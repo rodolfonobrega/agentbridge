@@ -92,7 +92,7 @@ ab ui --open        # live dashboard on http://127.0.0.1:8788
 **7. Let Claude Code delegate to the others**
 
 ```bash
-ab install claude          # registers the MCP bridge + writes relay subagents
+ab install claude          # registers the MCP bridge, writes relay subagents and installs the `agentbridge-delegate` skill
 ```
 
 Now inside Claude Code, subagents and dynamic workflows can call `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...

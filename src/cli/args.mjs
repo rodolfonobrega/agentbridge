@@ -1,5 +1,5 @@
 // Tiny argv parser: --k v, --k=v, -k v (short aliases), booleans, `--` terminator. Zero deps.
-export const BOOL = new Set(['json', 'stream', 'worktree', 'all', 'once', 'live', 'keep', 'help', 'quiet', 'no-seed', 'no-models', 'allow-non-loopback', 'first', 'no-agents', 'open']);
+export const BOOL = new Set(['json', 'stream', 'worktree', 'all', 'once', 'live', 'keep', 'help', 'quiet', 'no-seed', 'no-models', 'allow-non-loopback', 'first', 'no-agents', 'no-skill', 'open']);
 const SHORT = { m: 'model', e: 'effort', h: 'help', j: 'json', s: 'stream', w: 'worktree', t: 'timeout', C: 'cwd' };
 
 export function parseArgs(argv) {

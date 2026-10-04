@@ -175,12 +175,13 @@ ab watch <run> | ab wait <run> | ab cancel <run>
 ab serve [--port][--host][--token][--allow-non-loopback]
 ab bridge                                        # stdio MCP server
 ab doctor [--live][--json]
-ab install claude [--scope project|user|local] [--permissions read-only|plan|edit|full] [--max-depth N] [--no-agents]
+ab install claude [--scope project|user|local] [--permissions read-only|plan|edit|full] [--max-depth N] [--no-agents] [--no-skill]
 ab endpoint [list] | add <name> <baseUrl> [--type openai|anthropic] [--model m] [--api-key-env VAR] | remove <name>
 ```
 
 Notes:
 
+- `ab install claude` registers the MCP server, writes the relay subagents (`--no-agents` to skip) and installs the `agentbridge-delegate` skill under `.claude/skills/` (project/local scope) or `~/.claude/skills/` (user scope); `--no-skill` skips it. The skill teaches Claude when to delegate, which tool to use (`ask_*` vs `dispatch_*`), permissions, fallback and how to treat results. Source: `skills/agentbridge-delegate/SKILL.md`.
 - `<agent>` is `claude`, `codex`, `opencode`, `agy`, `pi`, `ollama` or any [endpoint](#http-endpoints-ollama-and-any-base-url) you configured. Targets for `fanout`/`race` can include a model: `claude:haiku`, `opencode:provider/model`.
 - Pass `-` as the prompt to read it from stdin.
 - `--json` prints the full Result as JSON; `--stream` prints text as it arrives.

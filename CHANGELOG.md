@@ -9,4 +9,5 @@
 - OpenAI- and Anthropic-compatible local proxy.
 - Telemetry, context policy, compaction and cross-agent handoff.
 - `ab ui`: read-only live dashboard (runs, tokens, cost, success rate, fallbacks rescued, context pressure, per-run details). CLI, proxy and MCP `ask_*` runs are now recorded in the telemetry.
+- `agentbridge-delegate` skill, installed by `ab install claude` (`--no-skill` to skip).
 - `ab doctor`, `ab install claude`, hooks, structured output (`jsonSchema`), worktrees and budgets.

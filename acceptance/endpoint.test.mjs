@@ -155,6 +155,8 @@ test('CLI: endpoint add/list/remove and install claude (project scope, no model 
   r = await run1(['install', 'claude', '--permissions', 'edit', '--max-depth', '1'], cwd); assert.equal(r.c, 0, r.e + r.o);
   const mcp = JSON.parse(readFileSync(path.join(cwd, '.mcp.json'), 'utf8')).mcpServers.agentbridge;
   assert.equal(mcp.env.AGENTBRIDGE_PERMS, 'edit'); assert.equal(mcp.env.AGENTBRIDGE_MAX_DEPTH, '1'); assert.deepEqual(mcp.args.slice(-1), ['bridge']);
+  const sk = path.join(cwd, '.claude', 'skills', 'agentbridge-delegate', 'SKILL.md'); assert.ok(existsSync(sk), 'skill installed');
+  assert.match(readFileSync(sk, 'utf8'), /^---\r?\nname: agentbridge-delegate\r?\n/);
   for (const n of ['codex', 'opencode', 'ollama', 'cli_ep']) {
     const f = path.join(cwd, '.claude', 'agents', `${n}-agent.md`); assert.ok(existsSync(f), f);
     assert.match(readFileSync(f, 'utf8'), new RegExp(`mcp__agentbridge__ask_${n}`));
