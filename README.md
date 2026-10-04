@@ -89,13 +89,17 @@ const { results } = await fanout(['claude:haiku', 'codex'], { prompt: 'Review sr
 ab ui --open        # live dashboard on http://127.0.0.1:8788
 ```
 
-**7. Let Claude Code delegate to the others**
+**7. Let your agents delegate to each other**
 
 ```bash
 ab install claude          # registers the MCP bridge, writes relay subagents and installs the `agentbridge-delegate` skill
+ab install codex           # same for Codex
+ab install opencode        # same for OpenCode (opencode.json)
+ab install agy             # same for Antigravity
+ab install all             # every one of the above that is installed
 ```
 
-Now inside Claude Code, subagents and dynamic workflows can call `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...
+Now, from inside any of them, you can say "ask claude to review this" or "have pi write the tests": the agent calls the `ask_<agent>` tools (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...). `--scope user` installs globally; `--permissions` sets the ceiling a delegated agent can never exceed. pi can be a *target* (`ask_pi`) but has no installer yet.
 
 ---
 

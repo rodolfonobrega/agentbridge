@@ -162,6 +162,6 @@ test('CLI: endpoint add/list/remove and install claude (project scope, no model 
     assert.match(readFileSync(f, 'utf8'), new RegExp(`mcp__agentbridge__ask_${n}`));
   }
   r = await run1(['endpoint', 'remove', 'cli_ep'], cwd); assert.equal(r.c, 0, r.e);
-  r = await run1(['install', 'codex'], cwd); assert.notEqual(r.c, 0);
+  r = await run1(['install', 'nosuchagent'], cwd); assert.notEqual(r.c, 0);
   r = await run1(['install', 'claude', '--scope', 'weird'], cwd); assert.notEqual(r.c, 0);
 });
