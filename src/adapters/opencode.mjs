@@ -335,10 +335,10 @@ export default {
       if (exited?.aborted || o.signal?.aborted) return new AgentError('ABORTED', 'Aborted', { agent: 'opencode' });
       return null;
     };
-    const http = async (method, p, body) => {
+    const http = async (method, p, body, timeoutMs) => {
       let r;
       try {
-        r = await fetch(`${base}${p}${p.includes('?') ? '&' : '?'}${dq}`, { method, headers: { authorization: auth, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: fetchAc.signal });
+        r = await fetch(`${base}${p}${p.includes('?') ? '&' : '?'}${dq}`, { method, headers: { authorization: auth, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: timeoutMs ? AbortSignal.any([fetchAc.signal, AbortSignal.timeout(timeoutMs)]) : fetchAc.signal });
       } catch (e) { throw stopped() || fail(`opencode server request failed: ${errText(e)}. ${diag()}`, { exitCode: exited?.exitCode }); }
       const txt = await r.text();
       let j; try { j = txt ? JSON.parse(txt) : undefined; } catch { j = txt; }
@@ -353,14 +353,16 @@ export default {
       // wait for readiness
       for (let i = 0; ; i++) {
         if (exited) throw stopped() || fail(`opencode serve exited before becoming ready (code ${exited.exitCode}). ${diag()}`, { exitCode: exited.exitCode, stderr: exited.stderr });
-        try { const r = await fetch(`${base}/global/health`, { headers: { authorization: auth }, signal: fetchAc.signal }); if (r.ok) break; } catch { /* not yet */ }
+        try { const r = await fetch(`${base}/global/health`, { headers: { authorization: auth }, signal: AbortSignal.any([fetchAc.signal, AbortSignal.timeout(3000)]) }); if (r.ok) break; } catch { /* not yet */ }
         if (i > 200) throw fail(`opencode serve did not become ready. ${diag()}`);
         await sleep(150);
       }
 
       // warm the per-directory instance (plugins/providers/MCP bootstrap) before any session work; prompts sent mid-bootstrap can be lost
-      await http('GET', '/config/providers');
-      await http('GET', '/agent');
+      // (bounded: a bootstrap request that hangs is retried once instead of waiting out the whole run timeout)
+      for (const p of ['/config/providers', '/agent']) {
+        try { await http('GET', p, undefined, 20000); } catch (e) { if (stopped() || exited) throw e; await http('GET', p, undefined, 20000); }
+      }
 
       // Wait for configured MCP servers to finish connecting before the first prompt: without this, a prompt sent
       // immediately after the health check can reach the model before opencode's MCP client handshake completes, so
@@ -411,7 +413,7 @@ export default {
           sessionId = f.body.id;
         } else sessionId = id;
       } else {
-        const c = await http('POST', '/session', {});
+        const c = await http('POST', '/session', {}, 30000);
         if (c.status !== 200 || !c.body?.id) throw fail(`session create failed (${c.status}): ${errText(c.body)}. ${diag()}`);
         sessionId = c.body.id;
       }
