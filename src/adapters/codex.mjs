@@ -79,14 +79,14 @@ const release = (claim) => {
   claim.id = undefined;
 };
 
-function buildArgs(o, schemaFile, claim = {}) {
+function buildArgs(o, schemaFile, claim = {}, imageFiles = []) {
   const s = o.session || { mode: 'new' };
   const mode = s.mode || 'new';
   if (!['new', 'ephemeral', 'continue', 'fork'].includes(mode)) throw new AgentError('BAD_OPTION', `Unknown session mode ${mode}`);
   if (s.id != null && !(typeof s.id === 'string' && UUID.test(s.id))) throw bad('session.id must be a session UUID');
   const fresh = mode === 'new' || mode === 'ephemeral';
   const sub = mode === 'continue' ? ['resume'] : mode === 'fork' ? ['fork'] : [];
-  const a = ['exec', ...sub, '--json', '--skip-git-repo-check'];
+  const a = ['exec', ...sub, ...imageFiles.flatMap((f) => ['-i', f]), '--json', '--skip-git-repo-check']; // -i takes a list, so a flag must follow it
   // Windows: codex's default (elevated) sandbox fails with 'deny-read ACLs' on many hosts. We inject
   // windows.sandbox="unelevated" (restricted-token sandbox). Guarantee: writes are limited to the workspace roots
   // (cwd + writableRoots; TEMP excluded by default for 'edit'), but READS ARE NOT RESTRICTED (any readable file).
@@ -155,14 +155,20 @@ export default {
     if (o.permissions === 'plan') prompt = `${PLAN_NOTE}\n\n${prompt}`;
     let dir, schemaFile;
     if (o.jsonSchema != null && !(typeof o.jsonSchema === 'object' && !Array.isArray(o.jsonSchema) && o.jsonSchema.type === 'object')) throw bad('jsonSchema must be a JSON Schema object with type "object"');
+    const imageFiles = [];
+    if (o.jsonSchema || o.images?.length) dir = mkdtempSync(path.join(tmpdir(), 'ab-codex-'));
     if (o.jsonSchema) {
-      dir = mkdtempSync(path.join(tmpdir(), 'ab-codex-'));
       schemaFile = path.join(dir, 'schema.json');
       writeFileSync(schemaFile, JSON.stringify(o.jsonSchema));
     }
+    for (const [n, im] of (o.images || []).entries()) {
+      const f = path.join(dir, `image-${n}.${im.mediaType.split('/')[1].replace('jpeg', 'jpg')}`);
+      writeFileSync(f, Buffer.from(im.data, 'base64'));
+      imageFiles.push(f);
+    }
     const claim = {};
     try {
-      const args = buildArgs(o, schemaFile, claim);
+      const args = buildArgs(o, schemaFile, claim, imageFiles);
       const env = { ...process.env, ...(o.env || {}) };
       delete env.OPENAI_API_KEY; delete env.CODEX_API_KEY;
       const p = spawnProc('codex', args, { cwd: o.cwd, env, input: prompt, timeoutMs: o.timeoutMs, signal: o.signal, agent: 'codex' });

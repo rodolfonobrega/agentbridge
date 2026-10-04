@@ -1,7 +1,7 @@
 import { AgentError, asRateLimited } from './core/errors.mjs';
 import { ev } from './core/events.mjs';
 
-export { AgentError, asRateLimited, retryAfterMs, looksRateLimited } from './core/errors.mjs';
+export { AgentError, asRateLimited, retryAfterMs, looksRateLimited, rateLimitKind } from './core/errors.mjs';
 export { ev } from './core/events.mjs';
 import { loadEndpoints, endpointNames, makeEndpointAdapter } from './adapters/endpoint.mjs';
 export { loadEndpoints, endpointNames, saveEndpoint, endpointsFile } from './adapters/endpoint.mjs';
@@ -43,7 +43,7 @@ export const agents = {
 const EFFORT = ['low', 'medium', 'high', 'xhigh', 'max'];
 const PERMS = ['read-only', 'edit', 'full', 'plan'];
 const SESSION_MODES = ['new', 'ephemeral', 'continue', 'fork'];
-const KNOWN = new Set(['prompt', 'model', 'effort', 'permissions', 'cwd', 'timeoutMs', 'signal', 'session', 'systemPrompt', 'mcpServers', 'env', 'jsonSchema', 'extraArgs', 'isolated', 'fallback', 'fallbackOn']);
+const KNOWN = new Set(['prompt', 'model', 'effort', 'permissions', 'cwd', 'timeoutMs', 'signal', 'session', 'systemPrompt', 'mcpServers', 'env', 'jsonSchema', 'extraArgs', 'isolated', 'fallback', 'fallbackOn', 'images']);
 const FALLBACK_ON = ['RATE_LIMITED', 'NOT_LOGGED_IN', 'NOT_INSTALLED', 'TIMEOUT', 'AGENT_FAILED'];
 const bad = (m) => new AgentError('BAD_OPTION', m);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -77,6 +77,9 @@ export function validateOptions(opts) {
   if (o.jsonSchema != null && !isObj(o.jsonSchema)) throw bad('jsonSchema must be an object');
   if (o.isolated != null && typeof o.isolated !== 'boolean') throw bad('isolated must be boolean');
   if (o.extraArgs != null && !(Array.isArray(o.extraArgs) && o.extraArgs.every((a) => typeof a === 'string'))) throw bad('extraArgs must be string[]');
+  if (o.images != null) {
+    if (!Array.isArray(o.images) || o.images.length > 8 || o.images.some((i) => !isObj(i) || !/^image\/(png|jpe?g|gif|webp)$/i.test(i.mediaType || '') || typeof i.data !== 'string' || !i.data)) throw bad('images must be at most 8 items of {mediaType: image/png|jpeg|gif|webp, data: base64}');
+  }
   if (o.fallback != null) {
     if (!Array.isArray(o.fallback) || o.fallback.length > 5) throw bad('fallback must be an array of at most 5 agents');
     o.fallback = o.fallback.map(parseFallbackTarget);

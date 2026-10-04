@@ -87,18 +87,18 @@ test('count_tokens estimate', async () => {
   assert.ok(r.input_tokens > 0);
 });
 
-test('openai error shapes: unknown model, tools, bad body', async () => {
+test('openai error shapes: unknown model, hosted tools, bad body', async () => {
   await assert.rejects(oa.chat.completions.create({ model: 'nope-xyz', messages: [{ role: 'user', content: 'hi' }] }),
     (e) => e instanceof OpenAI.NotFoundError && e.status === 404 && e.code === 'model_not_found' && e.type === 'invalid_request_error');
-  await assert.rejects(oa.chat.completions.create({ model: 'claude/haiku', messages: [{ role: 'user', content: 'hi' }], tools: [{ type: 'function', function: { name: 'f', parameters: {} } }] }),
+  await assert.rejects(oa.chat.completions.create({ model: 'claude/haiku', messages: [{ role: 'user', content: 'hi' }], tools: [{ type: 'web_search' }] }),
     (e) => e.status === 400 && e.code === 'tools_not_supported');
   await assert.rejects(oa.chat.completions.create({ model: 'claude/haiku', messages: [] }), (e) => e.status === 400);
 });
 
-test('anthropic error shapes: unknown model, tools, missing max_tokens', async () => {
+test('anthropic error shapes: unknown model, server tools, missing max_tokens', async () => {
   await assert.rejects(an.messages.create({ model: 'nope-xyz', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] }),
     (e) => e instanceof Anthropic.NotFoundError && e.status === 404 && e.error?.type === 'error' && e.error.error.type === 'not_found_error');
-  await assert.rejects(an.messages.create({ model: 'claude/haiku', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }], tools: [{ name: 'f', input_schema: { type: 'object', properties: {} } }] }),
+  await assert.rejects(an.messages.create({ model: 'claude/haiku', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }], tools: [{ type: 'web_search_20250305', name: 'web_search' }] }),
     (e) => e instanceof Anthropic.BadRequestError && /not supported/.test(e.message));
   await assert.rejects(an.messages.create({ model: 'claude/haiku', messages: [{ role: 'user', content: 'hi' }] }), (e) => e.status === 400);
 });
@@ -132,4 +132,40 @@ test('abort before output (raw http destroy) does not crash the server', T, asyn
     setTimeout(() => rq.destroy(), 500);
   });
   assert.ok((await oa.models.list()).data.length);
+});
+
+// ---------- client tool calling (real CLIs) ----------
+const WEATHER = { type: 'function', function: { name: 'get_weather', description: 'Get the current weather for a city', parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] } } };
+const ASK = [{ role: 'user', content: 'What is the weather in Paris? You must use the get_weather tool.' }];
+
+test('openai tool calling round trip (claude, MCP bridge)', T, async () => {
+  const r = await oa.chat.completions.create({ model: 'claude/haiku', messages: ASK, tools: [WEATHER] });
+  const c = r.choices[0];
+  assert.equal(c.finish_reason, 'tool_calls');
+  const call = c.message.tool_calls[0];
+  assert.equal(call.function.name, 'get_weather');
+  assert.match(JSON.parse(call.function.arguments).city, /paris/i);
+  const r2 = await oa.chat.completions.create({ model: 'claude/haiku', tools: [WEATHER], messages: [...ASK, c.message, { role: 'tool', tool_call_id: call.id, content: '18C and sunny' }] });
+  assert.equal(r2.choices[0].finish_reason, 'stop');
+  assert.match(r2.choices[0].message.content, /18/);
+});
+
+test('anthropic tool calling round trip, streaming (claude, MCP bridge)', T, async () => {
+  const tool = { name: 'get_weather', description: 'Get the current weather for a city', input_schema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] } };
+  const msgs = [{ role: 'user', content: 'What is the weather in Paris? You must use the get_weather tool.' }];
+  const s = an.messages.stream({ model: 'claude/haiku', max_tokens: 500, tools: [tool], messages: msgs });
+  const m = await s.finalMessage();
+  assert.equal(m.stop_reason, 'tool_use');
+  const use = m.content.find((b) => b.type === 'tool_use');
+  assert.equal(use.name, 'get_weather'); assert.match(use.input.city, /paris/i);
+  const m2 = await an.messages.create({ model: 'claude/haiku', max_tokens: 500, tools: [tool], messages: [...msgs, { role: 'assistant', content: m.content }, { role: 'user', content: [{ type: 'tool_result', tool_use_id: use.id, content: '18C and sunny' }] }] });
+  assert.equal(m2.stop_reason, 'end_turn');
+  assert.match(m2.content.map((b) => b.text || '').join(''), /18/);
+});
+
+test('tool calling through prompt emulation (codex)', T, async (t) => {
+  if (!MODELS.codex) return t.skip('no codex model');
+  const r = await oa.chat.completions.create({ model: MODELS.codex, messages: ASK, tools: [WEATHER] });
+  assert.equal(r.choices[0].finish_reason, 'tool_calls');
+  assert.equal(r.choices[0].message.tool_calls[0].function.name, 'get_weather');
 });

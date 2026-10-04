@@ -37,12 +37,25 @@ export function retryAfterMs(text) {
 
 export const looksRateLimited = (text) => RATE_PATTERNS.some((re) => re.test(String(text ?? '')));
 
+/**
+ * What kind of limit a provider message describes (the right reaction differs):
+ *  'quota'      budget/credits/usage window exhausted: switching account/agent helps, waiting only after the reset
+ *  'overloaded' provider-side capacity (529/overloaded): short wait, same account is fine
+ *  'rate'       per-minute/request rate limit (429): short wait on the same account
+ */
+export function rateLimitKind(text) {
+  const t = String(text ?? '');
+  if (/overloaded|529|at capacity|high demand/i.test(t)) return 'overloaded';
+  if (/quota|credit|usage (limit|cap)|subscription limit|(daily|weekly|monthly|hourly|session|5[- ]hour) limit|limit (will )?reset|out of (usage|messages|tokens)/i.test(t)) return 'quota';
+  return 'rate';
+}
+
 /** If `err` is a generic AGENT_FAILED whose message says the provider is rate/usage limited, return the same error as RATE_LIMITED. */
 export function asRateLimited(err) {
   if (!(err instanceof AgentError) || err.code !== 'AGENT_FAILED') return err;
   const blob = `${err.message}\n${err.stderr || ''}`;
   if (!looksRateLimited(blob)) return err;
-  const out = new AgentError('RATE_LIMITED', err.message, { agent: err.agent, exitCode: err.exitCode, stderr: err.stderr, sessionId: err.sessionId, partial: err.partial, status: err.status, retryAfterMs: err.retryAfterMs ?? retryAfterMs(blob) });
+  const out = new AgentError('RATE_LIMITED', err.message, { agent: err.agent, exitCode: err.exitCode, stderr: err.stderr, sessionId: err.sessionId, partial: err.partial, status: err.status, retryAfterMs: err.retryAfterMs ?? retryAfterMs(blob), kind: rateLimitKind(blob) });
   for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
   return out;
 }

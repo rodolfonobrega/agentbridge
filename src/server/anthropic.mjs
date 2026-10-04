@@ -1,6 +1,10 @@
 // Anthropic-compatible endpoints: POST /v1/messages (+ /count_tokens). GET /v1/models is served by index.mjs.
-import { HttpError, rid, resolveModel, effortFrom, effortFromBudget, buildPrompt, joinSystem, rejectTools, drive, runToEnd,
-  mapError, readJson, sendJson, sseStart, sseData, clientAbort, contentText, est } from './common.mjs';
+import { withAgentMode } from './agent.mjs';
+import { attachImages } from './images.mjs';
+import { toolsFromAnthropic, choiceFrom, anthropicTurns, anthropicBlocks } from './tools/format.mjs';
+import { runTools } from './tools/run.mjs';
+import { HttpError, rid, pickTarget, effortFrom, effortFromBudget, buildPrompt, incrementalPrompt, joinSystem, drive, runToEnd, warnHeaders,
+  mapError, readJson, sendJson, sseStart, sseData, clientAbort, contentText, est, readParams, ignoredHeaders, applyPayloadRules, sessionKeyOf } from './common.mjs';
 
 export function anthropicError(e) {
   const type = { 400: 'invalid_request_error', 401: 'authentication_error', 403: 'permission_error', 404: 'not_found_error', 413: 'request_too_large', 429: 'rate_limit_error' }[e.status] || (e.status >= 500 || e.status === 499 ? 'api_error' : e.type);
@@ -11,48 +15,69 @@ function finishErr(res, e, started) {
   sseData(res, anthropicError(e), 'error'); res.end();
 }
 
-const blockText = (c) => {
-  if (Array.isArray(c) && c.some((b) => b && (b.type === 'tool_use' || b.type === 'tool_result' || b.type === 'server_tool_use'))) {
-    throw new HttpError(400, 'tool_use/tool_result blocks are not supported by the agentbridge proxy', 'invalid_request_error', 'tools_not_supported');
-  }
-  return contentText(c);
-};
+const blockText = (c) => contentText(c);
 
-function prep(body) {
+function prep(body, opts = {}, req) {
   if (!Array.isArray(body.messages) || !body.messages.length) throw new HttpError(400, 'messages: Field required', 'invalid_request_error');
-  rejectTools(body);
-  const target = resolveModel(body.model);
+  const choice = choiceFrom(body.tool_choice);
+  const tools = choice.mode === 'none' ? [] : toolsFromAnthropic(body);
+  if (choice.mode === 'tool' && !tools.some((t) => t.name === choice.name)) throw new HttpError(400, `tool_choice names an unknown tool "${choice.name}"`, 'invalid_request_error', 'invalid_tool_choice');
+  const target = pickTarget(body.model, opts, req);
   const sys = [];
   if (body.system) sys.push(blockText(body.system));
-  const turns = [];
+  const turns = [], names = new Map();
   for (const m of body.messages) {
     if (m.role !== 'user' && m.role !== 'assistant') throw new HttpError(400, `messages: unsupported role "${m.role}"`, 'invalid_request_error');
-    turns.push({ role: m.role, text: blockText(m.content) });
+    turns.push(...anthropicTurns(m.role, m.content, names));
   }
-  if (turns[turns.length - 1].role !== 'user') throw new HttpError(400, 'The last message must have role "user" (assistant prefill is not supported by the agentbridge proxy)', 'invalid_request_error');
-  const effort = effortFrom(body.output_config?.effort) ?? effortFromBudget(body.thinking);
-  return { target, prompt: buildPrompt(turns), systemPrompt: joinSystem(sys), effort, turns, sysText: sys.join('\n') };
+  if (turns[turns.length - 1].role === 'assistant') throw new HttpError(400, 'The last message must have role "user" (assistant prefill is not supported by the agentbridge proxy)', 'invalid_request_error');
+  const effort = effortFrom(body.output_config?.effort) ?? effortFromBudget(body.thinking) ?? target.effort;
+  const params = readParams(body);
+  const r = applyPayloadRules(opts.cfg, target.canonical, { effort });
+  return { target, prompt: buildPrompt(turns, opts.cfg?.get().historyBudgetTokens || 0), incremental: incrementalPrompt(turns), systemPrompt: joinSystem(sys, [], target.mode), effort: r.effort, turns, sysText: sys.join('\n'), tools, choice,
+    maxTokens: params.maxTokens, stop: params.stop, ignored: params.ignored, sessionKey: sessionKeyOf(req) };
 }
 
 async function messages(req, res, opts) {
   const body = await readJson(req);
   if (!Number.isInteger(body.max_tokens) || body.max_tokens < 1) throw new HttpError(400, 'max_tokens: Field required (positive integer)', 'invalid_request_error');
-  const p = prep(body);
+  const p = await attachImages(prep(body, opts, req), body);
   const signal = clientAbort(res);
+  const ag = withAgentMode({ target: p.target, prompt: p.prompt, incremental: p.incremental, systemPrompt: p.systemPrompt, effort: p.effort, maxTokens: p.maxTokens, stop: p.stop, sessionKey: p.sessionKey, mode: p.target.mode, signal, timeoutMs: opts.timeoutMs, fallback: opts.fallback, pool: opts.pool, stats: opts.stats, images: p.images }, req, opts);
+  const o = ag.o, hdr = { ...ignoredHeaders(p.ignored), ...warnHeaders(p.warning), ...ag.headers };
   const id = rid('msg_'), model = body.model;
-  const o = { target: p.target, prompt: p.prompt, systemPrompt: p.systemPrompt, effort: p.effort, signal, timeoutMs: opts.timeoutMs, fallback: opts.fallback };
+  const stopOf = (r) => ({ stop_reason: { length: 'max_tokens', tool_calls: 'tool_use', content_filter: 'refusal' }[r.finishReason] || (r.stopSequence ? 'stop_sequence' : 'end_turn'), stop_sequence: r.stopSequence ?? null });
   const usageOf = (u) => ({ input_tokens: u.input, output_tokens: u.output });
   const skeleton = { id, type: 'message', role: 'assistant', model, content: [], stop_reason: null, stop_sequence: null };
+  const ev = (type, data) => sseData(res, { type, ...data }, type);
+  if (p.tools.length) { // client tools: buffered, then emitted as tool_use blocks
+    let r; try { r = await runTools(o, p.tools, p.choice); } catch (e) { ag.abort(); throw e; }
+    ag.finish();
+    const calls = r.toolCalls || [], h2 = { ...hdr, ...warnHeaders(r.warning) };
+    const blocks = [...(r.text ? [{ type: 'text', text: r.text }] : []), ...anthropicBlocks(calls)];
+    const so = calls.length ? { stop_reason: 'tool_use', stop_sequence: null } : stopOf(r);
+    if (!body.stream) return sendJson(res, 200, { ...skeleton, content: blocks, ...so, usage: usageOf(r.usage) }, h2);
+    sseStart(res, h2);
+    ev('message_start', { message: { ...skeleton, usage: { input_tokens: r.usage.input, output_tokens: 1 } } });
+    blocks.forEach((b, i) => {
+      if (b.type === 'text') { ev('content_block_start', { index: i, content_block: { type: 'text', text: '' } }); ev('content_block_delta', { index: i, delta: { type: 'text_delta', text: b.text } }); }
+      else { ev('content_block_start', { index: i, content_block: { type: 'tool_use', id: b.id, name: b.name, input: {} } }); ev('content_block_delta', { index: i, delta: { type: 'input_json_delta', partial_json: JSON.stringify(b.input) } }); }
+      ev('content_block_stop', { index: i });
+    });
+    ev('message_delta', { delta: so, usage: { input_tokens: r.usage.input, output_tokens: r.usage.output } });
+    ev('message_stop', {});
+    return res.end();
+  }
   if (!body.stream) {
-    const r = await runToEnd(o);
-    return sendJson(res, 200, { ...skeleton, content: [{ type: 'text', text: r.text }], stop_reason: 'end_turn', usage: usageOf(r.usage) });
+    let r; try { r = await runToEnd(o); } catch (e) { ag.abort(); throw e; }
+    const extra = ag.finish();
+    return sendJson(res, 200, { ...skeleton, content: [{ type: 'text', text: r.text }], ...stopOf(r), usage: usageOf(r.usage), ...(extra ? { agentbridge: extra } : {}) }, hdr);
   }
   let started = false;
-  const ev = (type, data) => sseData(res, { type, ...data }, type);
   try {
     const r = await drive(o, {
       onStart() {
-        started = true; sseStart(res);
+        started = true; sseStart(res, hdr);
         ev('message_start', { message: { ...skeleton, usage: { input_tokens: est(p.prompt), output_tokens: 1 } } });
         ev('content_block_start', { index: 0, content_block: { type: 'text', text: '' } });
         ev('ping', {});
@@ -60,22 +85,22 @@ async function messages(req, res, opts) {
       onDelta(d) { if (d) ev('content_block_delta', { index: 0, delta: { type: 'text_delta', text: d } }); },
     });
     ev('content_block_stop', { index: 0 });
-    ev('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { input_tokens: r.usage.input, output_tokens: r.usage.output } });
+    ev('message_delta', { delta: stopOf(r), usage: { input_tokens: r.usage.input, output_tokens: r.usage.output } });
     ev('message_stop', {});
-    res.end();
-  } catch (e) { if (signal.aborted) return res.end(); throw Object.assign(e, { _started: started }); }
+    ag.finish(); res.end();
+  } catch (e) { ag.abort(); if (signal.aborted) return res.end(); throw Object.assign(e, { _started: started }); }
 }
 
-async function countTokens(req, res) {
+async function countTokens(req, res, opts) {
   const body = await readJson(req);
-  const p = prep(body);
+  const p = prep(body, opts, req);
   sendJson(res, 200, { input_tokens: est(p.systemPrompt) + est(p.prompt) });
 }
 
 export async function handle(req, res, url, opts) {
   try {
     if (req.method === 'POST' && url === '/v1/messages') { await messages(req, res, opts); return true; }
-    if (req.method === 'POST' && url === '/v1/messages/count_tokens') { await countTokens(req, res); return true; }
+    if (req.method === 'POST' && url === '/v1/messages/count_tokens') { await countTokens(req, res, opts); return true; }
   } catch (e) { finishErr(res, mapError(e), !!e._started); return true; }
   return false;
 }

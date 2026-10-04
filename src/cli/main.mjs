@@ -196,7 +196,7 @@ async function cmdCancel(_, flags) {
 
 async function cmdServe(_, flags) {
   const { startProxy } = await import('../server/index.mjs');
-  const p = await startProxy({ port: flags.port ? num(flags, 'port', { min: 0, int: true }) : 8787, host: flags.host, token: flags.token || process.env.AGENTBRIDGE_TOKEN, allowNonLoopback: !!flags['allow-non-loopback'], ...(flags.fallback ? { fallback: String(flags.fallback).split(',').map((x) => x.trim()).filter(Boolean) } : {}) });
+  const p = await startProxy({ port: flags.port ? num(flags, 'port', { min: 0, int: true }) : 8787, host: flags.host, token: flags.token || process.env.AGENTBRIDGE_TOKEN, allowNonLoopback: !!flags['allow-non-loopback'], configFile: flags.config, agentRoot: flags['agent-root'], maxPermission: flags['agent-max-permission'], accounts: flags.accounts ? JSON.parse((await import('node:fs')).readFileSync(flags.accounts, 'utf8')) : undefined, acceptTosRisk: !!flags['accept-tos-risk'], logFile: flags.log, ...(flags.fallback ? { fallback: String(flags.fallback).split(',').map((x) => x.trim()).filter(Boolean) } : {}) });
   err(`agentbridge proxy listening on ${p.url}`);
   await new Promise((res) => { for (const sg of ['SIGINT', 'SIGTERM']) process.on(sg, () => p.close().then(res)); });
 }
@@ -236,7 +236,7 @@ const HELP = `agentbridge (ab) — drive local claude/codex/opencode/agy/pi CLIs
   ab context <session> [--agent a]
   ab handoff <session> --to <agent>
   ab watch <run> | ab wait <run> | ab cancel <run>
-  ab serve [--port][--host][--token][--allow-non-loopback][--fallback a,b:model]   # answer 429 only when every fallback is also limited
+  ab serve [--port][--host][--token][--allow-non-loopback][--fallback a,b:model][--config file.json][--agent-root DIR][--agent-max-permission edit|full][--accounts file.json --accept-tos-risk][--log file.jsonl]   # answer 429 only when every fallback is also limited
   ab ui [--port 8788][--open][--token t]            # live dashboard: runs, tokens, context, fallbacks (read-only, loopback)
   ab bridge                                        # stdio MCP server
   ab doctor [--live][--json]

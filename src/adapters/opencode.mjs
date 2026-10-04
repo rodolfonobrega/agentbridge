@@ -429,7 +429,7 @@ export default {
       let lastTool;
 
       const turn = async function* (prompt) {
-        const body = { parts: [{ type: 'text', text: prompt }] };
+        const body = { parts: [{ type: 'text', text: prompt }, ...(o.images || []).map((im, n) => ({ type: 'file', mime: im.mediaType, filename: `image-${n}.${im.mediaType.split('/')[1]}`, url: `data:${im.mediaType};base64,${im.data}` }))] };
         if (o.model) body.model = { providerID, modelID };
         if (variant) body.variant = variant;
         if (agent) body.agent = agent;

@@ -37,8 +37,11 @@ function latestSession(cwd) {
   return best?.id;
 }
 
+const userMessageLine = (o) => JSON.stringify({ type: 'user', message: { role: 'user', content: [...o.images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.mediaType, data: i.data } })), { type: 'text', text: o.prompt }] } }) + '\n';
+
 function buildArgs(o, mcpFile, resumeId) {
   const a = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages'];
+  if (o.images?.length) a.push('--input-format', 'stream-json'); // the prompt travels as one user message with image blocks
   if (o.model) a.push('--model', o.model);
   if (o.effort) a.push('--effort', o.effort);
   const isolated = o.isolated !== false;
@@ -112,9 +115,9 @@ export default {
     if (o.isolated !== false) { env.CLAUDE_CODE_DISABLE_CLAUDE_MDS = '1'; env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1'; }
     env.ANTHROPIC_API_KEY = ''; env.ANTHROPIC_AUTH_TOKEN = ''; // force subscription login
     p = spawnProc('claude', buildArgs(o, mcpFile, resumeId), {
-      cwd: o.cwd, env, input: o.prompt, timeoutMs: o.timeoutMs, signal: o.signal, agent: 'claude',
+      cwd: o.cwd, env, input: o.images?.length ? userMessageLine(o) : o.prompt, timeoutMs: o.timeoutMs, signal: o.signal, agent: 'claude',
     });
-    let text = '', sessionId, model, final, usage = { input: 0, output: 0 }, sawSession = false;
+    let text = '', sessionId, model, final, stopReason, usage = { input: 0, output: 0 }, sawSession = false;
     const toolNames = new Map();
       for await (const line of p.lines) {
         const m = parseJsonLine(line);
@@ -124,6 +127,7 @@ export default {
         else if (m.type === 'stream_event') {
           const e = m.event || {};
           if (e.type === 'message_start') { model = e.message?.model || model; }
+          else if (e.type === 'message_delta') { if (e.delta?.stop_reason) stopReason = e.delta.stop_reason; }
           else if (e.type === 'content_block_delta') {
             if (e.delta?.type === 'text_delta' && e.delta.text) { text += e.delta.text; yield ev.text(e.delta.text); }
             else if (e.delta?.type === 'thinking_delta' && e.delta.thinking) yield ev.thinking(e.delta.thinking);
@@ -163,6 +167,7 @@ export default {
       if (final.structured_output !== undefined) out = JSON.stringify(final.structured_output);
       return { text: out, sessionId: sess?.mode === 'ephemeral' ? undefined : (final.session_id || sessionId),
         usage, exitCode: r.exitCode, model, durationMs: Date.now() - t0, timedOut: false,
+        ...((final.stop_reason || stopReason) ? { stopReason: final.stop_reason || stopReason } : {}),
         ...(final.structured_output !== undefined ? { structured: final.structured_output } : {}) };
     } finally {
       p?.kill();
