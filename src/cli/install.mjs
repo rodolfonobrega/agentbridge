@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { UsageError } from './args.mjs';
 import { runCollect } from '../core/spawn.mjs';
 import { loadEndpoints, saveEndpoint, endpointsFile } from '../adapters/endpoint.mjs';
+import { hintFor } from '../core/hints.mjs';
 
 const MAIN = fileURLToPath(new URL('./main.mjs', import.meta.url));
 const SKILL = fileURLToPath(new URL('../../skills/agentbridge-delegate/SKILL.md', import.meta.url));
@@ -115,11 +116,13 @@ function installOpencode(flags, { out }) {
 export async function cmdInstall(_, flags, io) {
   const target = _[0];
   if (target === 'all') {
+    let done = 0;
     for (const t of TARGETS) {
       const found = await runCollect(t, ['--version'], { timeoutMs: 20000 }).then((r) => r.exitCode === 0, () => false);
-      if (!found) { io.out(`skipped ${t}: not installed`); continue; }
-      try { await cmdInstall([t], flags, io); } catch (e) { io.out(`${t} FAILED: ${e.message}`); process.exitCode = 1; }
+      if (!found) { io.out(`skipped ${t}: not installed${hintFor(t, 'NOT_INSTALLED')}`); continue; }
+      try { await cmdInstall([t], flags, io); done++; } catch (e) { io.out(`${t} FAILED: ${e.message}`); process.exitCode = 1; }
     }
+    if (!done) { io.out('nothing installed: none of the supported agent CLIs was found on PATH'); process.exitCode = 1; }
     return;
   }
   if (target === 'codex') return installCodex(flags, io);

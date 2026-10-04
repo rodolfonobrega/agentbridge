@@ -4,6 +4,7 @@ import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { AgentError } from './errors.mjs';
 import { createLineSplitter } from './events.mjs';
+import { hintFor } from './hints.mjs';
 
 const isWin = process.platform === 'win32';
 
@@ -145,7 +146,7 @@ export function spawnProc(cmd, args = [], opts = {}) {
   const env = { ...process.env };
   for (const [k, v] of Object.entries(opts.env || {})) { if (v === undefined || v === null) delete env[k]; else env[k] = String(v); }
   const found = resolveBinary(cmd, env);
-  if (!found) throw new AgentError('NOT_INSTALLED', `Executable not found on PATH: ${cmd}`, { agent: opts.agent, binary: cmd });
+  if (!found) throw new AgentError('NOT_INSTALLED', `Executable not found on PATH: ${cmd}${hintFor(opts.agent || cmd, 'NOT_INSTALLED')}`, { agent: opts.agent, binary: cmd });
   const r = resolveShim(found, args.map(String));
 
   let child;

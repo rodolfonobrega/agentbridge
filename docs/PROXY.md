@@ -107,3 +107,7 @@ Without a token they are only served on loopback. `--log file.jsonl` appends one
 
 ## Rate limits
 A `RATE_LIMITED` failure is answered with HTTP 429 and a `retry-after` header (seconds) in both the OpenAI and Anthropic shapes. `ab serve --fallback a,b` applies a fallback chain to every request. A limit hit after text was already streamed cannot be re-routed and ends the stream with the error (the first ~160 chars / 1.5 s are held back when a chain exists, so early limits still fall back cleanly).
+
+## Missing or unconfigured agents
+
+Nothing fails silently. When `ab serve` starts it prints which agent CLIs it found (`[ok]` / `[missing]` with the install command). A request for an agent that is not installed returns HTTP 503 `agent_not_installed`, one that is not logged in returns 401, both with the fix in the message. `/v1/models` only lists agents that are installed. `ab doctor` checks installs and logins in one go.

@@ -9,6 +9,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { runTracked, agents, endpointNames, AgentError } from '../index.mjs';
 import { globMatch } from './config.mjs';
 import { callId } from './tools/emulate.mjs';
+import { isInstalled } from '../core/readiness.mjs';
 
 const run = (agent, opts) => runTracked(agent, opts, { origin: 'proxy' });
 
@@ -87,12 +88,13 @@ export async function listModels() {
   const out = [];
   const add = (id) => { if (!out.includes(id)) out.push(id); };
   await Promise.all(agents.names.map(async (n) => {
+    if (!isInstalled(n)) return; // a CLI that is not installed has no usable models
     try {
       const ms = await Promise.race([agents.models(n), new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 20000))]);
       for (const x of ms) add(n === 'opencode' ? (x.startsWith('opencode/') ? x : 'opencode/' + x) : `${n}/${x}`);
     } catch { /* best-effort */ }
   }));
-  for (const a of ['claude/haiku', 'claude/sonnet', 'claude/opus']) add(a);
+  if (isInstalled('claude')) for (const a of ['claude/haiku', 'claude/sonnet', 'claude/opus']) add(a);
   out.sort();
   modelCache = { at: Date.now(), list: out };
   return out;

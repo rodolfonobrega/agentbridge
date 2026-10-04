@@ -42,6 +42,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AgentError } from '../core/errors.mjs';
 import { ev } from '../core/events.mjs';
+import { hintFor } from '../core/hints.mjs';
 import { spawnProc, runCollect, resolveBinary, killTree } from '../core/spawn.mjs';
 
 const BIN = 'opencode';
@@ -55,7 +56,7 @@ const dataDir = () => path.join(process.env.XDG_DATA_HOME || path.join(os.homedi
 const authFile = () => path.join(dataDir(), 'auth.json');
 
 function assertInstalled(env) {
-  if (!resolveBinary(BIN, env)) throw new AgentError('NOT_INSTALLED', 'opencode executable not found on PATH', { agent: 'opencode', binary: BIN });
+  if (!resolveBinary(BIN, env)) throw new AgentError('NOT_INSTALLED', 'opencode executable not found on PATH' + hintFor('opencode', 'NOT_INSTALLED'), { agent: 'opencode', binary: BIN });
 }
 function hasAuth() {
   try { const j = JSON.parse(readFileSync(authFile(), 'utf8')); return j && Object.keys(j).length > 0; } catch { return false; }

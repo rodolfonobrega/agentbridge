@@ -5,6 +5,7 @@ import { spawnProc, runCollect } from '../core/spawn.mjs';
 import { AgentError } from '../core/errors.mjs';
 import { ev, parseJsonLine } from '../core/events.mjs';
 import { validateOptions } from '../index.mjs';
+import { hintFor } from '../core/hints.mjs';
 
 const READ_TOOLS = 'Read,Glob,Grep,WebFetch,WebSearch';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -161,7 +162,7 @@ export default {
         const msg = (final?.result || r.stderr || `claude exited ${r.exitCode}`).toString();
         const code = AUTH_RE.test(msg) ? 'NOT_LOGGED_IN' : 'AGENT_FAILED';
         yield ev.error(msg);
-        throw new AgentError(code, msg, { agent: 'claude', exitCode: r.exitCode, stderr: r.stderr });
+        throw new AgentError(code, code === 'NOT_LOGGED_IN' ? msg + hintFor('claude', code) : msg, { agent: 'claude', exitCode: r.exitCode, stderr: r.stderr });
       }
       let out = typeof final.result === 'string' ? final.result : text;
       if (final.structured_output !== undefined) out = JSON.stringify(final.structured_output);

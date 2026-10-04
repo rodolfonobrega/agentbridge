@@ -39,7 +39,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "test": "node --test --test-concurrency=1 acceptance/core.test.mjs acceptance/registry.test.mjs acceptance/registry2.test.mjs acceptance/ui.test.mjs acceptance/install.test.mjs acceptance/proxy-features.test.mjs acceptance/proxy-tools.test.mjs acceptance/proxy-pool.test.mjs acceptance/proxy-images.test.mjs",
+    "test": "node --test --test-concurrency=1 acceptance/core.test.mjs acceptance/registry.test.mjs acceptance/registry2.test.mjs acceptance/ui.test.mjs acceptance/install.test.mjs acceptance/proxy-features.test.mjs acceptance/proxy-tools.test.mjs acceptance/proxy-pool.test.mjs acceptance/proxy-images.test.mjs acceptance/readiness.test.mjs",
     "accept": "node acceptance/run.mjs"
   },
   "devDependencies": {

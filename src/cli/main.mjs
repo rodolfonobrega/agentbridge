@@ -198,6 +198,9 @@ async function cmdServe(_, flags) {
   const { startProxy } = await import('../server/index.mjs');
   const p = await startProxy({ port: flags.port ? num(flags, 'port', { min: 0, int: true }) : 8787, host: flags.host, token: flags.token || process.env.AGENTBRIDGE_TOKEN, allowNonLoopback: !!flags['allow-non-loopback'], configFile: flags.config, agentRoot: flags['agent-root'], maxPermission: flags['agent-max-permission'], accounts: flags.accounts ? JSON.parse((await import('node:fs')).readFileSync(flags.accounts, 'utf8')) : undefined, acceptTosRisk: !!flags['accept-tos-risk'], logFile: flags.log, ...(flags.fallback ? { fallback: String(flags.fallback).split(',').map((x) => x.trim()).filter(Boolean) } : {}) });
   err(`agentbridge proxy listening on ${p.url}`);
+  const { readinessReport, installedAgents } = await import('../core/readiness.mjs');
+  err(['agents on this machine (run `ab doctor` to check logins):', ...readinessReport()].join(String.fromCharCode(10)));
+  if (!installedAgents().length) err('WARNING: no agent CLI is installed, so every request will fail with agent_not_installed.');
   await new Promise((res) => { for (const sg of ['SIGINT', 'SIGTERM']) process.on(sg, () => p.close().then(res)); });
 }
 
