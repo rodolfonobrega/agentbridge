@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Proxy: real `finish_reason`/`stop_reason` and usage, `max_tokens`/`stop` enforced, `x-agentbridge-ignored`, sessions via `x-ab-session`, config file (aliases, payload rules, effort suffix), early-stream fallback.
+- Proxy agent mode (`agent/` prefix or `/agent/v1`): the agent edits an isolated worktree, the diff comes back, `apply` is explicit. Needs `--agent-root` and a token.
+- Proxy client tool calling (OpenAI, Responses, Anthropic): claude through an MCP bridge, other agents through validated prompt emulation.
+- Opt-in account pool (`--accounts` + `--accept-tos-risk`), `/admin/status`, `/admin/usage`, `--log`.
+- Proxy images for claude (stream-json input), codex (`-i`) and opencode (file parts), with an SSRF-safe URL fetch; `run()` accepts `images: [{mediaType, data}]`.
+- `RATE_LIMITED` errors carry `kind` (quota / overloaded / rate).
+
 ## 0.1.0 — first public release
 
 - Unified `run/ask/fanout/race` API and `ab` CLI for Claude Code, Codex, OpenCode, Antigravity CLI (`agy`) and pi, plus HTTP endpoints (Ollama built in).

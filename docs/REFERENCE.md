@@ -635,7 +635,9 @@ Programmatic start: `import { startProxy } from 'agentbridge/src/server/index.mj
 
 **Model routing:** `claude/<model>`, `codex/<model>`, `agy/<model>`, `pi/<provider>/<model>`, `opencode/<provider>/<model>`, and `<endpoint>/<model>` for any configured HTTP endpoint (e.g. `ollama/qwen3:14b`). Bare names are routed by heuristic (`sonnet|haiku|opus|claude-*` to claude, `gpt-*|o1|o3|o4|codex*` to codex, anything with `/` to opencode); otherwise 404.
 
-**Important limits:** client-side tool/function calling is rejected with HTTP 400 (`tools_not_supported`); multi-turn messages are flattened into one prompt (each request is stateless); sampling parameters (`temperature`, `top_p`, `max_tokens`, ...) are ignored; images become `[image omitted]`; the server binds to `127.0.0.1` only unless you pass `--allow-non-loopback`. Full list in [docs/PROXY.md](docs/PROXY.md).
+**Also in the proxy:** client tool calling (claude via an MCP bridge, other agents via validated prompt emulation), an isolated-worktree **agent mode** (`agent/` prefix or `/agent/v1`, needs `--agent-root` and a token, returns a diff, `apply` is explicit), `max_tokens`/`stop` enforcement with real `finish_reason`, `x-ab-session` resume, a hot-reloaded `--config` (aliases, payload rules), an opt-in account pool (`--accounts` + `--accept-tos-risk`) and `/admin/status`, `/admin/usage`, `--log`.
+
+**Important limits:** without `x-ab-session` multi-turn messages are flattened into one prompt (each request is stateless); `temperature`, `top_p`, `seed` are ignored (listed in `x-agentbridge-ignored`); tool-mode replies are buffered; images reach only claude, codex and opencode (others get a placeholder and a warning header); the server binds to `127.0.0.1` only unless you pass `--allow-non-loopback`. Full list in [docs/PROXY.md](docs/PROXY.md).
 
 ---
 
@@ -720,7 +722,8 @@ CONTRACT.md          the binding spec for adapters, options, events and errors
 | Claude Code does not show the agentbridge tools | Restart Claude Code; for project scope approve the server on first open (`claude mcp get agentbridge`). |
 | Relay subagent answers by itself instead of delegating | Re-run `ab install claude` to refresh the agent files, or call `mcp__agentbridge__ask_<name>` directly. |
 | Proxy returns 401 | Missing/wrong bearer token (`Authorization: Bearer` or `x-api-key`). |
-| Proxy returns 400 `tools_not_supported` | The proxy does not support client-side tool calling. |
+| Proxy returns 400 `tools_not_supported` | Only `function` tools are supported (hosted tools like `web_search` are not), and client tools cannot be combined with agent mode. |
+| Proxy returns 403 `agent_mode_disabled` / `agent_mode_needs_token` | Start the proxy with `--agent-root <dir>` and a `--token` to use `agent/` models. |
 | `--worktree` fails | Ensure `git` is installed and `cwd` is inside a git repository. |
 
 ## License
