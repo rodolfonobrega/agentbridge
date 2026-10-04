@@ -35,7 +35,7 @@ test('ps / sessions / stats / sweep run clean with no runs', async () => {
   for (const cmd of [['ps'], ['sessions'], ['stats'], ['sweep']]) { const r = await abRaw(cmd, { env: { AGENTBRIDGE_HOME: tmp() } }); assert.equal(r.code, 0, `${cmd}: ${r.stderr}`); }
 });
 test('doctor --no-models --json reports structured checks', async () => {
-  const d = await abJson(['doctor', '--no-models']);
+  const d = JSON.parse((await abRaw(['doctor', '--no-models', '--json'])).stdout.trim()); // non-zero exit just means some agent is missing
   assert.ok(Array.isArray(d.checks) && d.checks.length > 0);
   assert.ok(d.checks.some((c) => c.name === 'node' && c.status === 'ok'));
 });
@@ -136,7 +136,8 @@ test('--max-time aborts a run cleanly (claude)', { timeout: 60000 }, async () =>
 });
 
 test('doctor --live probes real agents (claude only, to bound cost)', { timeout: 180000 }, async () => {
-  const d = await abJson(['doctor', '--no-models', '--live']);
+  const r = await abRaw(['doctor', '--no-models', '--live', '--json']); // exits non-zero when any agent (e.g. pi) is not installed, so read the JSON regardless
+  const d = JSON.parse(r.stdout.trim());
   const c = d.agents.claude;
   assert.ok(c && c.installed);
   if (c.live) assert.equal(c.live.ok, true);
