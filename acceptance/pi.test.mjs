@@ -152,7 +152,7 @@ t('bridge: ask_pi and dispatch_pi are exposed and answer through the MCP surface
   assert.match(JSON.stringify(r), /PONG/);
 });
 test('proxy routing: pi/<provider>/<model> resolves to the pi agent', () => {
-  assert.deepEqual(resolveModel('pi/ollama/glm-5.3-flash:cloud'), { agent: 'pi', model: 'ollama/glm-5.3-flash:cloud', id: 'pi/ollama/glm-5.3-flash:cloud' });
+  assert.deepEqual(resolveModel('pi/ollama/glm-5.3-flash:cloud'), { agent: 'pi', model: 'ollama/glm-5.3-flash:cloud', id: 'pi/ollama/glm-5.3-flash:cloud', canonical: 'pi/ollama/glm-5.3-flash:cloud', mode: 'api' });
 });
 
 for (const [caller, callee] of [['claude', 'pi'], ['pi', 'claude']]) {

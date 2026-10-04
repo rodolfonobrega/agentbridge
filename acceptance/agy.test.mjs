@@ -62,7 +62,7 @@ function mkdirSync0(d) { mkdirSync(d, { recursive: true }); }
 test('registry, routing and option validation (no model call)', async () => {
   assert.ok(agents.names.includes('agy'));
   assert.ok(allTools().some((x) => x.name === 'ask_agy') && allTools().some((x) => x.name === 'dispatch_agy'));
-  assert.deepEqual(resolveModel('agy/gemini-3.8-flash-low'), { agent: 'agy', model: 'gemini-3.8-flash-low', id: 'agy/gemini-3.8-flash-low' });
+  assert.deepEqual(resolveModel('agy/gemini-3.8-flash-low'), { agent: 'agy', model: 'gemini-3.8-flash-low', id: 'agy/gemini-3.8-flash-low', canonical: 'agy/gemini-3.8-flash-low', mode: 'api' });
   assert.equal(resolveModel('ollama/qwen3:14b').agent, 'ollama');
   assert.equal(resolveModel('ollama/qwen3:14b').model, 'qwen3:14b');
   assert.equal(await code(ask('agy', { prompt: 'x', session: { mode: 'fork', id: '00000000-0000-4000-8000-000000000000' } })), 'BAD_OPTION');

@@ -142,7 +142,7 @@ test('read-only exposes no mcp__ tools, only read built-ins; isolated loads no p
   assert.ok(init, 'init seen');
   assert.equal(init.tools.filter((t) => t.startsWith('mcp__')).length, 0, JSON.stringify(init.tools));
   assert.deepEqual([...init.tools].sort(), ['Glob', 'Grep', 'Read', 'WebFetch', 'WebSearch']);
-  assert.equal((init.plugins || []).length, 0); assert.equal((init.slash_commands || []).length, 0);
+  assert.equal((init.plugins || []).filter((p) => p.path !== 'builtin').length, 0); /* claude >= 2.1.28x ships built-in plugins */ assert.equal((init.slash_commands || []).length, 0);
 });
 
 test('isolated:false opt-out works; xhigh effort accepted', async () => {
