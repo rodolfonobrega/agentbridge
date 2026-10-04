@@ -191,7 +191,7 @@ test('children are killed when the parent exits (process.exit and uncaught error
   for (const ending of ['process.exit(0)', "throw new Error('boom')"]) {
     const script = `import {spawnProc} from ${JSON.stringify(srcUrl)};
 const p = spawnProc(process.execPath,['-e','console.log(process.pid);setInterval(()=>{},1000)']);
-for await (const l of p.lines) { console.log('CHILD '+l); break; }
+const it = p.lines[Symbol.asyncIterator](); console.log('CHILD '+(await it.next()).value);
 ${ending}`;
     const d = mkdtempSync(path.join(tmpdir(), 'ab-exit-'));
     const f = path.join(d, 'parent.mjs'); writeFileSync(f, script);
@@ -207,11 +207,11 @@ test('SIGINT/SIGTERM handlers kill children and exit', { skip: process.platform 
   const srcUrl = new URL('../src/core/spawn.mjs', import.meta.url).href;
   const script = `import {spawnProc} from ${JSON.stringify(srcUrl)};
 const p = spawnProc(process.execPath,['-e','console.log(process.pid);setInterval(()=>{},1000)']);
-for await (const l of p.lines) { console.log('CHILD '+l); break; }
+const it = p.lines[Symbol.asyncIterator](); console.log('CHILD '+(await it.next()).value);
 setInterval(()=>{},1000);`;
   const d = mkdtempSync(path.join(tmpdir(), 'ab-sig-')); const f = path.join(d, 'p.mjs'); writeFileSync(f, script);
   const par = spawnProc(N, [f]); let cpid = 0;
-  for await (const l of par.lines) { cpid = Number(l.replace('CHILD ', '')); break; }
+  const pit = par.lines[Symbol.asyncIterator](); cpid = Number((await pit.next()).value.replace('CHILD ', '')); // .next(): leaving a for-await loop would kill the tree and defeat the test
   process.kill(par.pid, 'SIGTERM'); await par.wait().catch(() => {}); await sleep(500);
   assert.equal(alive(cpid), false);
 });
