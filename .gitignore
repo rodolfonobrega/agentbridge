@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# local state and tooling
+.claude/
+.snapshots/
+.agentbridge/
+progress/
+*.stackdump
+*.log
+.env
+.env.*
+!.env.example
+
+# scratch directories from development / review rounds
+tmpcritic/
+tmpcx/
+tmp*/
+
+# third-party projects cloned for reference only (not part of this repo)
+refs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# internal dev progress tooling and stray files
+scripts/progress.mjs
+scripts/seed.sh
+/{}

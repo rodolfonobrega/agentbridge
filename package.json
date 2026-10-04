@@ -1,0 +1,48 @@
+{
+  "name": "agentbridge",
+  "version": "0.1.0",
+  "description": "One interface for every coding agent: drive Claude Code, Codex, OpenCode, Antigravity CLI, pi and Ollama with your existing logins. MCP bridge, fallback on rate limits, OpenAI/Anthropic-compatible proxy.",
+  "keywords": [
+    "ai",
+    "agents",
+    "claude-code",
+    "codex",
+    "opencode",
+    "antigravity",
+    "pi",
+    "ollama",
+    "mcp",
+    "orchestration",
+    "cli",
+    "proxy",
+    "subagents"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "agentbridge": "src/cli/main.mjs",
+    "ab": "src/cli/main.mjs"
+  },
+  "files": [
+    "src",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node --test --test-concurrency=1 acceptance/core.test.mjs acceptance/registry.test.mjs acceptance/registry2.test.mjs acceptance/ui.test.mjs",
+    "accept": "node acceptance/run.mjs"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.127.0",
+    "openai": "^7.20.0"
+  }
+}
