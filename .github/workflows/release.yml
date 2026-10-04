@@ -1,0 +1,22 @@
+name: Release
+# Push a tag like v0.1.0 (it must match package.json) to create a GitHub Release with the changelog entry.
+# npm publishing is intentionally NOT automated yet.
+on:
+  push: { tags: ['v*'] }
+permissions: { contents: write }
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install
+      - run: npm test
+      - name: Check tag matches package.json
+        run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}"
+      - name: Extract changelog entry
+        run: node -e "const s=require('fs').readFileSync('CHANGELOG.md','utf8');const v=process.env.GITHUB_REF_NAME.slice(1);const m=s.split(/^## /m).find(x=>x.startsWith(v));require('fs').writeFileSync('notes.md',m?m.split('\n').slice(1).join('\n').trim():'See CHANGELOG.md')"
+      - run: npm pack
+      - env: { GH_TOKEN: '${{ github.token }}' }
+        run: gh release create "$GITHUB_REF_NAME" *.tgz --title "$GITHUB_REF_NAME" --notes-file notes.md

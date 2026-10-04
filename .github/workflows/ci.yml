@@ -21,3 +21,18 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: npm install
       - run: npm test
+
+  package:
+    name: Package contents
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm pack dry run (must contain bin, src, docs and no scratch files)
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e "const f=JSON.parse(require('fs').readFileSync('pack.json','utf8'))[0].files.map(x=>x.path);for(const need of ['src/index.mjs','src/cli/main.mjs','README.md','LICENSE'])if(!f.includes(need)){console.error('missing',need);process.exit(1)}const bad=f.filter(x=>/^(tmp|\.claude|refs|acceptance|\.github)/.test(x));if(bad.length){console.error('unexpected',bad);process.exit(1)}console.log(f.length+' files OK')"
+      - name: CLI starts
+        run: node src/cli/main.mjs --help
