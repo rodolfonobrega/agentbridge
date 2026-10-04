@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agentbridge</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><use href="/favicon.svg#m"/></svg><span>agentbridge</span></div>
+  <div class="controls">
+    <label class="ctl">Window
+      <select id="since" aria-label="Time window">
+        <option value="3600000">Last hour</option>
+        <option value="21600000">Last 6 hours</option>
+        <option value="86400000" selected>Last 24 hours</option>
+        <option value="604800000">Last 7 days</option>
+        <option value="2592000000">Last 30 days</option>
+      </select>
+    </label>
+    <label class="ctl">Agent
+      <select id="agent" aria-label="Filter by agent"><option value="">All agents</option></select>
+    </label>
+    <button id="pause" class="btn" type="button" aria-pressed="false">Pause</button>
+    <button id="theme" class="btn ghost" type="button" aria-label="Toggle theme">Theme</button>
+    <span id="live" class="live" role="status"><i></i><span>connecting</span></span>
+  </div>
+</header>
+
+<main>
+  <div id="banner" class="banner" hidden></div>
+
+  <section aria-label="Key numbers" class="kpis" id="kpis"></section>
+
+  <section class="grid2">
+    <div class="card">
+      <div class="card-h"><h2>Running now</h2><span class="muted" id="live-count"></span></div>
+      <div id="live-runs" class="live-runs"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Activity</h2>
+        <div class="seg" role="tablist" aria-label="Chart metric">
+          <button type="button" role="tab" data-metric="runs" aria-selected="true">Runs</button>
+          <button type="button" role="tab" data-metric="tokens" aria-selected="false">Tokens</button>
+        </div>
+      </div>
+      <div id="timeline" class="chart"></div>
+      <div class="legend" id="timeline-legend"></div>
+    </div>
+  </section>
+
+  <section class="grid2">
+    <div class="card">
+      <div class="card-h"><h2>By agent</h2><span class="muted">tokens in + out</span></div>
+      <div id="agents"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Context pressure</h2><span class="muted">share of each session's window</span></div>
+      <div id="context"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-h"><h2>Recent runs</h2>
+      <div class="seg" role="tablist" aria-label="Status filter" id="status-filter">
+        <button type="button" role="tab" data-status="" aria-selected="true">All</button>
+        <button type="button" role="tab" data-status="ok" aria-selected="false">Succeeded</button>
+        <button type="button" role="tab" data-status="failed" aria-selected="false">Failed</button>
+        <button type="button" role="tab" data-status="rescued" aria-selected="false">Rescued</button>
+      </div>
+    </div>
+    <div class="table-wrap"><table id="runs">
+      <thead><tr><th>Started</th><th>Agent</th><th>Model</th><th>Source</th><th>Status</th><th class="num">Duration</th><th class="num">Tokens</th><th class="num">Tools</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div id="empty" class="empty" hidden></div>
+  </section>
+
+  <section class="grid2">
+    <div class="card"><div class="card-h"><h2>Top tools</h2></div><div id="tools"></div></div>
+    <div class="card"><div class="card-h"><h2>Where runs come from</h2></div><div id="origins"></div></div>
+  </section>
+
+  <footer class="foot">Read-only view of <code>~/.agentbridge</code> telemetry. Cost appears only for agents that report it (Claude does; others show &ndash;). Token counts for some agents are estimates, marked <span class="est">est.</span></footer>
+</main>
+
+<aside id="drawer" class="drawer" hidden aria-label="Run details">
+  <div class="drawer-h"><h3 id="d-title">Run</h3><button id="d-close" class="btn ghost" type="button">Close</button></div>
+  <div id="d-body"></div>
+</aside>
+<div id="scrim" class="scrim" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

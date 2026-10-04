@@ -1,0 +1,46 @@
+✔ models() lists haiku (292.8079ms)
+✔ basic + result shape + API key stripped (2925.6789ms)
+✔ streaming events: session, text, usage (3459.008ms)
+✔ effort maps (low/high accepted) (7548.3281ms)
+✔ systemPrompt applied (7088.6017ms)
+✔ cwd applied (read-only can read files there) (8823.5295ms)
+✔ permissions: read-only cannot write, edit can (18073.7497ms)
+✔ permissions: plan and full accepted (10931.513ms)
+✔ timeoutMs -> TIMEOUT (552.6583ms)
+✔ signal -> ABORTED (463.2191ms)
+✔ jsonSchema -> structured output (4534.7588ms)
+✔ extraArgs passed through (--append-system-prompt) (4194.5234ms)
+✔ mcpServers: custom stdio server tool works under permissions=read-only, no extraArgs (4763.7285ms)
+✔ mcpServers: custom stdio server tool works under permissions=edit, no extraArgs (8699.867ms)
+✔ mcpServers: custom stdio server tool works under permissions=plan, no extraArgs (10288.4886ms)
+✔ mcpServers: custom stdio server tool works under permissions=full, no extraArgs (6629.5683ms)
+✔ session: continue remembers; fork remembers but original unchanged; ephemeral not resumable (75813.768ms)
+✔ continue without id resumes most recent in cwd (8887.9406ms)
+✔ continue/fork without id and no prior session fail loudly (BAD_OPTION) (1.6932ms)
+✔ adapter validates options itself (no index.mjs) (0.2926ms)
+✔ read-only exposes no mcp__ tools, only read built-ins; isolated loads no plugins/skills (3028.0561ms)
+✔ isolated:false opt-out works; xhigh effort accepted (18636.0539ms)
+✔ models() discovered from CLI includes aliases (288.1773ms)
+✔ plan mode is write-free (no new files in cwd or ~/.claude/plans) (9026.4735ms)
+✔ isolated ignores CLAUDE.md canary; isolated:false sees it (13978.1273ms)
+✔ concurrent continue on one id is serialized (25598.9202ms)
+✔ lock released when setup throws (MCP temp-file write fails); later continue proceeds (8178.0869ms)
+✔ no-id continue resolves to OUR session, never a foreign newer one; adoptForeign opt-in (17867.8873ms)
+✔ concurrent new sessions in one cwd do not corrupt no-id resolution to a foreign file (6502.4527ms)
+✔ NOT_LOGGED_IN with empty config dir (1439.7327ms)
+✔ unknown session id -> AGENT_FAILED (3594.5197ms)
+✔ timeout kills grandchild processes (MCP server that never completes handshake) (6264.2143ms)
+✔ usage event mapping (thinking events, if any, are non-empty) (3272.5827ms)
+# canary hidden by env only: true | by --setting-sources only: true
+✔ isolation: env vars alone hide CLAUDE.md; setting-sources flag alone also does (both documented load-bearing) (15302.6744ms)
+✔ two concurrent no-id continues never share a session (second gets distinct/BAD_OPTION busy) (17744.868ms)
+✔ lock released after failure INSIDE the lock (spawn fails on bad cwd) (6546.2609ms)
+✔ abort kills MCP-server child and Bash-tool child (5116.308ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 401348.8848
