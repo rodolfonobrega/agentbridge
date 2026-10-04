@@ -17,7 +17,7 @@ const sandbox = () => {
   return d;
 };
 const ab = (d, args) => new Promise((res) => {
-  const env = { ...process.env, HOME: d.home, USERPROFILE: d.home, CODEX_HOME: d.cx, XDG_CONFIG_HOME: d.xdg, AGENTBRIDGE_HOME: path.join(d.r, 'ab') };
+  const env = { ...process.env, HOME: d.home, USERPROFILE: d.home, CODEX_HOME: d.cx, XDG_CONFIG_HOME: d.xdg, PI_CODING_AGENT_DIR: path.join(d.r, 'pi'), AGENTBRIDGE_HOME: path.join(d.r, 'ab') };
   const p = spawn(process.execPath, [MAIN, 'install', ...args, '--cwd', d.proj], { env });
   let o = '', e = '';
   p.stdout.on('data', (b) => (o += b)); p.stderr.on('data', (b) => (e += b)); p.on('close', (c) => res({ c, o, e }));
@@ -78,6 +78,21 @@ test('agy: registered in its (isolated) mcp_config.json', { skip: !(await has('a
   assert.equal(cfg.mcpServers.agentbridge.env.AGENTBRIDGE_PERMS, 'read-only');
   assert.deepEqual(cfg.mcpServers.agentbridge.args.slice(-1), ['bridge']);
   skillOk(d);
+});
+
+test('pi: registered in its (isolated) mcp.json with direct exposure, and the bridge connects', { skip: !(await has('pi')) && 'pi is not installed', timeout: 90000 }, async () => {
+  const d = sandbox(); const r = await ab(d, ['pi']);
+  assert.equal(r.c, 0, r.e + r.o);
+  const cfg = JSON.parse(readFileSync(path.join(d.r, 'pi', 'mcp.json'), 'utf8'));
+  const s = cfg.mcpServers.agentbridge;
+  assert.equal(s.exposure, 'direct'); assert.equal(s.env.AGENTBRIDGE_PERMS, 'read-only'); assert.deepEqual(s.args.slice(-1), ['bridge']);
+  skillOk(d);
+  // no model involved: pi only connects to the MCP server and lists its tools
+  const l = await new Promise((res) => {
+    const p = spawn('pi', ['mcp', 'list', '--json'], { shell: process.platform === 'win32', env: { ...process.env, PI_CODING_AGENT_DIR: path.join(d.r, 'pi'), HOME: d.home, USERPROFILE: d.home }, cwd: d.proj });
+    let o = ''; p.stdout.on('data', (b) => (o += b)); p.on('close', (c) => res({ c, o }));
+  });
+  assert.match(l.o, /ask_claude/);
 });
 
 test('unknown target and bad options fail', async () => {

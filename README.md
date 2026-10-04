@@ -99,7 +99,7 @@ ab install agy             # same for Antigravity
 ab install all             # every one of the above that is installed
 ```
 
-Now, from inside any of them, you can say "ask claude to review this" or "have pi write the tests": the agent calls the `ask_<agent>` tools (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...). `--scope user` installs globally; `--permissions` sets the ceiling a delegated agent can never exceed. pi can be a *target* (`ask_pi`) but has no installer yet.
+Now, from inside any of them, you can say "ask claude to review this" or "have pi write the tests": the agent calls the `ask_<agent>` tools (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...). `--scope user` installs globally; `--permissions` sets the ceiling a delegated agent can never exceed. `ab install pi` covers pi too.
 
 ---
 
