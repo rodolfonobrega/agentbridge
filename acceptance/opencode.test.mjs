@@ -13,7 +13,7 @@ import { ask, run } from '../src/index.mjs';
 const CANDS = [process.env.OC_TEST_MODEL, 'opencode-go/deepseek-v4-flash', 'opencode-go/mimo-v2.5', 'opencode/gpt-5-nano', 'opencode/gpt-5.4-nano', 'opencode/big-pickle', 'opencode/claude-haiku-4-5'].filter(Boolean);
 let MODEL, WHY = 'no probe run';
 const cwd = mkdtempSync(path.join(os.tmpdir(), 'oc-accept-'));
-const oco = (args, extra = {}) => spawnSync('opencode', args, { encoding: 'utf8', shell: process.platform === 'win32', maxBuffer: 1e8, ...extra }).stdout || '';
+const oco = (args, extra = {}) => spawnSync('opencode', args, { encoding: 'utf8', shell: process.platform === 'win32', maxBuffer: 1e8, cwd, ...extra }).stdout || '';
 const sessions = () => JSON.parse(oco(['session', 'list', '--format', 'json']) || '[]')
   .filter((s) => path.resolve(s.directory).toLowerCase() === path.resolve(cwd).toLowerCase());
 const live = (t) => (MODEL ? false : (t.skip(`no live opencode model: ${WHY}`), true));

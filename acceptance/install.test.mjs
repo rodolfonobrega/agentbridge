@@ -71,6 +71,18 @@ test('codex: registered in its (isolated) config.toml', { skip: !(await has('cod
   skillOk(d);
 });
 
+test('codex --auto-approve pre-approves the bridge tools (codex exec cannot answer the prompt)', { skip: !(await has('codex')) && 'codex is not installed' }, async () => {
+  const d = sandbox();
+  const plain = await ab(d, ['codex']);
+  assert.equal(plain.c, 0, plain.e + plain.o);
+  assert.doesNotMatch(readFileSync(path.join(d.cx, 'config.toml'), 'utf8'), /default_tools_approval_mode/);
+  const r = await ab(d, ['codex', '--auto-approve']);
+  assert.equal(r.c, 0, r.e + r.o);
+  const toml = readFileSync(path.join(d.cx, 'config.toml'), 'utf8');
+  assert.match(toml, /\[mcp_servers\.agentbridge\]\r?\n(?:.*\r?\n)*?default_tools_approval_mode = "approve"/);
+  assert.match(toml, /AGENTBRIDGE_PERMS = "read-only"/);
+});
+
 test('agy: registered in its (isolated) mcp_config.json', { skip: !(await has('agy')) && 'agy is not installed' }, async () => {
   const d = sandbox(); const r = await ab(d, ['agy']);
   assert.equal(r.c, 0, r.e + r.o);

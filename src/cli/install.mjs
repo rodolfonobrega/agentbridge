@@ -59,6 +59,23 @@ function writeSkill(base, out) {
 }
 const agentsBase = (c) => (c.scope === 'user' ? path.join(homedir(), '.agents') : path.join(c.cwd, '.agents'));
 
+// codex exec / CI cannot answer the "approve this MCP tool call?" prompt, so delegation fails there unless the server is pre-approved
+function autoApproveCodex(out) {
+  const file = path.join(process.env.CODEX_HOME || path.join(homedir(), '.codex'), 'config.toml');
+  let t; try { t = readFileSync(file, 'utf8'); } catch { out(`--auto-approve: ${file} not found, nothing changed`); return; }
+  const head = '[mcp_servers.agentbridge]';
+  const i = t.indexOf(head);
+  if (i < 0) { out('--auto-approve: agentbridge not found in the Codex config, nothing changed'); return; }
+  const rest = t.slice(i + head.length);
+  const j = rest.search(/^\[/m);
+  const body = j < 0 ? rest : rest.slice(0, j);
+  if (/^default_tools_approval_mode\s*=/m.test(body)) { out('--auto-approve: already set'); return; }
+  const nl = t.includes('\r\n') ? '\r\n' : '\n';
+  const at = i + head.length + body.replace(/\s+$/, '').length;
+  writeFileSync(file, t.slice(0, at) + nl + 'default_tools_approval_mode = "approve"' + t.slice(at));
+  out('Codex will run agentbridge tools without asking (default_tools_approval_mode = "approve").');
+}
+
 async function installCodex(flags, { out }) {
   const c = bridgeCtx(flags);
   const envArgs = Object.entries(c.env).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
@@ -66,6 +83,7 @@ async function installCodex(flags, { out }) {
   const r = await runCollect('codex', ['mcp', 'add', 'agentbridge', ...envArgs, '--', process.execPath, MAIN, 'bridge'], { cwd: c.cwd, timeoutMs: 30000 });
   if (r.exitCode !== 0) throw new UsageError(`codex mcp add failed: ${(r.stderr || r.stdout).trim()}`);
   out(`registered MCP server "agentbridge" in Codex (global ~/.codex/config.toml, permission ceiling: ${c.permissions})`);
+  if (flags['auto-approve']) autoApproveCodex(out);
   if (!flags['no-skill']) writeSkill(agentsBase(c), out);
   out('Restart Codex. Its tools appear as agentbridge ask_claude / ask_opencode / ask_agy / ask_pi / ask_ollama ... Codex may ask to approve MCP tool calls the first time.');
 }

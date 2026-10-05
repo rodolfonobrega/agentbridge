@@ -175,13 +175,14 @@ ab watch <run> | ab wait <run> | ab cancel <run>
 ab serve [--port][--host][--token][--allow-non-loopback]
 ab bridge                                        # stdio MCP server
 ab doctor [--live][--json]
-ab install <claude|codex|opencode|agy|all> [--scope project|user|local] [--permissions read-only|plan|edit|full] [--max-depth N] [--no-agents] [--no-skill]
+ab install <claude|codex|opencode|agy|pi|all> [--scope project|user|local] [--permissions read-only|plan|edit|full] [--max-depth N] [--no-agents] [--no-skill] [--auto-approve (codex)]
 ab endpoint [list] | add <name> <baseUrl> [--type openai|anthropic] [--model m] [--api-key-env VAR] | remove <name>
 ```
 
 Notes:
 
 - `ab install codex|opencode|agy|pi` register the same MCP bridge in those CLIs (Codex: `codex mcp add`, global `~/.codex/config.toml`; Antigravity: `agy mcp add`, global; OpenCode: the `mcp` block of `opencode.json` in the project, or of the global file with `--scope user`; a config that is not plain JSON is refused untouched) and put the skill in `.agents/skills/` (or `~/.agents/skills/` with `--scope user`), the shared folder those CLIs read. `ab install all` does every CLI that is installed. pi: `pi mcp add agentbridge --exposure direct` (global `~/.pi/agent/mcp.json`, so the `ask_*` tools are declared to the model) plus the same `.agents/skills/` folder pi reads; verified that pi connects to the bridge and lists its tools (a model call through pi was not verified: no model is configured in this pi). Verified live: OpenCode and Antigravity saw the skill and called the bridge tools; for Codex only the registration was verified (its usage limit was exhausted during the check).
+- `ab install codex --auto-approve` sets `default_tools_approval_mode = "approve"` on the bridge server in Codex's config. Without it, interactive Codex asks once per tool and `codex exec` fails with "MCP tool call requires approval".
 - `ab install claude` registers the MCP server, writes the relay subagents (`--no-agents` to skip) and installs the `agentbridge-delegate` skill under `.claude/skills/` (project/local scope) or `~/.claude/skills/` (user scope); `--no-skill` skips it. The skill teaches Claude when to delegate, which tool to use (`ask_*` vs `dispatch_*`), permissions, fallback and how to treat results. Source: `skills/agentbridge-delegate/SKILL.md`.
 - `<agent>` is `claude`, `codex`, `opencode`, `agy`, `pi`, `ollama` or any [endpoint](#http-endpoints-ollama-and-any-base-url) you configured. Targets for `fanout`/`race` can include a model: `claude:haiku`, `opencode:provider/model`.
 - Pass `-` as the prompt to read it from stdin.

@@ -10,6 +10,7 @@
 - `ab install pi`: registers the bridge in pi (`pi mcp add`, direct exposure) and installs the skill in the shared `.agents/skills/` folder.
 - opencode: bootstrap requests are bounded (health 3 s, warm-up 20 s with one retry, session create 30 s), which fixes a ~300 s stall.
 - Missing/unconfigured agents are never silent: `NOT_INSTALLED`/`NOT_LOGGED_IN` messages carry install/login hints, `ab serve` prints which agent CLIs are present at startup, `/v1/models` lists only installed agents, and `ab install all` exits 1 when nothing was installed.
+- `ab install codex --auto-approve`: pre-approves the bridge tools in Codex, so `codex exec` / CI can delegate (it cannot answer the approval prompt).
 - `RATE_LIMITED` errors carry `kind` (quota / overloaded / rate).
 
 ## 0.1.0 — first public release

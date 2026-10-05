@@ -243,7 +243,7 @@ const HELP = `agentbridge (ab) — drive local claude/codex/opencode/agy/pi CLIs
   ab ui [--port 8788][--open][--token t]            # live dashboard: runs, tokens, context, fallbacks (read-only, loopback)
   ab bridge                                        # stdio MCP server
   ab doctor [--live][--json]
-  ab install <claude|codex|opencode|agy|all> [--scope project|user|local] [--permissions read-only|plan|edit|full] [--max-depth N] [--no-agents] [--no-skill]
+  ab install <claude|codex|opencode|agy|pi|all> [--scope project|user|local] [--permissions read-only|plan|edit|full] [--max-depth N] [--no-agents] [--no-skill] [--auto-approve (codex)]
                                                    # register the bridge in Claude Code + write codex/opencode/ollama relay subagents
   ab endpoint [list] | add <name> <baseUrl> [--type openai|anthropic] [--model m] [--api-key-env VAR] | remove <name>
                                                    # HTTP chat endpoints (Ollama, vLLM, LM Studio, remote gateways...); \`ollama\` is built in
