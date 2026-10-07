@@ -78,6 +78,28 @@ test('Windows .cmd shim resolution (npm-style and plain)', { skip: process.platf
   await assert.rejects(runCollect('plain', ['100%']), { code: 'BAD_OPTION' }).catch(() => {}); // not on PATH here: NOT_INSTALLED is fine too
 });
 
+test('Windows Codex npm shim passes quoted arguments directly to its JS target', { skip: process.platform !== 'win32' }, async () => {
+  const d = mkdtempSync(path.join(tmpdir(), 'ab-codex-shim-'));
+  const target = path.join(d, 'node_modules', '@openai', 'codex', 'bin');
+  mkdirSync(target, { recursive: true });
+  writeFileSync(path.join(target, 'codex.js'), 'console.log(JSON.stringify(process.argv.slice(2)))');
+  writeFileSync(path.join(d, 'codex.cmd'), [
+    '@ECHO off',
+    'GOTO start',
+    ':find_dp0',
+    'SET dp0=%~dp0',
+    'EXIT /b',
+    ':start',
+    'SETLOCAL',
+    'CALL :find_dp0',
+    'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js" %*',
+  ].join('\r\n') + '\r\n');
+  const env = { PATH: d + path.delimiter + process.env.PATH };
+  const args = ['exec', '-c', 'windows.sandbox="unelevated"', '-'];
+  const r = await runCollect('codex', args, { env, cwd: d });
+  assert.deepEqual(JSON.parse(r.stdout), args);
+});
+
 for (const bin of ['claude', 'codex', 'opencode']) {
   test(`real binary ${bin} --version`, async (t) => {
     if (!resolveBinary(bin)) return t.skip(`${bin} not installed`);

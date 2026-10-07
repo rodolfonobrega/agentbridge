@@ -30,7 +30,7 @@ export function resolveBinary(cmd, env = process.env) {
 //    spawn the real target (.exe, or .js/.mjs/.cjs via node) directly: args go through the OS argv, no cmd.exe.
 // 2) Otherwise run the batch file itself through cmd.exe, which cannot be made injection-proof for arbitrary
 //    characters, so any arg containing " % ! CR LF NUL is rejected (BAD_OPTION) and the rest are wrapped in "...".
-const SHIM_BOILERPLATE = /^(@?echo\s+off|@?(setlocal|endlocal)\b.*|@?set\s+["']?\w+=.*|if\s.*|\(.*|\).*|goto\s.*|title\s.*|exit\s.*|:\w+)$/i;
+const SHIM_BOILERPLATE = /^(@?echo\s+off|@?(setlocal|endlocal)\b.*|@?set\s+["']?\w+=.*|if\s.*|\(.*|\).*|goto\s.*|call\s+:find_dp0|title\s.*|exit\s.*|:\w+)$/i;
 
 function parseShim(txt) {
   const lines = txt.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^(@?rem(\s|$)|::)/i.test(l));
