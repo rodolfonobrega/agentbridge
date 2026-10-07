@@ -1,5 +1,7 @@
 # agentbridge
 
+![Colorful coding-agent nodes connected through the AgentBridge hub](docs/img/hero.png)
+
 **One interface for every coding agent on your machine.**
 Drive **Claude Code**, **Codex**, **OpenCode**, **Antigravity CLI (`agy`)**, **pi** and local/remote **HTTP models (Ollama, vLLM, LM Studio...)** from the same CLI, library, MCP server and OpenAI/Anthropic-compatible proxy — using the logins you already have. **No API keys. No dependencies. No build step.**
 
