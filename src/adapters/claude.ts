@@ -80,28 +80,37 @@ function buildArgs(o: any, mcpFile?: string, resumeId?: string): string[] {
   if (isolated) a.push('--setting-sources', '', '--settings', '{"disableAllHooks":true}', '--disable-slash-commands');
   const ro = !o.permissions || o.permissions === 'read-only';
   const readTools = o.offline ? OFFLINE_READ_TOOLS : READ_TOOLS;
+  const mcpTools = mcpFile ? Object.keys(o.mcpServers).map((n) => `mcp__${n.replace(/[^a-zA-Z0-9_-]/g, '_')}__*`) : [];
+
+  let allowedToolsStr: string | undefined;
   switch (o.permissions) {
     case 'edit':
       a.push('--permission-mode', 'acceptEdits');
       if (o.offline) a.push('--disallowed-tools', 'WebFetch,WebSearch');
+      allowedToolsStr = [readTools, 'Edit,Write', ...mcpTools].join(',');
       break;
     case 'full':
       a.push('--permission-mode', 'bypassPermissions');
       if (o.offline) a.push('--disallowed-tools', 'WebFetch,WebSearch');
+      if (mcpTools.length) allowedToolsStr = ['*', ...mcpTools].join(',');
       break;
     case 'plan':
       a.push('--permission-mode', 'plan', '--tools', readTools);
+      allowedToolsStr = [readTools, ...mcpTools].join(',');
       break;
     default:
       a.push('--permission-mode', 'default', '--tools', readTools);
+      allowedToolsStr = [readTools, ...mcpTools].join(',');
+  }
+  if (allowedToolsStr) {
+    a.push('--allowedTools', allowedToolsStr);
   }
   if (o.systemPrompt) a.push('--system-prompt', o.systemPrompt);
   if (mcpFile) {
-    const mcpTools = Object.keys(o.mcpServers).map((n) => `mcp__${n.replace(/[^a-zA-Z0-9_-]/g, '_')}__*`);
-    const allowed = ro || o.permissions === 'plan' ? [readTools, ...mcpTools].join(',') : ['*', ...mcpTools].join(',');
-    a.push('--mcp-config', mcpFile, '--strict-mcp-config', '--allowedTools', allowed);
+    a.push('--mcp-config', mcpFile, '--strict-mcp-config');
+  } else if (isolated || ro || o.permissions === 'plan') {
+    a.push('--mcp-config', '{"mcpServers":{}}', '--strict-mcp-config');
   }
-  else if (isolated || ro || o.permissions === 'plan') a.push('--mcp-config', '{"mcpServers":{}}', '--strict-mcp-config');
   if (o.jsonSchema) a.push('--json-schema', JSON.stringify(o.jsonSchema));
   const s = o.session || { mode: 'new' };
   if (s.mode === 'ephemeral') a.push('--no-session-persistence');
