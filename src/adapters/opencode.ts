@@ -240,11 +240,11 @@ function permissionBlock(p?: string) {
   }
   switch (p) {
     case 'full':
-      return { edit: 'allow', bash: 'allow', webfetch: 'allow', external_directory: 'allow' };
+      return { edit: 'allow', bash: 'allow', webfetch: 'allow', websearch: 'allow', external_directory: 'allow' };
     case 'edit':
-      return { ...guard, edit: 'allow', bash: 'deny', webfetch: 'allow' };
+      return { ...guard, edit: 'allow', bash: 'deny', webfetch: 'allow', websearch: 'allow' };
     default:
-      return { ...guard, edit: 'deny', bash: 'deny', webfetch: 'allow' };
+      return { ...guard, edit: 'deny', bash: 'deny', webfetch: 'allow', websearch: 'allow' };
   }
 }
 

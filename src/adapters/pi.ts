@@ -42,9 +42,9 @@ const PERM_FLAGS =
   /^(--tools|-t|--no-tools|-nt|--no-builtin-tools|-nbt|--exclude-tools|-xt|--extension|-e|--skill|--prompt-template|--theme|--api-key|--provider)(=|$)/;
 // Tools denied per permission level.
 const DENY: Record<string, string[]> = {
-  'read-only': ['bash', 'powershell', 'edit', 'write', 'codemode', 'tool_search'],
-  plan: ['bash', 'powershell', 'edit', 'write', 'codemode', 'tool_search'],
-  edit: ['bash', 'powershell', 'codemode', 'tool_search'],
+  'read-only': ['bash', 'powershell', 'edit', 'write', 'codemode'],
+  plan: ['bash', 'powershell', 'edit', 'write', 'codemode'],
+  edit: ['bash', 'powershell', 'codemode'],
   full: [],
 };
 // Resource lists in the user's settings would load extensions/packages into a run that is supposed to be shaped by us.
@@ -384,7 +384,7 @@ const adapter: AgentAdapter = {
           env: {
             ...(o.env || {}),
             PI_CODING_AGENT_DIR: ad!.dir,
-            PI_OFFLINE: '1',
+            ...(o.env?.PI_OFFLINE != null ? { PI_OFFLINE: o.env.PI_OFFLINE } : {}),
             PI_SKIP_VERSION_CHECK: '1',
             PI_TELEMETRY: '0',
           },

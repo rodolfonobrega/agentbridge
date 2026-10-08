@@ -206,19 +206,17 @@ Supports standard batch CLI runs (`codex exec`) as well as persistent JSON-RPC 2
 
 ### Agent capability overview
 
-| Agent | Permissions enforced by | Sessions | Notes |
-|---|---|---|---|
-| Claude Code | the CLI's own permission modes | new / continue / fork / ephemeral | |
-| Codex | the CLI's sandbox modes | new / continue / fork | |
-| OpenCode | agentbridge + CLI | new / continue / fork | latency depends on backend model |
-| Antigravity (`agy`) | **agentbridge** (private HOME, generated deny rules) | new / continue (no fork) | `edit` not confined to cwd |
-| pi | **agentbridge** (tool denylist, project trust off) | new / continue / fork / ephemeral | no sandbox; `plan` = `read-only` |
-| HTTP endpoints (Ollama, OpenRouter) | Direct API (plain chat) or agent harness (`claude`/`pi` for tools & edits) | emulated | supports tools/edits via `--harness` |
-| Cursor (`cursor`) | cursor CLI / agentbridge | new / continue | supports claude & gpt models |
-| Grok (`grok`) | grok CLI / agentbridge | new / continue | supports grok-3/grok-2 series |
-| Gemini (`gemini`) | gemini CLI / agentbridge | new / continue | native Gemini 2.0/1.5 models |
-| Devin (`devin`) | devin CLI / agentbridge | new / continue | autonomous software engineer CLI |
-| ACP (`acp`) | ACP server protocol | session managed by server | Agent Client Protocol JSON-RPC stdio |
+| Agent | Permissions enforced by | Sessions | Web Search / Network Access | How to Unlock Full Tools & Web |
+|---|---|---|---|---|
+| Claude Code | the CLI's own permission modes | new / continue / fork / ephemeral | `WebSearch`, `WebFetch` active across all modes | Works out of the box; use `--permissions full` for unrestricted shell/plugins |
+| Codex | the CLI's sandbox modes | new / continue / fork | Sandboxed by default; network blocked in `read-only`/`edit` | Set `--permissions full` (unrestricted sandbox) |
+| OpenCode | agentbridge + CLI | new / continue / fork | `webfetch`, `websearch` active across all modes | Set `--permissions full` for shell (`bash`) execution |
+| Antigravity (`agy`) | agentbridge (private HOME, deny rules) | new / continue (no fork) | `execute_url` (web fetch & search) active across all modes | Set `--permissions full` for arbitrary shell execution |
+| pi | agentbridge (tool denylist) | new / continue / fork / ephemeral | Connected by default (`tool_search` enabled) | Set `--permissions full` for full tool & extension suite |
+| HTTP endpoints (Ollama, OpenRouter) | Direct API or harness (`claude`/`pi`) | emulated | Plain chat (no tools) by default; full tools with harness | Pass `--harness claude` or `--harness pi` to enable tools & web |
+| Proxy (`ab serve`) | Client function calling | per request / session | Client functions supported; hosted server tools not available | Register a client-side search function tool |
+
+> **Web Search & Tool Permissions Note:** By default, AgentBridge applies strict sandboxing to protect your machine. For live internet research, web searches, or executing network commands, models require permission clearance or an execution harness. See **[docs/REFERENCE.md#web-search-tools-and-network-permissions-across-agents--modes](docs/REFERENCE.md#web-search-tools-and-network-permissions-across-agents--modes)** for the complete guide.
 
 Full details, flags and caveats: **[docs/REFERENCE.md](docs/REFERENCE.md)**.
 

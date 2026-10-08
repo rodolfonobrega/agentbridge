@@ -108,7 +108,7 @@ export function settingsFor(permissions: string, mcpNames: string[] = []): any {
   const deny =
     permissions === 'full'
       ? []
-      : ['command(*)', 'unsandboxed(*)', 'execute_url(*)', ...(permissions === 'edit' ? ['write_file(.agents/)'] : ['write_file(*)'])];
+      : ['command(*)', 'unsandboxed(*)', ...(permissions === 'edit' ? ['write_file(.agents/)'] : ['write_file(*)'])];
   return { permissions: { ...(allow.length ? { allow } : {}), ...(deny.length ? { deny } : {}) } };
 }
 

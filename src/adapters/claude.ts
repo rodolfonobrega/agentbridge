@@ -92,16 +92,11 @@ function buildArgs(o: any, mcpFile?: string, resumeId?: string): string[] {
       a.push('--permission-mode', 'default', '--tools', READ_TOOLS);
   }
   if (o.systemPrompt) a.push('--system-prompt', o.systemPrompt);
-  if (mcpFile)
-    a.push(
-      '--mcp-config',
-      mcpFile,
-      '--strict-mcp-config',
-      '--allowedTools',
-      Object.keys(o.mcpServers)
-        .map((n) => `mcp__${n.replace(/[^a-zA-Z0-9_-]/g, '_')}__*`)
-        .join(',')
-    );
+  if (mcpFile) {
+    const mcpTools = Object.keys(o.mcpServers).map((n) => `mcp__${n.replace(/[^a-zA-Z0-9_-]/g, '_')}__*`);
+    const allowed = ro || o.permissions === 'plan' ? [READ_TOOLS, ...mcpTools].join(',') : ['*', ...mcpTools].join(',');
+    a.push('--mcp-config', mcpFile, '--strict-mcp-config', '--allowedTools', allowed);
+  }
   else if (isolated || ro || o.permissions === 'plan') a.push('--mcp-config', '{"mcpServers":{}}', '--strict-mcp-config');
   if (o.jsonSchema) a.push('--json-schema', JSON.stringify(o.jsonSchema));
   const s = o.session || { mode: 'new' };

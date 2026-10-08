@@ -343,6 +343,43 @@ const c = await ask('claude', { prompt: 'Try a different approach', session: { m
 
 `permissions` and `effort` are mapped to each CLI's native concepts (sandbox modes, permission modes, reasoning effort). `read-only` is the default everywhere. In the bridge, a child agent can never receive broader permissions than its caller.
 
+### Web Search, Tools, and Network Permissions Across Agents & Modes
+
+By design, AgentBridge prioritizes safety and least privilege by default. Depending on the agent CLI and the requested permission mode, certain tools (especially web search, web fetch, external network access, and shell execution) may be enabled, sandboxed, or restricted.
+
+The table below summarizes tool availability and network access across adapters and modes:
+
+| Agent | `read-only` / `plan` | `edit` | `full` | Web Search / Network Access | How to Grant Full Network / Web Access |
+|---|---|---|---|---|---|
+| **Claude Code** (`claude`) | `Read`, `Glob`, `Grep`, `WebFetch`, `WebSearch` | All Claude built-in tools (`acceptEdits`), edits auto-accepted | Unrestricted (`bypassPermissions`) | Native `WebSearch` and `WebFetch` active across all modes. When MCP servers are connected, built-in tools are preserved. | Web search works out of the box in `read-only` and `edit`. For full shell and plugin freedom, use `--permissions full`. |
+| **OpenAI Codex** (`codex`) | Sandbox `read-only` (read files only) | Sandbox `workspace-write` (edits confined to repo) | Sandbox `danger-full-access` (unrestricted) | Codex sandbox blocks outgoing network connections in `read-only` and `workspace-write` modes. | Set `--permissions full` (or pass Codex network flags via `extraArgs: ['-c', 'sandbox_mode="danger-full-access"']`). |
+| **OpenCode** (`opencode`) | Read files, search codebase, `webfetch`, `websearch`. `bash` denied. | File edits allowed. `bash` denied, `webfetch` and `websearch` allowed. | Unrestricted (`edit`, `bash`, `webfetch`, `websearch`). | Web fetch and search tools (`webfetch`, `websearch`) are permitted in all modes. Direct shell commands (`bash`) require `full`. | Use `--permissions full` if the model needs to run terminal curl/pip/npm commands. |
+| **Antigravity** (`agy`) | Read files, `execute_url` (web fetch/search). Shell command execution denied. | File edits allowed, `execute_url` allowed. Shell command execution denied. | Unrestricted (`--dangerously-skip-permissions`). | Web URL inspection and searches (`execute_url`) are allowed across all modes. Arbitrary terminal commands require `full`. | Use `--permissions full` if the model needs terminal shell execution (`command(*)`) or unsandboxed tools. |
+| **Pi** (`pi`) | Read files, search tools (`tool_search`). Shell/edit denied. | File edits allowed, `tool_search` allowed. Shell denied. | All tools allowed without exclusion. | Pi connects to network APIs and tools by default. Telemetry and version checks stay suppressed for speed. | Use `--permissions full` or pass community skills/extensions via `--permissions full` or `extraArgs`. |
+| **HTTP Endpoints** (`ollama`, OpenRouter, etc.) | **Plain chat HTTP mode**: No tools or web search by default (direct LLM API completion). | Requires harness (`--harness claude` or `--harness pi`) to edit files. | Unrestricted harness mode. | Plain chat endpoints have NO tool runner. For tools or web search, an execution harness is **required**. | Specify `--harness claude` (or `--harness pi`) to wrap the model in a tool-enabled environment. |
+| **Proxy Server** (`ab serve`) | Client-defined function calling supported. | Client-defined function calling supported. | Client-defined function calling supported. | Client function tools are supported. **Hosted server tools** (`type: "web_search"` in OpenAI/Anthropic format) are NOT supported because they require proprietary server-side execution. | Define a client-side search function tool (e.g. `web_search`) executed by your client, or use the MCP Bridge / CLI directly. |
+
+#### How to unlock tools and web access:
+
+1. **For models that need to run live web searches or external commands in Codex:**
+   Codex defaults to isolated filesystem sandboxes where network sockets are locked down. Use `--permissions full` to enable internet and unrestrained tool access:
+   ```bash
+   ab ask codex "Search the web for latest Node 26 release notes" --permissions full
+   ```
+
+2. **For local Ollama or custom HTTP endpoints:**
+   Plain HTTP endpoints (`/v1/chat/completions`) have no built-in browser or tool engine. Pass `--harness claude` or `--harness pi` to give your local/remote models full tool execution and web capabilities:
+   ```bash
+   ab ask ollama "Fetch https://example.com and summarize" --model qwen2.5-coder:32b --harness claude
+   ```
+
+3. **In the MCP Bridge (`ask_*` and `dispatch_*` tools):**
+   Subagents cannot exceed the caller's permission ceiling. If the parent agent has ceiling `edit` or `full`, pass `"permissions": "full"` in the MCP tool call arguments to grant the subagent full network and shell tools.
+
+4. **In the OpenAI / Anthropic Compatible Proxy (`ab serve`):**
+   Clients connecting to `http://127.0.0.1:8787/v1` can supply standard function tools (`tools: [{ type: "function", function: { ... } }]`). If your frontend (e.g., Cursor, Continue, LibreChat) attempts to request proprietary cloud-hosted tools (like OpenAI's native server-side web search), configure the client to use a client-side search tool instead.
+
+
 ### Errors
 
 All failures throw `AgentError` with a `code`:
