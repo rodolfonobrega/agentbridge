@@ -10,13 +10,13 @@ import { randomBytes } from 'node:crypto';
 
 const HOME = realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-agy-test-home-')));
 process.env.AGENTBRIDGE_HOME = HOME;
-const { ask, run, agents } = await import('../src/index.mjs');
-const agyMod = await import('../src/adapters/agy.mjs');
+const { ask, run, agents } = await import('../dist/index.js');
+const agyMod = await import('../dist/adapters/agy.js');
 const { settingsFor, makeHome, destroyHome, findBinary } = agyMod;
-const { runAsSubagent } = await import('../src/bridge/subagent.mjs');
-const { mcpConfigFor } = await import('../src/bridge/attach.mjs');
-const { callAny, allTools } = await import('../src/bridge/mcp.mjs');
-const { resolveModel } = await import('../src/server/common.mjs');
+const { runAsSubagent } = await import('../dist/bridge/subagent.js');
+const { mcpConfigFor } = await import('../dist/bridge/attach.js');
+const { callAny, allTools } = await import('../dist/bridge/mcp.js');
+const { resolveModel } = await import('../dist/server/common.js');
 
 const SELF = fileURLToPath(import.meta.url);
 const PROBE = path.join(path.dirname(SELF), '_probe_fixture.mjs');
@@ -271,7 +271,7 @@ t('bridge: ask_agy / dispatch_agy return an attested result; permission ceiling 
 });
 
 t('telemetry: context is tracked for agy sessions with a 1M window for Gemini', async () => {
-  const { askWithTelemetry, contextOf } = await import('../src/index.mjs');
+  const { askWithTelemetry, contextOf } = await import('../dist/index.js');
   const r = await askWithTelemetry('agy', { prompt: 'Reply with exactly: PONG', model: M, cwd: dir(), timeoutMs: 200000 }, { hooks: {}, policy: { warn: null } });
   assert.ok(r.telemetry?.runId);
   const c = contextOf(r.sessionId, { agent: 'agy' });
@@ -279,7 +279,7 @@ t('telemetry: context is tracked for agy sessions with a 1M window for Gemini', 
 });
 
 t('handoff and compact work with agy as the source (it cannot fork, so the summary is requested via continue)', async () => {
-  const { handoff, compact } = await import('../src/index.mjs');
+  const { handoff, compact } = await import('../dist/index.js');
   const cwd = dir(); const word = 'ZEBRA-' + randomBytes(3).toString('hex');
   const a = await ask('agy', { prompt: `Remember: the project code word is ${word}. Reply only OK.`, model: M, cwd, timeoutMs: 200000 });
   assert.equal((await agents.agy).canFork, false);
@@ -295,7 +295,7 @@ t('handoff and compact work with agy as the source (it cannot fork, so the summa
 });
 
 t('proxy: agy/<model> is served over the OpenAI-compatible API (stream and non-stream)', async () => {
-  const { startProxy } = await import('../src/server/index.mjs');
+  const { startProxy } = await import('../dist/server/index.js');
   const p = await startProxy({ port: 0 });
   try {
     const post = (body) => fetch(`${p.url}/v1/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });

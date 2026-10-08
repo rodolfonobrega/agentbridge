@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const MCP = fileURLToPath(new URL('../src/bridge/mcp.mjs', import.meta.url));
+export const MCP = fileURLToPath(new URL('../dist/bridge/mcp.js', import.meta.url));
 
 /** Minimal MCP client over the bridge's stdio. Collects notifications and any non-JSON stdout lines (protocol corruption). */
 export function rpc(env = {}, { script = MCP, nodeArgs = [] } = {}) {

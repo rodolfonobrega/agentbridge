@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **TypeScript Migration:** 100% strict TypeScript (`.ts`) with zero runtime dependencies (`"dependencies": {}`). All source files migrated and built to `dist/`.
+- **Endpoint Coding Harnesses (`--harness auto|claude|pi|none`):** Endpoints (Ollama, OpenRouter, vLLM) can now be driven via Claude Code or Pi harnesses to execute file edits (`--permissions edit`), web search, and tool operations seamlessly.
+- **Git Hidden-Ref Checkpoints:** Atomic, non-destructive snapshots stored in `refs/agentbridge/checkpoints/<session>/<id>` without branch pollution or touching `.git/index`. CLI commands `ab checkpoint create|list|diff|rollback` and MCP tools `checkpoint_create|rollback|list`.
+- **Proactive Quota Probing & Account Pool Cooldown:** Real-time quota polling for Anthropic and Codex limits with automatic pool cooldown.
+- **Subagent Hierarchy Roster:** Parent-child delegation tracking with interactive lineage tree visualization in `ab ui`.
+- **Dual-Mode Codex Execution:** Added persistent JSON-RPC 2.0 stdio server mode (`codex app-server`) alongside batch CLI execution (`codex exec`).
+- **Extended Provider Roster:** Native adapter integration for Cursor CLI (`cursor`), xAI Grok (`grok`), Google Gemini (`gemini`), Devin (`devin`), and Agent Client Protocol (`acp`).
+- **Process Supervision:** Circular 8 KiB stderr ring buffer preventing pipe deadlocks across all agent CLI runners.
 - Proxy: real `finish_reason`/`stop_reason` and usage, `max_tokens`/`stop` enforced, `x-agentbridge-ignored`, sessions via `x-ab-session`, config file (aliases, payload rules, effort suffix), early-stream fallback.
 - Proxy agent mode (`agent/` prefix or `/agent/v1`): the agent edits an isolated worktree, the diff comes back, `apply` is explicit. Needs `--agent-root` and a token.
 - Proxy client tool calling (OpenAI, Responses, Anthropic): claude through an MCP bridge, other agents through validated prompt emulation.

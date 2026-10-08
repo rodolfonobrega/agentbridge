@@ -1,10 +1,10 @@
 // Account pool: opt-in guard, rotation, cooldown after RATE_LIMITED, sticky sessions (fake adapter, no real CLI).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startProxy } from '../src/server/index.mjs';
-import { createPool, parseAccounts } from '../src/server/pool.mjs';
-import { AgentError } from '../src/core/errors.mjs';
-import { ev } from '../src/core/events.mjs';
+import { startProxy } from '../dist/server/index.js';
+import { createPool, parseAccounts } from '../dist/server/pool.js';
+import { AgentError } from '../dist/core/errors.js';
+import { ev } from '../dist/core/events.js';
 
 const ACCOUNTS = (strategy) => ({ strategy, fake: [{ name: 'a', env: { HOME_X: 'A' } }, { name: 'b', env: { HOME_X: 'B' } }] });
 const used = [];

@@ -7,8 +7,8 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'no
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import oc, { makeRedactor } from '../src/adapters/opencode.mjs';
-import { ask, run } from '../src/index.mjs';
+import oc, { makeRedactor } from '../dist/adapters/opencode.js';
+import { ask, run } from '../dist/index.js';
 
 const CANDS = [process.env.OC_TEST_MODEL, 'opencode-go/deepseek-v4-flash', 'opencode-go/mimo-v2.5', 'opencode/gpt-5-nano', 'opencode/gpt-5.4-nano', 'opencode/big-pickle', 'opencode/claude-haiku-4-5'].filter(Boolean);
 let MODEL, WHY = 'no probe run';

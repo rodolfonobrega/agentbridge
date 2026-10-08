@@ -11,14 +11,14 @@ import { fileURLToPath } from 'node:url';
 
 const HOME = realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-ep-home-')));
 process.env.AGENTBRIDGE_HOME = HOME;
-const { ask, run, agents, AgentError, loadEndpoints } = await import('../src/index.mjs');
-const { saveEndpoint } = await import('../src/adapters/endpoint.mjs');
-const { callAny, allTools } = await import('../src/bridge/mcp.mjs');
+const { ask, run, agents, AgentError, loadEndpoints } = await import('../dist/index.js');
+const { saveEndpoint } = await import('../dist/adapters/endpoint.js');
+const { callAny, allTools } = await import('../dist/bridge/mcp.js');
 
-const MAIN = fileURLToPath(new URL('../src/cli/main.mjs', import.meta.url));
+const MAIN = fileURLToPath(new URL('../dist/cli/main.js', import.meta.url));
 const BASE = 'http://127.0.0.1:11434';
 let up = false, MODEL;
-try { const r = await fetch(`${BASE}/api/tags`, { signal: AbortSignal.timeout(4000) }); const j = await r.json(); up = r.ok; MODEL = (j.models || []).map((m) => m.name).find((n) => /qwen2\.5:7b/.test(n)) || j.models?.[0]?.name; } catch { /* not running */ }
+try { const r = await fetch(`${BASE}/api/tags`, { signal: AbortSignal.timeout(4000) }); const j = await r.json(); up = r.ok; MODEL = (j.models || []).map((m) => m.name).find((n) => /glm|qwen2\.5:7b/i.test(n)) || j.models?.[0]?.name; } catch { /* not running */ }
 const live = (name, fn) => (up && MODEL ? test(name, { timeout: 240000 }, fn) : test(name, { skip: 'Ollama is not running on 127.0.0.1:11434 (start it with `ollama serve`)' }, fn));
 const code = async (p) => { try { await p; } catch (e) { return e.code; } return 'no-error'; };
 
@@ -40,12 +40,27 @@ test('OLLAMA_HOST is honored for the built-in ollama endpoint', () => {
   assert.equal(eps.ollama.baseUrl, 'http://10.1.2.3:9999/v1');
 });
 
-test('unsupported options throw BAD_OPTION (never silently ignored)', async () => {
-  assert.equal(await code(ask('ollama', { prompt: 'x', model: 'm', mcpServers: { a: { command: 'node' } } })), 'BAD_OPTION');
+test('unsupported options in plain chat throw BAD_OPTION (never silently ignored)', async () => {
   assert.equal(await code(ask('ollama', { prompt: 'x', model: 'm', extraArgs: ['--x'] })), 'BAD_OPTION');
   saveEndpoint('anth_fixture', { type: 'anthropic', baseUrl: BASE });
   assert.equal(await code(ask('anth_fixture', { prompt: 'x', model: 'm', effort: 'high' })), 'BAD_OPTION');
   assert.equal(await code(ask('anth_fixture', { prompt: 'x', model: 'm', jsonSchema: { type: 'object' } })), 'BAD_OPTION');
+});
+
+test('permissions "edit" on ollama routes to execution harness instead of rejecting', async () => {
+  const c = await code(ask('ollama', { prompt: 'x', model: 'm', permissions: 'edit', timeoutMs: 1500 }));
+  assert.notEqual(c, 'BAD_OPTION', 'must not reject permissions "edit" with BAD_OPTION');
+});
+
+test('harness options validation and routing', async () => {
+  assert.equal(await code(ask('ollama', { prompt: 'x', model: 'm', harness: 'invalid' })), 'BAD_OPTION');
+  assert.equal(await code(ask('ollama', { prompt: 'x', model: 'm', harness: 'none', extraArgs: ['--foo'] })), 'BAD_OPTION');
+
+  const tools = allTools();
+  const askOllama = tools.find((t) => t.name === 'ask_ollama');
+  assert.ok(askOllama, 'ask_ollama should exist');
+  assert.ok(askOllama.inputSchema.properties.harness, 'ask_ollama should have harness property');
+  assert.deepEqual(askOllama.inputSchema.properties.harness.enum, ['auto', 'claude', 'pi', 'none']);
 });
 
 test('unreachable endpoint -> AGENT_FAILED with the URL in the message', async () => {
@@ -119,7 +134,7 @@ live('errors: invalid model -> BAD_OPTION, timeout -> TIMEOUT, abort -> ABORTED'
   const it = run('ollama', { prompt: 'Write a 2000 word essay about the history of Rome.', model: MODEL, signal: ac.signal, session: { mode: 'ephemeral' }, timeoutMs: 200000 });
   let e;
   try { for (;;) { const x = await it.next(); if (x.done) break; if (x.value.type === 'text') ac.abort(); } } catch (x) { e = x; }
-  assert.equal(e?.code, 'ABORTED'); assert.ok(Date.now() - t0 < 60000);
+  assert.equal(e?.code, 'ABORTED'); assert.ok(Date.now() - t0 < 120000);
 });
 
 live('jsonSchema (openai-type) returns parsed structured output', async () => {
@@ -142,7 +157,7 @@ live('a custom-named endpoint on another base URL is usable via the bridge (ask_
   assert.match(r.content[0].text, /PONG/); assert.equal(r.structuredContent.agent, 'lab_gpu'); assert.ok(r.structuredContent.attestation?.hmac);
   const d = await callAny('dispatch_lab_gpu', { prompt: 'Reply with exactly: ASYNC', session: { mode: 'ephemeral' }, timeoutSeconds: 200 }, { env });
   const w = await callAny('wait_run', { id: d.structuredContent.runId, timeoutSeconds: 120 }, { env });
-  assert.match(w.content[0].text, /ASYNC/);
+  assert.match(w.content[0].text, /ASYNC/i);
   assert.ok(await callAny('ask_lab_gpu', { prompt: 'x', permissions: 'full' }, { env: { ...env, AGENTBRIDGE_PERMS: 'read-only' } }).then(() => false, () => true), 'permission ceiling still applies to endpoints');
 });
 

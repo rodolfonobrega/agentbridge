@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { startProxy } from '../src/server/index.mjs';
-import { parseToolCalls } from '../src/server/tools/emulate.mjs';
-import { ev } from '../src/core/events.mjs';
+import { startProxy } from '../dist/server/index.js';
+import { parseToolCalls } from '../dist/server/tools/emulate.js';
+import { ev } from '../dist/core/events.js';
 
 const PARAMS = { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] };
 const TOOLS = [{ name: 'get_weather', description: 'weather', parameters: PARAMS }];

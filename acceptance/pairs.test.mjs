@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { runAsSubagent } from '../src/bridge/subagent.mjs';
-import { mcpConfigFor } from '../src/bridge/attach.mjs';
-import { resolvePerms, allTools } from '../src/bridge/mcp.mjs';
+import { runAsSubagent } from '../dist/bridge/subagent.js';
+import { mcpConfigFor } from '../dist/bridge/attach.js';
+import { resolvePerms, allTools } from '../dist/bridge/mcp.js';
 import { rpc, init } from './_rpc.mjs';
 
 const dir = () => realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-pair-')));
@@ -79,8 +79,8 @@ test('mcpConfigFor shape', () => {
 
 import { randomBytes } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
-import { bridgeMeta } from '../src/bridge/subagent.mjs';
-import { attest } from '../src/bridge/mcp.mjs';
+import { bridgeMeta } from '../dist/bridge/subagent.js';
+import { attest } from '../dist/bridge/mcp.js';
 
 test('attestation: verifies only with the launcher key; callee-forged meta lines are rejected', () => {
   const env = { AGENTBRIDGE_ATTEST_KEY: 'secret-k' };

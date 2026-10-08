@@ -7,8 +7,8 @@ import path from 'node:path';
 
 const HOME = mkdtempSync(path.join(tmpdir(), 'ab-hk-'));
 process.env.AGENTBRIDGE_HOME = HOME;
-const { askWithTelemetry, wait, waitAll } = await import('../src/index.mjs');
-const H = await import('../src/telemetry/hooks.mjs');
+const { askWithTelemetry, wait, waitAll } = await import('../dist/index.js');
+const H = await import('../dist/telemetry/hooks.js');
 const cwd = mkdtempSync(path.join(tmpdir(), 'ab-hk-cwd-'));
 const N = process.execPath;
 const summary = { runId: 'r1', agent: 'claude', sessionId: 's1', status: 'finished', event: 'finish' };

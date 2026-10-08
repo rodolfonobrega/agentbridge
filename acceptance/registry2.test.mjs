@@ -6,14 +6,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
-import { dispatch, loadRun, cancelRun, waitRun, runsDir } from '../src/bridge/runs.mjs';
-import { mcpConfigFor } from '../src/bridge/attach.mjs';
+import { dispatch, loadRun, cancelRun, waitRun, runsDir } from '../dist/bridge/runs.js';
+import { mcpConfigFor } from '../dist/bridge/attach.js';
 import { MCP } from './_rpc.mjs';
 
 const T = { timeout: 90000 };
 const tmp = () => realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-reg2-')));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const RUNS = pathToFileURL(fileURLToPath(new URL('../src/bridge/runs.mjs', import.meta.url))).href;
+const RUNS = pathToFileURL(fileURLToPath(new URL('../dist/bridge/runs.js', import.meta.url))).href;
 
 // Round 6/7 / N1: mcpConfigFor() itself never touches the filesystem and has no `attestKey` parameter (round 7: even that value
 // was a mistake — see acceptance/keydelivery.test.mjs for the proof against the REAL adapter-mediated spawn path, where the
@@ -75,7 +75,7 @@ test('N4: cancelling an already-finished live run changes nothing and writes no 
 });
 
 test('N1 (round 6): a real end-to-end tools/call, then attempted forgery WITHOUT the key fails verification', T, async () => {
-  const { attest, verifyAttestation } = await import('../src/bridge/mcp.mjs');
+  const { attest, verifyAttestation } = await import('../dist/bridge/mcp.js');
   const realKey = 'k-real-' + randomBytes(8).toString('hex');
   const st = { agent: 'claude', sessionId: 's1', depth: 1, model: 'haiku', text: 'ANSWER-42', promptSha: 'p'.repeat(64) };
   const genuine = attest(st, { AGENTBRIDGE_ATTEST_KEY: realKey, AGENTBRIDGE_ATTEST_BIND: 'b1' });

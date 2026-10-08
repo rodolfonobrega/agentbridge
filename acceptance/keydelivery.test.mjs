@@ -19,10 +19,10 @@ import { readdir, stat, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import claude from '../src/adapters/claude.mjs';
-import codex from '../src/adapters/codex.mjs';
-import opencode from '../src/adapters/opencode.mjs';
-import { ask } from '../src/index.mjs';
+import claude from '../dist/adapters/claude.js';
+import codex from '../dist/adapters/codex.js';
+import opencode from '../dist/adapters/opencode.js';
+import { ask } from '../dist/index.js';
 
 const T = { timeout: 150000 };
 const dir = () => realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-kd-')));
@@ -115,7 +115,7 @@ test('N1 (round 7): codex root cause — its MCP subprocess does NOT inherit the
 // src/bridge/subagent.mjs runOnce() use exactly this for codex: the grandchild bridge runs IN-PROCESS (no separate spawn at
 // all — see serveHttp()) and codex is pointed at it via `-c mcp_servers.agentbridge.url=...` + `bearer_token_env_var=...`.
 test('N1 (round 8): codex HTTP transport — real end-to-end delegation, key visible NEITHER on disk NOR via WMI CommandLine', T, async () => {
-  const { runAsSubagent } = await import('../src/bridge/subagent.mjs');
+  const { runAsSubagent } = await import('../dist/bridge/subagent.js');
   const key = 'SECRET-' + Math.random().toString(36).slice(2) + '-' + Date.now(); // known in advance so we can scan for it LIVE
   const since = Date.now() - 2000;
   let diskHit = null, argvHit = null, stop = false;
@@ -156,7 +156,7 @@ test('N1 (round 7): opencode — real adapter-mediated spawn never leaks the key
 });
 
 test('mcpConfigFor has no attestKey parameter any more (structural guard against regressing round 7)', async () => {
-  const { mcpConfigFor } = await import('../src/bridge/attach.mjs');
+  const { mcpConfigFor } = await import('../dist/bridge/attach.js');
   const e = mcpConfigFor('claude', { attestKey: 'should-be-ignored-if-someone-re-adds-the-param' }).agentbridge;
   assert.ok(!JSON.stringify(e).includes('should-be-ignored'), 'even if a caller passes attestKey, mcpConfigFor must not surface it');
 });

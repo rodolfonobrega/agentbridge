@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawnProc, runCollect, resolveBinary } from '../src/core/spawn.mjs';
-import { AgentError } from '../src/core/errors.mjs';
-import { createLineSplitter, splitJsonl } from '../src/core/events.mjs';
-import { run, ask, validateOptions } from '../src/index.mjs';
+import { spawnProc, runCollect, resolveBinary } from '../dist/core/spawn.js';
+import { AgentError } from '../dist/core/errors.js';
+import { createLineSplitter, splitJsonl } from '../dist/core/events.js';
+import { run, ask, validateOptions } from '../dist/index.js';
 
 const N = process.execPath;
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
@@ -209,7 +209,7 @@ test('env undefined values are dropped, not stringified', async () => {
 });
 
 test('children are killed when the parent exits (process.exit and uncaught error)', async () => {
-  const srcUrl = new URL('../src/core/spawn.mjs', import.meta.url).href;
+  const srcUrl = new URL('../dist/core/spawn.js', import.meta.url).href;
   for (const ending of ['process.exit(0)', "throw new Error('boom')"]) {
     const script = `import {spawnProc} from ${JSON.stringify(srcUrl)};
 const p = spawnProc(process.execPath,['-e','console.log(process.pid);setInterval(()=>{},1000)']);
@@ -226,7 +226,7 @@ ${ending}`;
 });
 
 test('SIGINT/SIGTERM handlers kill children and exit', { skip: process.platform === 'win32' }, async () => {
-  const srcUrl = new URL('../src/core/spawn.mjs', import.meta.url).href;
+  const srcUrl = new URL('../dist/core/spawn.js', import.meta.url).href;
   const script = `import {spawnProc} from ${JSON.stringify(srcUrl)};
 const p = spawnProc(process.execPath,['-e','console.log(process.pid);setInterval(()=>{},1000)']);
 const it = p.lines[Symbol.asyncIterator](); console.log('CHILD '+(await it.next()).value);
@@ -341,3 +341,12 @@ test('shim parsing ignores rem/:: comments and requires the known shim shape', {
   assert.match(x.stdout, /BEFORE/);
   assert.equal((await runCollect('good.cmd', [], { env, cwd: d })).stdout.trim(), 'SCRIPT');
 });
+
+test('spawnProc bounds stderr to 8KiB ring buffer and provides child PID', async () => {
+  const p = spawnProc(N, ['-e', 'for(let i=0;i<500;i++) console.error("X".repeat(50));']);
+  assert.ok(typeof p.pid === 'number' && p.pid > 0);
+  const r = await p.wait();
+  assert.ok(r.stderr.length <= 8192, `stderr length ${r.stderr.length} should be <= 8192`);
+  assert.ok(r.stderr.length > 0, 'stderr captured tail output');
+});
+

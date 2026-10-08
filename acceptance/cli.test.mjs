@@ -4,11 +4,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, realpathSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, realpathSync, writeFileSync, existsSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-const CLI = new URL('../src/cli/main.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const CLI = new URL('../dist/cli/main.js', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const tmp = () => realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-cli-')));
 const PONG = 'reply with exactly PONG';
 const M = { claude: 'haiku', codex: 'gpt-5.6-luna', opencode: 'opencode-go/glm-5.3-flash' };
@@ -28,6 +28,22 @@ async function abJson(args, o) { const r = await ab([...args, '--json'], o); con
 // ---------- no-agent commands ----------
 
 test('help', async () => { const r = await abRaw(['--help']); assert.equal(r.code, 0); assert.match(r.stdout, /agentbridge/); });
+test('runs cleanly when invoked through a symlink', async () => {
+  const d = tmp();
+  const linkPath = path.join(d, process.platform === 'win32' ? 'ab_link.js' : 'custom_ab');
+  try {
+    symlinkSync(CLI, linkPath, process.platform === 'win32' ? 'file' : undefined);
+    const p = spawn(process.execPath, [linkPath, '--help'], { cwd: d, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    p.stdout.on('data', (c) => (stdout += c));
+    const code = await new Promise((res) => p.on('close', res));
+    assert.equal(code, 0);
+    assert.match(stdout, /agentbridge/);
+  } catch (e) {
+    if (process.platform === 'win32' && e.code === 'EPERM') return;
+    throw e;
+  }
+});
 test('unknown command exits 2', async () => { const r = await abRaw(['bogus']); assert.equal(r.code, 2); assert.match(r.stderr, /unknown command/); });
 test('run: missing agent is a usage error', async () => { const r = await abRaw(['run']); assert.equal(r.code, 2); });
 test('run: unknown agent is a usage error', async () => { const r = await abRaw(['run', 'nope', 'hi']); assert.equal(r.code, 2); assert.match(r.stderr, /Unknown agent/); });

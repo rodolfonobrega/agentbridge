@@ -3,7 +3,7 @@
 ![Colorful coding-agent nodes connected through the AgentBridge hub](docs/img/hero.png)
 
 **One interface for every coding agent on your machine.**
-Drive **Claude Code**, **Codex**, **OpenCode**, **Antigravity CLI (`agy`)**, **pi** and local/remote **HTTP models (Ollama, vLLM, LM Studio...)** from the same CLI, library, MCP server and OpenAI/Anthropic-compatible proxy — using the logins you already have. **No API keys. No dependencies. No build step.**
+Drive **Claude Code**, **Codex**, **OpenCode**, **Antigravity CLI (`agy`)**, **pi**, **Cursor**, **Grok**, **Gemini**, **Devin**, **Agent Client Protocol (`acp`)** and local/remote **HTTP models (Ollama, vLLM, LM Studio...)** from the same CLI, library, MCP server and OpenAI/Anthropic-compatible proxy — using the logins you already have. **No API keys. No dependencies. No build step.**
 
 ```bash
 ab ask claude   "Review src/auth.mjs for security bugs"
@@ -11,6 +11,7 @@ ab ask codex    "Write tests for it"                      --permissions edit
 ab ask agy      "Explain the failing build"               --model gemini-3.8-flash
 ab race "Fix the flaky test" claude:haiku codex opencode  # first answer wins, the rest are cancelled
 ab ask claude   "Big refactor" --fallback codex,pi        # out of tokens? the next agent takes over
+ab checkpoint create "Before agent refactor"             # git hidden-ref snapshot for zero-risk rollback
 ```
 
 > Node ESM · Node ≥ 22 · Windows, macOS, Linux · MIT · zero runtime dependencies
@@ -36,6 +37,8 @@ You probably pay for more than one coding agent, and each has a different CLI, f
 | See what your agents are doing | A live **dashboard** (`ab ui`): runs, tokens, cost, success rate, fallbacks, context pressure |
 | Keep context under control | **Telemetry, context policy, auto-compaction** and cross-agent **`handoff()`** |
 | Stay safe | Permission ceilings, depth guards and **HMAC-attested** delegation so a subagent cannot escalate |
+| Zero-risk agent edits | **Git hidden-ref checkpoints** (`refs/agentbridge/checkpoints/...`): rollback untracked and modified files instantly without branch pollution |
+| Prevent token lockouts | **Proactive quota probing** (Anthropic & Codex usage limits) + automatic pool cooldown and rotation |
 
 ---
 
@@ -118,7 +121,8 @@ Now, from inside any of them, you can say "ask claude to review this" or "have p
 `new`, `ephemeral`, `continue` (by id or "latest for this cwd") and `fork` (where the agent supports it) — the same vocabulary for all agents.
 
 ### 3. Agents calling agents (MCP bridge)
-- `ab bridge` is a stdio MCP server exposing `ask_<agent>` and `dispatch_<agent>` (async job) tools.
+- `ab bridge` is a stdio MCP server exposing `ask_<agent>`, `dispatch_<agent>` (async job), `wait_run`, `check_run`, `cancel_run`, `send_message`, and `checkpoint_create`/`checkpoint_rollback`/`checkpoint_list` tools.
+- **Subagent Roster & Lineage:** Tracks full parent-child hierarchy (`parentRunId`, `rootRunId`, `depth`, `subagents[]`), aggregates tokens, and visualizes call trees in `ab ui`.
 - **All caller × callee pairs** are tested live (claude, codex, opencode, agy, pi, in both directions).
 - **Safety rules:** recursion depth guard, permission ceiling (a subagent can never exceed the caller), HMAC attestation of results, the attestation key is delivered only through the process environment (never on disk or argv).
 - Forced child working directory (`AGENTBRIDGE_CHILD_CWD`) so a caller cannot redirect where a subagent works.
@@ -128,6 +132,7 @@ Now, from inside any of them, you can say "ask claude to review this" or "have p
 ab ask claude "Refactor X" --fallback codex,opencode:opencode-go/glm-5.3-flash
 ```
 HTTP 429/529, "usage limit", "quota exceeded", "credit balance too low", "overloaded"... become `RATE_LIMITED` (with `retryAfterMs`). The chain moves to the next agent, reports `fallback: { used, attempts, contextLost }`, and **refuses to re-run** a task that already made edits under `edit`/`full` permissions. Works in the library, CLI, MCP tools and proxy.
+- **Proactive Quota Probing & Pool Cooldown:** Automatically queries Anthropic OAuth usage APIs and Codex headers, rotating accounts or triggering cooldowns for credentials with $\ge 95\%$ quota usage.
 
 ### 5. Parallel workflows
 `fanout` runs the same prompt on many agents and collects all answers; `race` returns the first accepted answer and cancels the rest. `--worktree` runs an agent in an isolated git worktree; `--max-cost/--max-tokens/--max-time` enforce budgets.
@@ -157,6 +162,22 @@ A read-only local web UI over the telemetry agentbridge records: **runs in fligh
 ### 10. Hooks, doctor, Claude Code integration
 Lifecycle hooks, `ab doctor` diagnostics, and `ab install claude` (MCP registration plus relay subagents for Codex/OpenCode/Ollama).
 
+### 11. Git hidden-ref checkpoints
+```bash
+ab checkpoint create "Refactoring auth module"
+ab checkpoint list
+ab checkpoint diff <checkpoint-id>
+ab checkpoint rollback <checkpoint-id>
+```
+Instant, non-destructive snapshots saved under `refs/agentbridge/checkpoints/...` via an isolated temporary git index (`GIT_INDEX_FILE`). Never touches your primary `.git/index` or pollutes git branches. Full rollback restores both tracked files and removes newly created untracked files safely. Also exposed as MCP tools (`checkpoint_create`, `checkpoint_rollback`, `checkpoint_list`).
+
+### 12. Process supervision & anti-deadlock safeguards
+- **Bounded Tail Ring Buffer:** Agent standard error is collected in a circular 8 KiB ring buffer (`STDERR_TAIL_MAX_CHARS`), preventing OS pipe buffer overflows and pipe deadlocks while preserving critical error tails.
+- **Cross-Platform Tree Kills:** Escalates through Win32 Job Objects / `taskkill.exe /T /F` on Windows and process groups (`-pid` SIGTERM to SIGKILL) on POSIX to guarantee zero zombie child processes.
+
+### 13. Dual-mode Codex execution
+Supports standard batch CLI runs (`codex exec`) as well as persistent JSON-RPC 2.0 stdio server mode (`codex app-server`), minimizing cold-start overhead and maintaining stateful turn execution.
+
 ### Agent capability overview
 
 | Agent | Permissions enforced by | Sessions | Notes |
@@ -166,7 +187,12 @@ Lifecycle hooks, `ab doctor` diagnostics, and `ab install claude` (MCP registrat
 | OpenCode | agentbridge + CLI | new / continue / fork | latency depends on backend model |
 | Antigravity (`agy`) | **agentbridge** (private HOME, generated deny rules) | new / continue (no fork) | `edit` not confined to cwd |
 | pi | **agentbridge** (tool denylist, project trust off) | new / continue / fork / ephemeral | no sandbox; `plan` = `read-only` |
-| HTTP endpoints | n/a (plain chat) | emulated | no tools/MCP/files |
+| HTTP endpoints (Ollama, OpenRouter) | Direct API (plain chat) or agent harness (`claude`/`pi` for tools & edits) | emulated | supports tools/edits via `--harness` |
+| Cursor (`cursor`) | cursor CLI / agentbridge | new / continue | supports claude & gpt models |
+| Grok (`grok`) | grok CLI / agentbridge | new / continue | supports grok-3/grok-2 series |
+| Gemini (`gemini`) | gemini CLI / agentbridge | new / continue | native Gemini 2.0/1.5 models |
+| Devin (`devin`) | devin CLI / agentbridge | new / continue | autonomous software engineer CLI |
+| ACP (`acp`) | ACP server protocol | session managed by server | Agent Client Protocol JSON-RPC stdio |
 
 Full details, flags and caveats: **[docs/REFERENCE.md](docs/REFERENCE.md)**.
 
@@ -180,6 +206,7 @@ Full details, flags and caveats: **[docs/REFERENCE.md](docs/REFERENCE.md)**.
 | [docs/PROXY.md](docs/PROXY.md) | The OpenAI/Anthropic compatible proxy |
 | [docs/TELEMETRY.md](docs/TELEMETRY.md) | Telemetry, the dashboard, context policy, compaction, handoff |
 | [docs/EXTENDING.md](docs/EXTENDING.md) | Adding a new agent CLI or HTTP provider |
+| [docs/COMPARISON.md](docs/COMPARISON.md) | In-depth technical comparison: AgentBridge vs. Orca vs. T3 Code |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, run the tests, the review rules |
 | [acceptance/ADAPTER_NOTES.md](acceptance/ADAPTER_NOTES.md) | Verified facts about each CLI (quirks, workarounds) |
 | [SECURITY.md](SECURITY.md) | Threat model and how to report vulnerabilities |

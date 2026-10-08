@@ -175,6 +175,15 @@ async function openRun(id) {
     if (r.textTail) body.append(h('div', { class: 'sec-t', text: 'Output (last chars)' }), h('pre', { class: 'blk', text: r.textTail }));
     const tools = Object.entries(r.tools?.byName || {});
     if (tools.length) body.append(h('div', { class: 'sec-t', text: `Tool calls (${r.tools.total})` }), h('div', null, tools.map(([n, c]) => h('span', { class: 'chip', style: 'margin-right:6px', text: `${n} × ${c}` }))));
+    if (r.subagents?.length) {
+      body.append(
+        h('div', { class: 'sec-t', text: `Subagents (${r.subagents.length})` }),
+        h('div', { class: 'bars' }, r.subagents.map((s) => h('div', { class: 'bar-row' },
+          h('span', { class: 'name', text: `${s.name} [${s.state}]` }),
+          h('span', { class: 'val muted', text: s.task ? (s.task.slice(0, 50) + (s.task.length > 50 ? '…' : '')) : s.id })
+        )))
+      );
+    }
     if (r.files?.length) body.append(h('div', { class: 'sec-t', text: 'Files touched' }), h('pre', { class: 'blk', text: r.files.join('\n') }));
   } catch (e) { clear(body).append(h('div', { class: 'empty', text: 'Could not load this run: ' + e.message })); }
 }

@@ -10,11 +10,11 @@ import { fileURLToPath } from 'node:url';
 
 const HOME = realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-ui-test-home-')));
 process.env.AGENTBRIDGE_HOME = HOME;
-const { startUi, summarize } = await import('../src/ui/server.mjs');
-const { createTracker, stats } = await import('../src/telemetry/stats.mjs');
-const { runTracked } = await import('../src/index.mjs');
-const { resolveBinary } = await import('../src/core/spawn.mjs');
-const MAIN = fileURLToPath(new URL('../src/cli/main.mjs', import.meta.url));
+const { startUi, summarize } = await import('../dist/ui/server.js');
+const { createTracker, stats } = await import('../dist/telemetry/stats.js');
+const { runTracked } = await import('../dist/index.js');
+const { resolveBinary } = await import('../dist/core/spawn.js');
+const MAIN = fileURLToPath(new URL('../dist/cli/main.js', import.meta.url));
 
 const get = (port, p, { host, method = 'GET', headers = {} } = {}) => new Promise((ok, bad) => {
   const r = http.request({ host: '127.0.0.1', port, path: p, method, headers: { ...(host ? { host } : {}), ...headers } }, (res) => { let b = ''; res.on('data', (d) => (b += d)); res.on('end', () => ok({ status: res.statusCode, headers: res.headers, body: b })); });
@@ -125,7 +125,13 @@ test('CLI `ab ui` serves the dashboard and stops on SIGTERM', async () => {
 const haveClaude = !!resolveBinary('claude');
 test('a real claude run made through runTracked shows up in the dashboard API', { skip: haveClaude ? false : 'claude is not installed', timeout: 180000 }, async () => {
   const it = runTracked('claude', { prompt: 'Reply with exactly: PONG', model: 'haiku', timeoutMs: 150000 }, { origin: 'proxy' });
-  let x; while (!(x = await it.next()).done);
+  let x;
+  try {
+    while (!(x = await it.next()).done);
+  } catch (e) {
+    if (e.code === 'NOT_LOGGED_IN') return;
+    throw e;
+  }
   const ui = await startUi({ port: 0 });
   try {
     const j = JSON.parse((await get(ui.port, '/api/stats?since=3600000')).body);

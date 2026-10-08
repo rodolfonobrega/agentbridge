@@ -12,12 +12,12 @@ import { randomBytes } from 'node:crypto';
 
 const HOME = realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-pi-test-home-')));
 process.env.AGENTBRIDGE_HOME = HOME;
-const { ask, run, agents, AgentError } = await import('../src/index.mjs');
-const piMod = await import('../src/adapters/pi.mjs');
+const { ask, run, agents, AgentError } = await import('../dist/index.js');
+const piMod = await import('../dist/adapters/pi.js');
 const { findBinary, makeAgentDir, destroyAgentDir, agentDirOf } = piMod;
-const { runAsSubagent } = await import('../src/bridge/subagent.mjs');
-const { callAny, allTools } = await import('../src/bridge/mcp.mjs');
-const { resolveModel } = await import('../src/server/common.mjs');
+const { runAsSubagent } = await import('../dist/bridge/subagent.js');
+const { callAny, allTools } = await import('../dist/bridge/mcp.js');
+const { resolveModel } = await import('../dist/server/common.js');
 
 const M = 'ollama/glm-5.3-flash:cloud';
 const T = { timeout: 300000 };

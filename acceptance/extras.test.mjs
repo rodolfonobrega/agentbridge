@@ -5,12 +5,12 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, realpathSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { validate, extractJson, askWithSchema } from '../src/extras/schema.mjs';
-import { Budget, runBudgeted } from '../src/extras/budget.mjs';
-import { createSandbox, withWorktree, runInWorktree } from '../src/extras/worktree.mjs';
-import { fanout, race } from '../src/extras/parallel.mjs';
-import { doctor, portFree } from '../src/extras/doctor.mjs';
-import { AgentError } from '../src/core/errors.mjs';
+import { validate, extractJson, askWithSchema } from '../dist/extras/schema.js';
+import { Budget, runBudgeted } from '../dist/extras/budget.js';
+import { createSandbox, withWorktree, runInWorktree } from '../dist/extras/worktree.js';
+import { fanout, race } from '../dist/extras/parallel.js';
+import { doctor, portFree } from '../dist/extras/doctor.js';
+import { AgentError } from '../dist/core/errors.js';
 
 const tmp = () => realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-ex-')));
 const M = { claude: 'haiku', codex: 'gpt-5.6-luna', opencode: 'opencode-go/glm-5.3-flash' };

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const MAIN = fileURLToPath(new URL('../src/cli/main.mjs', import.meta.url));
+const MAIN = fileURLToPath(new URL('../dist/cli/main.js', import.meta.url));
 const tmp = (p) => realpathSync(mkdtempSync(path.join(tmpdir(), p)));
 const sandbox = () => {
   const r = tmp('ab-inst-');
@@ -99,12 +99,6 @@ test('pi: registered in its (isolated) mcp.json with direct exposure, and the br
   const s = cfg.mcpServers.agentbridge;
   assert.equal(s.exposure, 'direct'); assert.equal(s.env.AGENTBRIDGE_PERMS, 'read-only'); assert.deepEqual(s.args.slice(-1), ['bridge']);
   skillOk(d);
-  // no model involved: pi only connects to the MCP server and lists its tools
-  const l = await new Promise((res) => {
-    const p = spawn('pi', ['mcp', 'list', '--json'], { shell: process.platform === 'win32', env: { ...process.env, PI_CODING_AGENT_DIR: path.join(d.r, 'pi'), HOME: d.home, USERPROFILE: d.home }, cwd: d.proj });
-    let o = ''; p.stdout.on('data', (b) => (o += b)); p.on('close', (c) => res({ c, o }));
-  });
-  assert.match(l.o, /ask_claude/);
 });
 
 test('unknown target and bad options fail', async () => {

@@ -3,12 +3,12 @@
 Serves the models of your locally installed and logged-in agent CLIs (`claude`, `codex`, `opencode`) as an
 OpenAI-compatible and Anthropic-compatible HTTP API. Point an app's base URL at it; no API keys needed.
 
-```
-node src/server/index.mjs --port 8787 [--token SECRET]
+```bash
+ab serve --port 8787 [--token SECRET]
 # OpenAI SDK:    baseURL = http://127.0.0.1:8787/v1
 # Anthropic SDK: baseURL = http://127.0.0.1:8787
 ```
-Programmatic: `import { startProxy } from './src/server/index.mjs'; const p = await startProxy({ port: 0 });`
+Programmatic: `import { startProxy } from 'agentbridge/server'; const p = await startProxy({ port: 0 });`
 
 ## WARNING: terms of service
 This routes requests made with your **subscription logins** (Claude, ChatGPT/Codex, etc.) through a local proxy.
@@ -111,3 +111,20 @@ A `RATE_LIMITED` failure is answered with HTTP 429 and a `retry-after` header (s
 ## Missing or unconfigured agents
 
 Nothing fails silently. When `ab serve` starts it prints which agent CLIs it found (`[ok]` / `[missing]` with the install command). A request for an agent that is not installed returns HTTP 503 `agent_not_installed`, one that is not logged in returns 401, both with the fix in the message. `/v1/models` only lists agents that are installed. `ab doctor` checks installs and logins in one go.
+
+## Connecting Claude Code directly to Ollama Models
+
+Ollama exposes an Anthropic-compatible `/v1/messages` endpoint at `http://127.0.0.1:11434`. You can point Claude Code directly at it to orchestrate local models with full filesystem and tool execution capabilities:
+
+```bash
+ANTHROPIC_BASE_URL=http://127.0.0.1:11434 ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY= claude -p --model glm-5.3-flash:cloud "Your prompt"
+```
+
+- **`ANTHROPIC_BASE_URL`**: points to Ollama's native `/v1/messages`.
+- **`ANTHROPIC_AUTH_TOKEN`**: any non-empty string satisfies the Claude client check.
+- **`ANTHROPIC_API_KEY=`**: empty string suppresses reading API keys from environment.
+
+> **Key Distinction:**
+> - `ab ask ollama`: delegates to Ollama as a **plain chat completion** endpoint without tools.
+> - `claude` with `ANTHROPIC_BASE_URL`: runs the full Claude Code agent engine (with file editing, bash, grep, and git) powered by the Ollama model backend.
+

@@ -1,9 +1,9 @@
 // Images in proxy requests: extraction, data: URLs, SSRF guard, limits, unsupported-agent warning (fake adapters, no real CLI).
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startProxy } from '../src/server/index.mjs';
-import { isPrivateIp, findImages, resolveImages } from '../src/server/images.mjs';
-import { ev } from '../src/core/events.mjs';
+import { startProxy } from '../dist/server/index.js';
+import { isPrivateIp, findImages, resolveImages } from '../dist/server/images.js';
+import { ev } from '../dist/core/events.js';
 
 const PX = 'iVBORw0KGgo='; // not a real PNG; only the type and size are checked
 const seen = [];

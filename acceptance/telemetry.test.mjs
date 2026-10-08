@@ -6,8 +6,8 @@ import path from 'node:path';
 
 const HOME = mkdtempSync(path.join(tmpdir(), 'ab-tel-'));
 process.env.AGENTBRIDGE_HOME = HOME;
-const { stats, contextOf, runWithTelemetry, askWithTelemetry, setContextWindow } = await import('../src/index.mjs');
-const S = await import('../src/telemetry/stats.mjs');
+const { stats, contextOf, runWithTelemetry, askWithTelemetry, setContextWindow } = await import('../dist/index.js');
+const S = await import('../dist/telemetry/stats.js');
 const windowFor = S.windowFor;
 
 // ---------- pure logic ----------
@@ -111,7 +111,7 @@ test('real claude + codex concurrently: per-run stats, exact context, global tot
 
 test('multi-process: 8 processes finishing runs of ONE session lose no updates', { timeout: 120000 }, async () => {
   const { spawn } = await import('node:child_process');
-  const statsUrl = new URL('../src/telemetry/stats.mjs', import.meta.url).href;
+  const statsUrl = new URL('../dist/telemetry/stats.js', import.meta.url).href;
   const code = `const S=await import(${JSON.stringify(statsUrl)});const t=S.createTracker({agent:'claude',opts:{prompt:'x'}});t.onEvent({type:'tool',name:'Read',input:{file_path:'/f'+process.pid}});t.finish({result:{sessionId:'RACE-S',model:'m',usage:{input:1,output:1}}});`;
   await Promise.all(Array.from({ length: 8 }, () => new Promise((res, rej) => { const p = spawn(process.execPath, ['--input-type=module', '-e', code], { env: process.env, stdio: 'inherit' }); p.on('exit', (c) => (c === 0 ? res() : rej(new Error('child exit ' + c)))); })));
   const s = S.listSessions().find((x) => x.sessionId === 'RACE-S');

@@ -1,10 +1,13 @@
-# dependencies
+# dependencies and build
 node_modules/
+dist/
 
 # local state and tooling
 .claude/
+.agents/
 .snapshots/
 .agentbridge/
+.mcp.json
 progress/
 *.stackdump
 *.log

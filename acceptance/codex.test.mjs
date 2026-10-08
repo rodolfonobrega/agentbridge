@@ -5,8 +5,8 @@ import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { rmSync, mkdirSync } from 'node:fs';
-import codex from '../src/adapters/codex.mjs';
-import { AgentError } from '../src/core/errors.mjs';
+import codex from '../dist/adapters/codex.js';
+import { AgentError } from '../dist/core/errors.js';
 
 const T = 240000;
 const cwd = mkdtempSync(path.join(tmpdir(), 'cx-acc-'));

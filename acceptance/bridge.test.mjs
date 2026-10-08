@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rpc, init, MCP } from './_rpc.mjs';
-import { runAsSubagent } from '../src/bridge/subagent.mjs';
+import { runAsSubagent } from '../dist/bridge/subagent.js';
 
 const T = { timeout: 300000 };
 const tmp = (name = 'ab-br-') => realpathSync(mkdtempSync(path.join(tmpdir(), name)));

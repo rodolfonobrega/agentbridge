@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, existsSync, realpathSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
-import claude from '../src/adapters/claude.mjs';
-import { ask, run } from '../src/index.mjs';
-import { runCollect } from '../src/core/spawn.mjs';
+import claude from '../dist/adapters/claude.js';
+import { ask, run } from '../dist/index.js';
+import { runCollect } from '../dist/core/spawn.js';
 
 const M = 'haiku';
 const dir = () => realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-cl-')));

@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const MAIN = path.join(ROOT, 'src', 'cli', 'main.mjs');
+const MAIN = path.join(ROOT, 'dist', 'cli', 'main.js');
 const home = realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-ready-')));
 mkdirSync(path.join(home, 'proj'));
 const env = { ...process.env, PATH: path.dirname(process.execPath), Path: path.dirname(process.execPath), HOME: home, USERPROFILE: home, LOCALAPPDATA: path.join(home, 'la'), APPDATA: path.join(home, 'ad'), CODEX_HOME: path.join(home, 'cx'), PI_CODING_AGENT_DIR: path.join(home, 'pi') };
@@ -44,7 +44,7 @@ test('serve prints which agents are missing and how to install them', async () =
 });
 
 test('/v1/models does not list agents that are not installed', async () => {
-  const code = `const { listModels } = await import(${JSON.stringify(pathToFileURL(path.join(ROOT, 'src', 'server', 'common.mjs')).href)}); console.log(JSON.stringify(await listModels()));`;
+  const code = `const { listModels } = await import(${JSON.stringify(pathToFileURL(path.join(ROOT, 'dist', 'server', 'common.js')).href)}); console.log(JSON.stringify(await listModels()));`;
   const r = await node(['--input-type=module', '-e', code]);
   const list = JSON.parse(r.o.trim().split('\n').pop());
   assert.ok(!list.some((m) => /^(claude|codex|opencode)\//.test(m)), JSON.stringify(list));

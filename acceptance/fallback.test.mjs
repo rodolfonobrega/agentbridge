@@ -12,12 +12,12 @@ import { fileURLToPath } from 'node:url';
 
 const HOME = realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-fb-home-')));
 process.env.AGENTBRIDGE_HOME = HOME;
-const { ask, run, AgentError, ev, validateOptions, asRateLimited, retryAfterMs, looksRateLimited, askWithTelemetry } = await import('../src/index.mjs');
-const { saveEndpoint } = await import('../src/adapters/endpoint.mjs');
-const { callAny, verifyAttestation } = await import('../src/bridge/mcp.mjs');
-const { startProxy } = await import('../src/server/index.mjs');
-const { retryHeaderMs } = await import('../src/core/errors.mjs');
-const MAIN = fileURLToPath(new URL('../src/cli/main.mjs', import.meta.url));
+const { ask, run, AgentError, ev, validateOptions, asRateLimited, retryAfterMs, looksRateLimited, askWithTelemetry } = await import('../dist/index.js');
+const { saveEndpoint } = await import('../dist/adapters/endpoint.js');
+const { callAny, verifyAttestation } = await import('../dist/bridge/mcp.js');
+const { startProxy } = await import('../dist/server/index.js');
+const { retryHeaderMs } = await import('../dist/core/errors.js');
+const MAIN = fileURLToPath(new URL('../dist/cli/main.js', import.meta.url));
 const code = async (p) => { try { await p; } catch (e) { return e.code; } return 'no-error'; };
 const PONG = 'Reply with exactly: PONG';
 

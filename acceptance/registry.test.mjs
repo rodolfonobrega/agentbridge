@@ -6,14 +6,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
-import { dispatch, loadRun, cancelRun, setKeep, waitRun, sendMessage, checkMessages, runsDir } from '../src/bridge/runs.mjs';
-import { bridgeMeta } from '../src/bridge/subagent.mjs';
-import { attest } from '../src/bridge/mcp.mjs';
+import { dispatch, loadRun, cancelRun, setKeep, waitRun, sendMessage, checkMessages, runsDir } from '../dist/bridge/runs.js';
+import { bridgeMeta } from '../dist/bridge/subagent.js';
+import { attest } from '../dist/bridge/mcp.js';
 
 const T = { timeout: 60000 };
 const tmp = () => realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-reg-')));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const RUNS = pathToFileURL(fileURLToPath(new URL('../src/bridge/runs.mjs', import.meta.url))).href;
+const RUNS = pathToFileURL(fileURLToPath(new URL('../dist/bridge/runs.js', import.meta.url))).href;
 
 test('D1: cross-process cancel + retain survive an owner that streams events constantly', T, async () => {
   const home = tmp();
@@ -87,10 +87,10 @@ test('D2: attestation replay / cross-launch / wrong-prompt are rejected; one-tim
 });
 
 test('D3/N1 (round 7): mcpConfigFor carries NO secret at all — attestKey has no parameter, so it can only reach the child via its own top-level env', async () => {
-  const { mcpConfigFor } = await import('../src/bridge/attach.mjs');
+  const { mcpConfigFor } = await import('../dist/bridge/attach.js');
   const key = 'super-secret-' + randomBytes(4).toString('hex');
   const e = mcpConfigFor('codex', { attestKey: key }).agentbridge; // attestKey is not a recognized option any more
   assert.ok(!JSON.stringify(e).includes(key), 'mcpConfigFor must never surface a key value, even if a caller passes one by mistake');
-  const { attestKey } = await import('../src/bridge/mcp.mjs');
+  const { attestKey } = await import('../dist/bridge/mcp.js');
   assert.equal(attestKey({ AGENTBRIDGE_ATTEST_KEY: key }), key, 'attestKey() itself still just reads whatever env it is given');
 });

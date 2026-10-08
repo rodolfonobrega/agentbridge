@@ -39,7 +39,7 @@ A CLI is a good candidate only if it has all of these:
 4. **Resumable sessions** with a session id you can read from the output. Without this you can only implement `new` and `ephemeral`, and the others must throw `BAD_OPTION`.
 5. A way to set the model, a working directory, and a sandbox/permission level non-interactively.
 
-Run `<cli> --help` and one real headless call before writing code. The output format and session handling decide most of the work. The existing adapters are a good size reference: Claude 175 lines, Codex 230 lines, agy about 200 lines, OpenCode 570 lines (it needed an HTTP server mode for real streaming and session safety).
+Run `<cli> --help` and one real headless call before writing code. The output format and session handling decide most of the work. Existing adapters serve as reference implementations: Claude, Codex (CLI and app-server), agy, OpenCode, Cursor, Grok, Gemini, Devin, and generic ACP (`src/adapters/acp.ts`).
 
 `src/adapters/agy.mjs` is the best worked example of a CLI that is **not** well-behaved: no flag restricts file writes, its config is global, and an unknown session id silently starts a new conversation. It shows how to enforce permissions with a throw-away HOME and per-run rules, how to share state across those homes, and how to verify claims about the CLI before trusting them (every workaround is justified in `acceptance/ADAPTER_NOTES.md`). Probe the CLI with real calls before designing around its documentation.
 

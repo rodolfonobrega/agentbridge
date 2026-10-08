@@ -1,9 +1,9 @@
 // Proxy features that need no real CLI: a fake adapter is injected through startProxy({ adapters }).
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startProxy } from '../src/server/index.mjs';
-import { createLimiter, buildPrompt, incrementalPrompt, resolveModel, readParams } from '../src/server/common.mjs';
-import { ev } from '../src/core/events.mjs';
+import { startProxy } from '../dist/server/index.js';
+import { createLimiter, buildPrompt, incrementalPrompt, resolveModel, readParams } from '../dist/server/common.js';
+import { ev } from '../dist/core/events.js';
 
 const seen = [];
 /** fake agent: streams `chunks`, then returns the full text; opts are recorded in `seen`. */

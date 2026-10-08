@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import { startProxy } from '../src/server/index.mjs';
+import { startProxy } from '../dist/server/index.js';
 
 const T = { timeout: 280000 };
 const PONG = 'Reply with exactly the word PONG and nothing else.';

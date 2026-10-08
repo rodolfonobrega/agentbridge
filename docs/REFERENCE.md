@@ -2,7 +2,7 @@
 
 > Complete reference. For an overview and quickstart see the [README](../README.md).
 
-Drive the coding agents you already have installed — **Claude Code**, **Codex**, **OpenCode** **Antigravity CLI (`agy`)** and **pi** — programmatically, using their existing local logins. No API keys.
+Drive the coding agents you already have installed — **Claude Code**, **Codex**, **OpenCode**, **Antigravity CLI (`agy`)**, **pi**, **Cursor**, **Grok**, **Gemini**, **Devin**, **Agent Client Protocol (`acp`)** and local/remote **HTTP models** — programmatically, using their existing local logins. No API keys.
 
 agentbridge gives you:
 
@@ -34,6 +34,9 @@ Plain Node ESM (`.mjs`), zero build step, no runtime dependencies. Windows, macO
   - [Errors](#errors)
 - [Parallel workflows: fanout and race](#parallel-workflows-fanout-and-race)
 - [Extras: schema, worktree, budget](#extras-schema-worktree-budget)
+- [Git hidden-ref checkpoints](#git-hidden-ref-checkpoints)
+- [Process supervision and anti-deadlock safeguards](#process-supervision-and-anti-deadlock-safeguards)
+- [New providers (Cursor, Grok, Gemini, Devin, ACP)](#new-providers-cursor-grok-gemini-devin-acp)
 - [Agents calling agents (the MCP bridge)](#agents-calling-agents-the-mcp-bridge)
 - [Antigravity CLI (`agy`)](#antigravity-cli-agy)
 - [pi](#pi)
@@ -167,6 +170,7 @@ ab run <agent> [prompt|-] [--model][--effort][--permissions][--cwd][--timeout s]
 ab ask <agent> [prompt|-] [same flags]           # prints only the result text
 ab fanout "<prompt>" agent[:model] ...           # run all, collect all
 ab race   "<prompt>" agent[:model] ...           # first accepted wins, rest cancelled
+ab checkpoint create [message] | list | rollback <id> | diff <id>   # git hidden-ref snapshots
 ab sessions | ab ps | ab top [--once] | ab stats
 ab ui [--port 8788] [--open] [--token t]       # live web dashboard (see docs/TELEMETRY.md#dashboard)
 ab context <session> [--agent a]
@@ -228,8 +232,41 @@ Everything is exported from the package root (`src/index.mjs`):
 | `jsonSchema` | object | Request structured output |
 | `extraArgs` | string[] | Raw extra CLI arguments, passed through |
 | `isolated` | boolean | Run the agent without your local config/plugins/slash commands where supported |
+| `harness` | `auto\|claude\|pi\|none` | Execution harness for HTTP endpoints (Ollama, OpenRouter, etc.). Default `auto`. |
 
 Unknown options raise `BAD_OPTION`. Anything an agent cannot do raises `BAD_OPTION` as well; options are never silently ignored.
+
+### Permissions & Sandboxing Architecture: How Edits are Blocked vs Allowed
+
+AgentBridge enforces permissions deterministically at the OS and CLI runtime levels. When a delegated agent runs with `permissions: 'read-only'` (the default) or `'plan'`, it is impossible for the model to mutate your codebase:
+
+| Permission | Read Files | Web Search | Edit/Write Files | Run Bash/Commands | Enforced By |
+|---|---|---|---|---|---|
+| `read-only` *(default)* | Yes | Yes | **NO** | **NO** | Tool schema stripping, OS read-only sandboxes, deny rules |
+| `plan` | Yes | Yes | **NO** | **NO** | Read-only sandbox + plan prompt mode; writes blocked |
+| `edit` | Yes | Yes | **YES** | **NO** | Write/Edit tools enabled; cwd workspace-write sandbox |
+| `full` | Yes | Yes | **YES** | **YES** | Unrestricted tools; permission bypass |
+
+#### How each adapter prevents edits:
+1. **Claude Code (`claude`):**
+   - In `read-only` and `plan`, AgentBridge passes `--tools Read,Glob,Grep,WebFetch,WebSearch` and `--permission-mode default\|plan`. The tools `Write`, `Edit`, `Bash`, `NotebookEdit`, and `KillShell` are **completely omitted from the tool definitions**. The LLM prompt literally receives zero write schemas.
+   - External MCP servers are isolated (`--mcp-config {"mcpServers":{}} --strict-mcp-config`).
+   - In `edit`, AgentBridge passes `--permission-mode acceptEdits`, unlocking `Write` and `Edit`.
+2. **OpenAI Codex (`codex`):**
+   - In `read-only` and `plan`, AgentBridge passes `--sandbox read-only`. Codex CLI runs inside an OS-level container sandbox where filesystem mutations are denied by kernel/sandbox restrictions.
+   - In `edit`, Codex passes `--sandbox workspace-write` (strictly restricted to the workspace directory, excluding temp directories).
+   - In `full`, it passes `--sandbox danger-full-access`.
+3. **OpenCode (`opencode`):**
+   - AgentBridge generates an inline runtime policy: `permission: { edit: 'deny', bash: 'deny', webfetch: 'allow' }`. Any tool invocation attempting filesystem modification is denied by OpenCode's policy engine.
+4. **Antigravity (`agy`):**
+   - `agy` has no built-in read-only flag. AgentBridge creates a disposable, private HOME with generated `.gemini/antigravity-cli/settings.json` specifying explicit deny rules: `deny: ['command(*)', 'unsandboxed(*)', 'execute_url(*)', 'write_file(*)']`.
+5. **Pi (`pi`):**
+   - In `read-only` and `plan`, AgentBridge passes `--exclude-tools bash,powershell,edit,write,codemode,tool_search`. Pi completely unregisters those tools from its active runtime.
+6. **Endpoints (Ollama, OpenRouter, vLLM):**
+   - When running with a coding harness (`--harness claude\|pi`), the model inherits the exact tool allowlists and sandboxes described above.
+   - When running without a harness (`--harness none` or plain question), it makes a direct HTTP API call with no filesystem tools attached.
+7. **MCP Bridge Ceiling (`AGENTBRIDGE_PERMS`):**
+   - When AgentBridge runs as an MCP server, child runs can never exceed the install-time permission ceiling (default `read-only`). An attempt to escalate to `edit` throws `BAD_OPTION`.
 
 ### Events and results
 
@@ -329,6 +366,73 @@ await runInWorktree('codex', { prompt: 'Add tests', permissions: 'edit', cwd: '/
 ```
 
 From the CLI: `ab run codex "..." --worktree --max-cost 0.5 --max-tokens 100000 --max-time 300`.
+
+---
+
+## Git hidden-ref checkpoints
+
+AgentBridge provides atomic git checkpointing without branch pollution or touching the user's `.git/index`.
+Checkpoints are stored in custom git references under `refs/agentbridge/checkpoints/<session>/<id>` using low-level git plumbing (`write-tree`, `commit-tree`, `update-ref`) with an isolated temporary index file (`GIT_INDEX_FILE` in `os.tmpdir()`).
+
+### CLI Usage
+```bash
+# Create a checkpoint
+ab checkpoint create "Before risky refactor"
+
+# List checkpoints
+ab checkpoint list
+
+# Inspect differences against working tree
+ab checkpoint diff <checkpoint-id>
+
+# Roll back to checkpoint (restores modified and tracked files, cleans untracked files safely)
+ab checkpoint rollback <checkpoint-id>
+```
+
+### Library API
+```js
+import { createCheckpoint, listCheckpoints, rollbackCheckpoint, diffCheckpoint } from 'agentbridge';
+
+const cp = createCheckpoint(process.cwd(), { message: 'pre-edit snapshot' });
+console.log(cp.id, cp.ref);
+
+// List checkpoints
+const list = listCheckpoints(process.cwd());
+
+// Rollback if something went wrong
+rollbackCheckpoint(process.cwd(), cp.id);
+```
+
+### MCP Tools
+Agents calling the bridge have native access to:
+- `checkpoint_create`: `{ message?: string }`
+- `checkpoint_rollback`: `{ checkpointId: string }`
+- `checkpoint_list`: `{}`
+
+---
+
+## Process supervision and anti-deadlock safeguards
+
+- **Bounded Stderr Tail Buffer:** Standard OS pipe buffers range from 4 to 64 KiB. If a child agent outputs massive debug logs to `stderr`, standard streaming pipes can deadlock. AgentBridge streams stdout while retaining a circular 8 KiB ring buffer (`STDERR_TAIL_MAX_CHARS = 8192`) on stderr, guaranteeing deadlock-free execution while retaining full tail diagnostics on failure.
+- **Cross-Platform Tree Escalation:** When an agent times out or is aborted:
+  - On POSIX, escalates through process groups (`-pid` SIGTERM, followed by SIGKILL).
+  - On Windows, uses `taskkill.exe /PID <pid> /T /F` or Win32 Job Object semantics to terminate child sub-processes.
+  - Exposes `handle.pid` on spawn handles for real process supervision.
+
+---
+
+## New providers (Cursor, Grok, Gemini, Devin, ACP)
+
+AgentBridge supports an extended roster of modern AI agents and protocols:
+
+| Provider | Identifier | Command | Supported Models |
+|---|---|---|---|
+| **Cursor CLI** | `cursor` | `cursor agent ...` | `claude-3.7-sonnet`, `claude-3.5-sonnet`, `gpt-4o`, `cursor-small` |
+| **xAI Grok** | `grok` | `grok ...` | `grok-3`, `grok-3-mini`, `grok-2`, `grok-2-mini` |
+| **Google Gemini CLI** | `gemini` | `gemini ...` | `gemini-2.0-flash`, `gemini-2.0-pro`, `gemini-1.5-pro` |
+| **Devin CLI** | `devin` | `devin run ...` | `default`, `devin-default` |
+| **Generic ACP** | `acp` | Configurable ACP stdio | Agent Client Protocol JSON-RPC 2.0 |
+
 
 ---
 
@@ -515,14 +619,69 @@ const r = await ask('lab_gpu', { prompt: 'Hello', model: 'qwen3:14b', session: {
 
 From inside Claude Code, Codex or OpenCode (through the bridge) they appear as `ask_ollama`, `dispatch_ollama`, `ask_lab_gpu`, ... Run `ab install claude` again after adding endpoints to get matching relay subagents.
 
-What endpoints support, honestly:
+What endpoints support:
 
-- Streaming text (and `thinking` for reasoning models), usage from the server (estimated at chars/4 and flagged `estimated: true` when the server reports none), `model` (omitted = `defaultModel`, else the first model the server lists), `systemPrompt`, `timeoutMs`, `signal`, `jsonSchema` (openai type), `effort` (openai type, mapped to `reasoning_effort`; `xhigh`/`max` become `high`).
-- **Sessions are emulated locally**: the history is stored in `~/.agentbridge/endpoint-sessions/` and replayed each call (the servers are stateless). `new`, `ephemeral`, `continue` (with or without id) and `fork` behave like the other agents; a concurrent `continue` on the same session gets `BAD_OPTION 'session busy'`.
-- **Plain chat only**: no tools, no MCP, no file access. `mcpServers` and `extraArgs` throw `BAD_OPTION`; `effort`/`jsonSchema` on anthropic-type endpoints too. Because they cannot act on your machine, `permissions` is accepted but does not change anything for them (the bridge's permission ceiling and depth guard still apply to the call).
-- Errors: unreachable server -> `AGENT_FAILED` (with the URL), HTTP 401/403 -> `NOT_LOGGED_IN`, unknown model -> `BAD_OPTION`, timeout -> `TIMEOUT`, abort -> `ABORTED`.
+- Streaming text (and `thinking` for reasoning models), usage from the server, `model` (omitted = `defaultModel`, else the first model the server lists), `systemPrompt`, `timeoutMs`, `signal`, `jsonSchema` (openai type), `effort`.
+- **Sessions are emulated locally**: the history is stored in `~/.agentbridge/endpoint-sessions/` and replayed each call. `new`, `ephemeral`, `continue` (with or without id) and `fork` behave like the other agents.
+- **Execution Harnesses for Tools and File Edits:** When `--permissions edit`, `--permissions full`, or `--harness <auto|claude|pi>` is passed, AgentBridge automatically drives the endpoint through an installed coding agent harness:
+  - `--harness auto` (default when permissions require editing or tools are configured): automatically picks `claude` (if installed) or `pi` (if installed).
+  - `--harness claude`: runs via Claude Code CLI (`claude -p`), passing the endpoint as `ANTHROPIC_BASE_URL`, enabling all of Claude Code's file editing and execution tools for the model.
+  - `--harness pi`: runs via the Pi CLI configured for the model.
+  - `--harness none`: enforces direct HTTP API calls (plain chat without filesystem tools, maximum speed).
 
-Note: this is "call another model from inside your client", not "run the Claude Code agent loop on a different model". The `claude` adapter deliberately forces your subscription login (it clears `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`), so pointing Claude Code itself at another base URL is not supported by agentbridge; use an endpoint agent instead.
+```bash
+# Run Ollama using Claude Code harness to edit files:
+ab run ollama "Fix auth bug in src/auth.ts" --permissions edit --harness claude --model glm-5.3-flash:cloud
+
+# Run Ollama with auto harness selection:
+ab run ollama "Create hello.txt with greeting" --permissions edit --model qwen2.5-coder:latest
+```
+
+### OpenRouter Integration Guide
+
+OpenRouter (`https://openrouter.ai`) gives you access to hundreds of AI models (Claude 3.5 Sonnet, DeepSeek R1, Qwen 2.5 Coder, GPT-4o, Llama 3.3, Gemini 2.0 Flash) through a single unified account and API key.
+
+AgentBridge supports OpenRouter in both direct chat mode and full coding harness mode:
+
+#### 1. Setup OpenRouter Endpoint
+Register OpenRouter in your AgentBridge endpoint registry:
+```bash
+# Add endpoint with default model and key read from environment:
+ab endpoint add openrouter https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY --model anthropic/claude-3.5-sonnet
+
+# Set your API key in your environment:
+export OPENROUTER_API_KEY="sk-or-v1-..."        # Linux/macOS
+$env:OPENROUTER_API_KEY = "sk-or-v1-..."        # Windows PowerShell
+```
+
+#### 2. Fast Direct API Mode (Plain Chat)
+Use direct API when you want fast answers, code reviews, or JSON schemas without spawning local CLI harnesses:
+```bash
+ab ask openrouter "Explique como funciona o algoritmo Raft" --model deepseek/deepseek-r1
+ab ask openrouter "Escreva um benchmark em Go" --model qwen/qwen-2.5-coder-32b-instruct
+```
+
+#### 3. Agent Harness Mode (Tools, File Reads, Web Search & File Edits)
+When you want the OpenRouter model to act as a **full coding agent** with tool execution:
+- **With Claude Code Harness (`--harness claude`):**
+  AgentBridge configures Claude Code to route requests through OpenRouter's Anthropic Messages API (`https://openrouter.ai/api/v1/messages`), injecting your `OPENROUTER_API_KEY` and target model. The OpenRouter model receives Claude Code's tools (`Read`, `Glob`, `Grep`, `WebSearch`, and `Edit` when permitted):
+  ```bash
+  # Read files and search web (read-only):
+  ab ask openrouter "Revise src/core/spawn.ts e pesquise por memory leaks" --harness claude --model anthropic/claude-3.5-sonnet
+
+  # Edit and refactor files:
+  ab run openrouter "Refatore src/auth.ts e adicione testes" --permissions edit --harness claude --model anthropic/claude-3.5-sonnet
+  ```
+- **With Pi Harness (`--harness pi`):**
+  AgentBridge automatically prefixes the model as `openrouter/<model>` and drives Pi with tool execution:
+  ```bash
+  ab run openrouter "Crie o arquivo config.json" --permissions edit --harness pi --model deepseek/deepseek-chat
+  ```
+
+#### 4. Delegating via MCP
+Once added, `openrouter` is automatically available to Claude Code, Codex, and OpenCode via MCP:
+- `mcp__agentbridge__ask_openrouter(prompt="...", permissions="edit", model="deepseek/deepseek-r1")`
+- `mcp__agentbridge__dispatch_openrouter(prompt="...", permissions="read-only", model="qwen/qwen-2.5-coder-32b-instruct")`
 
 ---
 

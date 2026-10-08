@@ -6,8 +6,8 @@ import path from 'node:path';
 
 const HOME = mkdtempSync(path.join(tmpdir(), 'ab-ctx-'));
 process.env.AGENTBRIDGE_HOME = HOME;
-const { runWithTelemetry, askWithTelemetry, contextOf, setPolicy, getPolicy, handoff, compact, AgentError } = await import('../src/index.mjs');
-const C = await import('../src/telemetry/context.mjs');
+const { runWithTelemetry, askWithTelemetry, contextOf, setPolicy, getPolicy, handoff, compact, AgentError } = await import('../dist/index.js');
+const C = await import('../dist/telemetry/context.js');
 const cwd = mkdtempSync(path.join(tmpdir(), 'ab-ctx-cwd-'));
 const collect = async (it) => { const ev = []; for (;;) { const { value, done } = await it.next(); if (done) return { ev, result: value }; ev.push(value); } };
 
