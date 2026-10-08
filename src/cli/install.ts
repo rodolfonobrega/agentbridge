@@ -233,12 +233,35 @@ export async function cmdInstall(
   const { scope, permissions, env, cwd } = bridgeCtx(flags);
   const json = JSON.stringify({ type: 'stdio', command: process.execPath, args: [MAIN, 'bridge'], env });
 
-  await runCollect('claude', ['mcp', 'remove', '-s', scope, 'agentbridge'], { cwd, timeoutMs: 30000 }).catch(() => {});
-  const r = await runCollect('claude', ['mcp', 'add-json', '-s', scope, 'agentbridge', json], {
-    cwd,
-    timeoutMs: 30000,
-  });
-  if (r.exitCode !== 0) throw new UsageError(`claude mcp add-json failed: ${(r.stderr || r.stdout).trim()}`);
+  let registered = false;
+  try {
+    await runCollect('claude', ['mcp', 'remove', '-s', scope, 'agentbridge'], { cwd, timeoutMs: 30000 }).catch(() => {});
+    const r = await runCollect('claude', ['mcp', 'add-json', '-s', scope, 'agentbridge', json], {
+      cwd,
+      timeoutMs: 30000,
+    });
+    if (r.exitCode === 0) registered = true;
+  } catch {
+    /* claude binary not on PATH */
+  }
+
+  if (!registered) {
+    if (scope === 'project') {
+      const mcpFile = path.join(cwd, '.mcp.json');
+      let current: any = { mcpServers: {} };
+      try {
+        current = JSON.parse(readFileSync(mcpFile, 'utf8'));
+      } catch {
+        /* empty */
+      }
+      if (!current || typeof current !== 'object') current = { mcpServers: {} };
+      if (!current.mcpServers) current.mcpServers = {};
+      current.mcpServers.agentbridge = JSON.parse(json);
+      writeFileSync(mcpFile, JSON.stringify(current, null, 2) + '\n');
+    } else {
+      throw new UsageError(`claude is not installed or "claude mcp add-json" failed. Install Claude Code with: npm install -g @anthropic-ai/claude-code`);
+    }
+  }
   out(`registered MCP server "agentbridge" in Claude Code (scope: ${scope}, permission ceiling: ${permissions})`);
 
   if (!flags['no-agents']) {
