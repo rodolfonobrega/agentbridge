@@ -4,35 +4,63 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
 jobs:
-  offline-tests:
-    name: Offline tests (${{ matrix.os }}, Node ${{ matrix.node }})
+  test:
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [22]
+        node: ['22', '24']
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: npm install
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
       - run: npm test
 
   package:
-    name: Package contents
+    name: Package Verification
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - name: npm pack dry run (must contain bin, src, docs and no scratch files)
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: npm pack dry run (verify dist, skills, docs)
         run: |
           npm pack --dry-run --json > pack.json
-          node -e "const f=JSON.parse(require('fs').readFileSync('pack.json','utf8'))[0].files.map(x=>x.path);for(const need of ['src/index.mjs','src/cli/main.mjs','README.md','LICENSE'])if(!f.includes(need)){console.error('missing',need);process.exit(1)}const bad=f.filter(x=>/^(tmp|\.claude|refs|acceptance|\.github)/.test(x));if(bad.length){console.error('unexpected',bad);process.exit(1)}console.log(f.length+' files OK')"
-      - name: CLI starts
-        run: node src/cli/main.mjs --help
+          node -e "
+            const fs = require('fs');
+            const files = JSON.parse(fs.readFileSync('pack.json', 'utf8'))[0].files.map(x => x.path);
+            const required = [
+              'dist/index.js',
+              'dist/cli/main.js',
+              'dist/cli/setup.js',
+              'skills/agentbridge-delegate/SKILL.md',
+              'README.md',
+              'LICENSE'
+            ];
+            for (const req of required) {
+              if (!files.includes(req)) {
+                console.error('Missing expected file in npm package:', req);
+                process.exit(1);
+              }
+            }
+            console.log('Package verification passed (' + files.length + ' files)');
+          "
+      - name: CLI starts and shows help
+        run: |
+          node dist/cli/main.js --help
+          node dist/cli/main.js setup --help

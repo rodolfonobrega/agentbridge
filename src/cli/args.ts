@@ -17,6 +17,9 @@ export const BOOL = new Set([
   'no-skill',
   'auto-approve',
   'open',
+  'yes',
+  'non-interactive',
+  'wizard',
 ]);
 const SHORT: Record<string, string> = {
   m: 'model',
@@ -27,6 +30,7 @@ const SHORT: Record<string, string> = {
   w: 'worktree',
   t: 'timeout',
   C: 'cwd',
+  y: 'yes',
 };
 
 export interface ParsedArgs {

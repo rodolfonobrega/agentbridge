@@ -42,11 +42,21 @@
     "LICENSE",
     "CHANGELOG.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rodolfonobrega/agentbridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rodolfonobrega/agentbridge/issues"
+  },
+  "homepage": "https://github.com/rodolfonobrega/agentbridge#readme",
   "scripts": {
     "build": "tsc && node scripts/copy-assets.mjs",
     "typecheck": "tsc --noEmit",
     "prepack": "npm run build",
-    "test": "node --test --test-concurrency=1 acceptance/core.test.mjs acceptance/endpoint.test.mjs acceptance/quota.test.mjs acceptance/checkpoint.test.mjs acceptance/checkpoint-cli.test.mjs acceptance/subagent-roster.test.mjs acceptance/new-providers.test.mjs acceptance/registry.test.mjs acceptance/registry2.test.mjs acceptance/ui.test.mjs acceptance/install.test.mjs acceptance/proxy-features.test.mjs acceptance/proxy-tools.test.mjs acceptance/proxy-pool.test.mjs acceptance/proxy-images.test.mjs acceptance/readiness.test.mjs",
+    "test": "node --test --test-concurrency=1 acceptance/core.test.mjs acceptance/endpoint.test.mjs acceptance/quota.test.mjs acceptance/checkpoint.test.mjs acceptance/checkpoint-cli.test.mjs acceptance/subagent-roster.test.mjs acceptance/new-providers.test.mjs acceptance/registry.test.mjs acceptance/registry2.test.mjs acceptance/ui.test.mjs acceptance/install.test.mjs acceptance/setup.test.mjs acceptance/proxy-features.test.mjs acceptance/proxy-tools.test.mjs acceptance/proxy-pool.test.mjs acceptance/proxy-images.test.mjs acceptance/readiness.test.mjs",
+    "setup": "node ./dist/cli/main.js setup",
+    "release": "node ./scripts/release.mjs",
     "accept": "node acceptance/run.mjs"
   },
   "devDependencies": {

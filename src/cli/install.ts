@@ -99,6 +99,8 @@ function autoApproveCodex(out: (msg: string) => void) {
 
 async function installCodex(flags: Record<string, any>, { out }: { out: (msg: string) => void }) {
   const c = bridgeCtx(flags);
+  const codexDir = process.env.CODEX_HOME || path.join(homedir(), '.codex');
+  mkdirSync(codexDir, { recursive: true });
   const envArgs = Object.entries(c.env).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
   await runCollect('codex', ['mcp', 'remove', 'agentbridge'], { cwd: c.cwd, timeoutMs: 30000 }).catch(() => {});
   const r = await runCollect(

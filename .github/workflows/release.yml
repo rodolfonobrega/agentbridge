@@ -1,22 +1,89 @@
 name: Release
-# Push a tag like v0.1.0 (it must match package.json) to create a GitHub Release with the changelog entry.
-# npm publishing is intentionally NOT automated yet.
+
 on:
-  push: { tags: ['v*'] }
-permissions: { contents: write }
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (validate build and tests without publishing)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+
 jobs:
-  release:
+  build-and-publish:
+    name: Build, Test, Publish & Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with: { node-version: 22 }
-      - run: npm install
-      - run: npm test
-      - name: Check tag matches package.json
-        run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Run acceptance tests
+        run: npm test
+
+      - name: Validate version matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          PKG_VER=$(node -p "require('./package.json').version")
+          if [ "$TAG_VER" != "$PKG_VER" ]; then
+            echo "::error::Tag version ($TAG_VER) does not match package.json version ($PKG_VER)"
+            exit 1
+          fi
+          echo "Version match confirmed: $PKG_VER"
+
       - name: Extract changelog entry
-        run: node -e "const s=require('fs').readFileSync('CHANGELOG.md','utf8');const v=process.env.GITHUB_REF_NAME.slice(1);const m=s.split(/^## /m).find(x=>x.startsWith(v));require('fs').writeFileSync('notes.md',m?m.split('\n').slice(1).join('\n').trim():'See CHANGELOG.md')"
-      - run: npm pack
-      - env: { GH_TOKEN: '${{ github.token }}' }
-        run: gh release create "$GITHUB_REF_NAME" *.tgz --title "$GITHUB_REF_NAME" --notes-file notes.md
+        run: |
+          node -e "
+            const fs = require('fs');
+            const tag = process.env.GITHUB_REF_NAME ? process.env.GITHUB_REF_NAME.replace(/^v/, '') : require('./package.json').version;
+            let changelog = '';
+            try { changelog = fs.readFileSync('CHANGELOG.md', 'utf8'); } catch {}
+            const sections = changelog.split(/^## /m);
+            const entry = sections.find(s => s.startsWith('[' + tag + ']') || s.startsWith(tag));
+            const notes = entry ? entry.split('\n').slice(1).join('\n').trim() : 'Release ' + tag + ' of AgentBridge.';
+            fs.writeFileSync('RELEASE_NOTES.md', notes + '\n');
+            console.log('Release notes generated:');
+            console.log(notes);
+          "
+
+      - name: Pack npm tarball
+        run: npm pack
+
+      - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry_run && startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" *.tgz \
+            --title "Release ${GITHUB_REF_NAME}" \
+            --notes-file RELEASE_NOTES.md

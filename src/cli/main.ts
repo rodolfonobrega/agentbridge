@@ -447,6 +447,7 @@ const HELP = `agentbridge (ab) — drive local claude/codex/opencode/agy/pi/curs
   ab ui [--port 8788][--open][--token t]            # live dashboard: runs, tokens, context, fallbacks (read-only, loopback)
   ab bridge                                        # stdio MCP server
   ab doctor [--live][--json]
+  ab setup | ab wizard [--yes]                     # modern interactive terminal setup wizard
   ab install <claude|codex|opencode|agy|pi|all> [--scope project|user|local] [--permissions read-only|plan|edit|full] [--max-depth N] [--no-agents] [--no-skill] [--auto-approve (codex)]
   ab endpoint [list] | add <name> <baseUrl> [--type openai|anthropic] [--model m] [--api-key-env VAR] | remove <name>
 `;
@@ -520,6 +521,10 @@ export async function main(): Promise<void> {
         break;
       case 'doctor':
         await cmdDoctor(_, flags);
+        break;
+      case 'setup':
+      case 'wizard':
+        await (await import('./setup.js')).cmdSetup(_, flags, { out, err });
         break;
       case 'install':
         await (await import('./install.js')).cmdInstall(_, flags, { out, err });

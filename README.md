@@ -48,23 +48,49 @@ You probably pay for more than one coding agent, and each has a different CLI, f
 
 **2. Install**
 
+Install globally via npm:
+```bash
+npm install -g agentbridge
+```
+
+Or run directly without installing:
+```bash
+npx agentbridge setup
+```
+
+Or clone from source:
 ```bash
 git clone https://github.com/rodolfonobrega/agentbridge.git
 cd agentbridge
-npm install        # dev dependencies only (used by the proxy tests)
-npm link           # optional: puts `ab` and `agentbridge` on your PATH
+npm ci
+npm run build
+npm link           # puts `ab` and `agentbridge` on your PATH
 ```
 
-(Without `npm link`, use `node src/cli/main.mjs` instead of `ab`.)
+**3. Interactive Setup Wizard**
 
-**3. Check your setup**
+Run the interactive terminal wizard to auto-detect your CLIs and configure everything in seconds:
+
+```bash
+ab setup           # or: ab wizard
+```
+
+The wizard will:
+- ✦ **Auto-detect** all installed agents (`claude`, `codex`, `opencode`, `pi`, `ollama`, `agy`)
+- ✦ Guide you through choosing target agents, scope (`user` global vs `project`), and permission ceilings (`edit`, `plan`, `read-only`, `full`)
+- ✦ Install the `agentbridge-delegate` skill so your agents can call each other as subagents
+- ✦ Configure Codex MCP tool auto-approval so you aren't interrupted by repetitive prompts
+- ✦ Connect local Ollama or OpenRouter endpoints
+- ✦ Run `ab doctor` to verify that all integrations are 100% operational
+
+**4. Check your setup**
 
 ```bash
 ab doctor          # finds each CLI, checks logins, lists models
 ab doctor --live   # also makes one tiny real call per agent
 ```
 
-**4. Ask something**
+**5. Ask something**
 
 ```bash
 ab ask claude "Reply with exactly: PONG"
@@ -72,7 +98,7 @@ ab ask codex  "Summarize this repo" --cwd ./my-project
 ab run opencode "Explain main.js" --stream           # live events
 ```
 
-**5. Use it from code**
+**6. Use it from code**
 
 ```js
 import { ask, run, fanout, race } from 'agentbridge';
@@ -88,13 +114,13 @@ console.log(winner.agent, winner.text);
 const { results } = await fanout(['claude:haiku', 'codex'], { prompt: 'Review src/auth.mjs' });
 ```
 
-**6. Watch what is happening (optional)**
+**7. Watch what is happening (optional)**
 
 ```bash
 ab ui --open        # live dashboard on http://127.0.0.1:8788
 ```
 
-**7. Let your agents delegate to each other**
+**8. Let your agents delegate to each other**
 
 ```bash
 ab install claude          # registers the MCP bridge, writes relay subagents and installs the `agentbridge-delegate` skill
