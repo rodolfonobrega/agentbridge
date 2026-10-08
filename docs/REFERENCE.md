@@ -70,31 +70,63 @@ agentbridge never asks for or stores credentials. It spawns the CLIs, which use 
 
 ## Installation
 
-agentbridge is not published to npm; install it from the source folder.
+Install globally via npm:
+
+```bash
+npm install -g agentbridge
+```
+
+Or run the setup wizard directly without installing:
+
+```bash
+npx agentbridge setup
+```
+
+Or build and link from source:
 
 ```bash
 git clone https://github.com/rodolfonobrega/agentbridge.git
 cd agentbridge
-npm install          # only installs dev dependencies (openai + @anthropic-ai/sdk, used by the proxy tests)
-npm link             # optional: puts the `agentbridge` and `ab` commands on your PATH
+npm ci
+npm run build
+npm link             # puts the `agentbridge` and `ab` commands on your PATH
 ```
 
-Without `npm link` you can run the CLI directly:
+Without `npm link` you can run the compiled CLI directly:
 
 ```bash
-node src/cli/main.mjs --help
+node dist/cli/main.js --help
 ```
 
 To use it as a library from another project:
 
 ```bash
-# in your project
-npm install /path/to/agentbridge
+npm install agentbridge
 ```
 
 ```js
-import { ask, run, agents } from 'agentbridge';
+import { ask, run, agents, contextOf, compact, setPolicy } from 'agentbridge';
 ```
+
+## Interactive Setup Wizard
+
+Run the interactive terminal wizard to auto-detect your CLIs and configure MCP bridges, subagent relays, skills, and permission ceilings:
+
+```bash
+ab setup           # or: ab wizard
+```
+
+The wizard guides you through:
+1. **CLI Probing:** Auto-detects `claude`, `codex`, `opencode`, `pi`, `ollama`, and `agy`.
+2. **Target Agents:** Select which agents to connect.
+3. **Scope:** Global (`user`: `~/.claude`, `~/.codex`, `~/.pi`) vs local (`project`).
+4. **Permissions:** Set ceiling (`read-only`, `plan`, `edit`, `full`).
+5. **Skills:** Install the `agentbridge-delegate` skill.
+6. **Codex Auto-Approve:** Pre-approve MCP tools to prevent prompt popups.
+7. **HTTP Endpoints:** Add local Ollama or OpenRouter.
+8. **Health Check:** Offers to run `ab doctor` immediately.
+
+Use `ab setup --yes` for non-interactive / scripted execution.
 
 ## Verify your setup
 
