@@ -73,13 +73,13 @@ agentbridge never asks for or stores credentials. It spawns the CLIs, which use 
 Install globally via npm:
 
 ```bash
-npm install -g agentbridge
+npm install -g @rodolfonobrega/agentbridge
 ```
 
 Or run the setup wizard directly without installing:
 
 ```bash
-npx agentbridge setup
+npx @rodolfonobrega/agentbridge setup
 ```
 
 Or build and link from source:
@@ -101,11 +101,11 @@ node dist/cli/main.js --help
 To use it as a library from another project:
 
 ```bash
-npm install agentbridge
+npm install @rodolfonobrega/agentbridge
 ```
 
 ```js
-import { ask, run, agents, contextOf, compact, setPolicy } from 'agentbridge';
+import { ask, run, agents, contextOf, compact, setPolicy } from '@rodolfonobrega/agentbridge';
 ```
 
 ## Interactive Setup Wizard
@@ -167,7 +167,7 @@ ab race "Summarize README.md" claude:haiku codex
 ### Library
 
 ```js
-import { ask, run } from 'agentbridge';
+import { ask, run } from '@rodolfonobrega/agentbridge';
 
 // Run to completion
 const result = await ask('claude', {
@@ -363,7 +363,7 @@ Abort and timeout kill the whole process tree, including grandchildren. `run()` 
 Workflows are plain JavaScript: decide targets, branch on results, loop, and combine the primitives however you like.
 
 ```js
-import { fanout, race } from 'agentbridge';
+import { fanout, race } from '@rodolfonobrega/agentbridge';
 
 // Same prompt to many agents/models; never rejects because one agent failed
 const { results, budget } = await fanout(
@@ -387,7 +387,7 @@ A shared budget covers all runs together: once exceeded, running ones are aborte
 ## Extras: schema, worktree, budget
 
 ```js
-import { askWithSchema, runInWorktree, Budget, runBudgeted } from 'agentbridge';
+import { askWithSchema, runInWorktree, Budget, runBudgeted } from '@rodolfonobrega/agentbridge';
 
 // Structured output: extracts JSON, validates against the schema, retries on invalid output
 const r = await askWithSchema('claude', { prompt: 'Return {"name": string, "age": number} for Ada Lovelace' },
@@ -423,7 +423,7 @@ ab checkpoint rollback <checkpoint-id>
 
 ### Library API
 ```js
-import { createCheckpoint, listCheckpoints, rollbackCheckpoint, diffCheckpoint } from 'agentbridge';
+import { createCheckpoint, listCheckpoints, rollbackCheckpoint, diffCheckpoint } from '@rodolfonobrega/agentbridge';
 
 const cp = createCheckpoint(process.cwd(), { message: 'pre-edit snapshot' });
 console.log(cp.id, cp.ref);
@@ -503,7 +503,7 @@ console.log(r.delegated, r.meta, r.text);   // r.meta is the server-attested pro
 ### Attaching the bridge to an agent manually
 
 ```js
-import { ask } from 'agentbridge';
+import { ask } from '@rodolfonobrega/agentbridge';
 import { mcpConfigFor } from 'agentbridge/src/bridge/attach.mjs';
 
 await ask('claude', {
@@ -645,7 +645,7 @@ ab fanout "Review this function" claude:haiku codex ollama:qwen3:14b lab_gpu
 ```
 
 ```js
-import { ask, fanout } from 'agentbridge';
+import { ask, fanout } from '@rodolfonobrega/agentbridge';
 const r = await ask('lab_gpu', { prompt: 'Hello', model: 'qwen3:14b', session: { mode: 'new' } });
 ```
 
@@ -722,7 +722,7 @@ Once added, `openrouter` is automatically available to Claude Code, Codex, and O
 Wrap runs with telemetry to track context size, tool counts, cost (when reported), and run status.
 
 ```js
-import { askWithTelemetry, stats, contextOf, setPolicy, compact, handoff } from 'agentbridge';
+import { askWithTelemetry, stats, contextOf, setPolicy, compact, handoff } from '@rodolfonobrega/agentbridge';
 
 const r = await askWithTelemetry('claude', { prompt: 'Work on the task', cwd }, {
   hooks: { finish: [{ http: 'http://127.0.0.1:9000/done' }] },
@@ -788,7 +788,7 @@ Events: `start`, `finish`, `error`, `timeout`, `context-threshold` (`'*'` for al
 Global hooks can live in `~/.agentbridge/hooks.json` and are merged with per-call hooks. Hook failures never affect the run, and every hook has a timeout (default 10s).
 
 ```js
-import { wait } from 'agentbridge';
+import { wait } from '@rodolfonobrega/agentbridge';
 const summary = await wait(runIdOrSessionId, { timeoutMs: 60_000 });   // works across processes
 ```
 

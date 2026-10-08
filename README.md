@@ -50,12 +50,12 @@ You probably pay for more than one coding agent, and each has a different CLI, f
 
 Install globally via npm:
 ```bash
-npm install -g agentbridge
+npm install -g @rodolfonobrega/agentbridge
 ```
 
 Or run directly without installing:
 ```bash
-npx agentbridge setup
+npx @rodolfonobrega/agentbridge setup
 ```
 
 Or clone from source:
@@ -101,7 +101,7 @@ ab run opencode "Explain main.js" --stream           # live events
 **6. Use it from code**
 
 ```js
-import { ask, run, fanout, race } from 'agentbridge';
+import { ask, run, fanout, race } from '@rodolfonobrega/agentbridge';
 
 const r = await ask('claude', { prompt: 'Say hi', model: 'haiku' });
 console.log(r.text, r.usage, r.sessionId);

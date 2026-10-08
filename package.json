@@ -1,6 +1,9 @@
 {
-  "name": "agentbridge",
+  "name": "@rodolfonobrega/agentbridge",
   "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "One interface for every coding agent: drive Claude Code, Codex, OpenCode, Antigravity CLI, pi and Ollama with your existing logins. MCP bridge, fallback on rate limits, OpenAI/Anthropic-compatible proxy.",
   "keywords": [
     "ai",
