@@ -133,7 +133,8 @@ async function main() {
 
   // Git Commit and Tag
   console.log('\n\x1b[34m✦ Creating git commit and tag...\x1b[0m');
-  run('git add package.json package-lock.json CHANGELOG.md dist/');
+  run('git add package.json CHANGELOG.md');
+  if (runOutput('git ls-files package-lock.json')) run('git add package-lock.json');
   run(`git commit -m "chore(release): v${nextVersion}"`);
   run(`git tag -a "v${nextVersion}" -m "Release v${nextVersion}"`);
 
