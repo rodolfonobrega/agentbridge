@@ -9,6 +9,7 @@ import { hintFor } from '../core/hints.js';
 import { AgentAdapter, AgentEvent, RunResult } from '../types/index.js';
 
 const READ_TOOLS = 'Read,Glob,Grep,WebFetch,WebSearch';
+const OFFLINE_READ_TOOLS = 'Read,Glob,Grep';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 const AUTH_RE =
@@ -78,23 +79,26 @@ function buildArgs(o: any, mcpFile?: string, resumeId?: string): string[] {
   const isolated = o.isolated !== false;
   if (isolated) a.push('--setting-sources', '', '--settings', '{"disableAllHooks":true}', '--disable-slash-commands');
   const ro = !o.permissions || o.permissions === 'read-only';
+  const readTools = o.offline ? OFFLINE_READ_TOOLS : READ_TOOLS;
   switch (o.permissions) {
     case 'edit':
       a.push('--permission-mode', 'acceptEdits');
+      if (o.offline) a.push('--disallowed-tools', 'WebFetch,WebSearch');
       break;
     case 'full':
       a.push('--permission-mode', 'bypassPermissions');
+      if (o.offline) a.push('--disallowed-tools', 'WebFetch,WebSearch');
       break;
     case 'plan':
-      a.push('--permission-mode', 'plan', '--tools', READ_TOOLS);
+      a.push('--permission-mode', 'plan', '--tools', readTools);
       break;
     default:
-      a.push('--permission-mode', 'default', '--tools', READ_TOOLS);
+      a.push('--permission-mode', 'default', '--tools', readTools);
   }
   if (o.systemPrompt) a.push('--system-prompt', o.systemPrompt);
   if (mcpFile) {
     const mcpTools = Object.keys(o.mcpServers).map((n) => `mcp__${n.replace(/[^a-zA-Z0-9_-]/g, '_')}__*`);
-    const allowed = ro || o.permissions === 'plan' ? [READ_TOOLS, ...mcpTools].join(',') : ['*', ...mcpTools].join(',');
+    const allowed = ro || o.permissions === 'plan' ? [readTools, ...mcpTools].join(',') : ['*', ...mcpTools].join(',');
     a.push('--mcp-config', mcpFile, '--strict-mcp-config', '--allowedTools', allowed);
   }
   else if (isolated || ro || o.permissions === 'plan') a.push('--mcp-config', '{"mcpServers":{}}', '--strict-mcp-config');

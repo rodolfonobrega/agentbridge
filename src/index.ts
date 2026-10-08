@@ -100,6 +100,7 @@ const KNOWN = new Set([
   'fallbackOn',
   'images',
   'harness',
+  'offline',
 ]);
 const HARNESS_MODES = ['auto', 'claude', 'pi', 'none'];
 const FALLBACK_ON = ['RATE_LIMITED', 'NOT_LOGGED_IN', 'NOT_INSTALLED', 'TIMEOUT', 'AGENT_FAILED'];
@@ -122,6 +123,9 @@ export function validateOptions(opts: RunOptions): RunOptions {
   else if (!PERMS.includes(o.permissions)) throw bad(`permissions must be one of ${PERMS.join('|')}`);
   if (o.harness != null && !HARNESS_MODES.includes(o.harness)) {
     throw bad(`harness must be one of ${HARNESS_MODES.join('|')}`);
+  }
+  if (o.offline != null && typeof o.offline !== 'boolean') {
+    throw bad('offline must be a boolean');
   }
   if (o.timeoutMs != null && !(Number.isFinite(o.timeoutMs) && o.timeoutMs > 0)) {
     throw bad('timeoutMs must be a positive number');

@@ -379,6 +379,42 @@ The table below summarizes tool availability and network access across adapters 
 4. **In the OpenAI / Anthropic Compatible Proxy (`ab serve`):**
    Clients connecting to `http://127.0.0.1:8787/v1` can supply standard function tools (`tools: [{ type: "function", function: { ... } }]`). If your frontend (e.g., Cursor, Continue, LibreChat) attempts to request proprietary cloud-hosted tools (like OpenAI's native server-side web search), configure the client to use a client-side search tool instead.
 
+#### How to block tools, web searches, and network access:
+
+If you are working in sensitive, private, corporate, or air-gapped environments and want to **strictly forbid** web searching, external network calls, or dangerous tools:
+
+1. **Unified Offline Mode (`--offline` / `offline: true`):**
+   AgentBridge provides a cross-adapter offline switch that disables web tools across all supported engines in one command:
+   ```bash
+   # CLI: completely disallow web access
+   ab run claude "Analyze this local codebase" --offline
+   ab ask pi "Review this file" --offline
+   ab run opencode "Check syntax" --offline
+   ```
+   From the TypeScript / JavaScript library:
+   ```js
+   await ask('claude', { prompt: 'Local audit only', offline: true });
+   ```
+   In the MCP bridge (`ask_*` tools):
+   ```json
+   {
+     "prompt": "Inspect codebase without internet",
+     "offline": true
+   }
+   ```
+   **What `--offline` does under the hood:**
+   - **Claude Code:** Strips `WebFetch` and `WebSearch` from the tool allowlist (leaving only local file readers `Read`, `Glob`, `Grep`).
+   - **Pi:** Injects `PI_OFFLINE=1` into the process environment.
+   - **OpenCode:** Sets `webfetch: 'deny'` and `websearch: 'deny'` in the security guard.
+   - **Antigravity:** Adds `execute_url(*)` to the sandbox deny rules.
+   - **Codex:** Retains strict socket isolation in filesystem sandboxes.
+
+2. **Block File System Modifications (Read-Only):**
+   Use `--permissions read-only` (the default) or `--permissions plan`. Agents cannot edit, overwrite, or delete local files.
+
+3. **Block Shell / Terminal Execution:**
+   All modes except `full` (`read-only`, `plan`, `edit`) deny arbitrary shell execution (`bash: deny`, `command(*): deny`, `powershell: deny`). The agent cannot execute unapproved system scripts or shell binaries.
+
 
 ### Errors
 

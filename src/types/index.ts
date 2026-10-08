@@ -77,6 +77,7 @@ export interface RunOptions {
   fallbackOn?: FallbackErrorCode[];
   images?: ImageData[];
   harness?: HarnessKind;
+  offline?: boolean;
   [key: string]: any;
 }
 

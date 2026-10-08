@@ -384,7 +384,7 @@ const adapter: AgentAdapter = {
           env: {
             ...(o.env || {}),
             PI_CODING_AGENT_DIR: ad!.dir,
-            ...(o.env?.PI_OFFLINE != null ? { PI_OFFLINE: o.env.PI_OFFLINE } : {}),
+            ...(o.offline || o.env?.PI_OFFLINE != null ? { PI_OFFLINE: o.offline ? '1' : o.env!.PI_OFFLINE } : {}),
             PI_SKIP_VERSION_CHECK: '1',
             PI_TELEMETRY: '0',
           },

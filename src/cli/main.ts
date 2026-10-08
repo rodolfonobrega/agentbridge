@@ -51,6 +51,7 @@ function baseOpts(flags: Record<string, any>, prompt: string): RunOptions {
   if (flags.effort) o.effort = flags.effort;
   if (flags.permissions) o.permissions = flags.permissions;
   if (flags.harness) o.harness = flags.harness;
+  if (flags.offline !== undefined) o.offline = Boolean(flags.offline);
   if (flags.isolated !== undefined) o.isolated = Boolean(flags.isolated);
   if (flags.cwd) o.cwd = flags.cwd;
   if (flags.timeout != null) o.timeoutMs = num(flags, 'timeout', { min: 0 }) * 1000;

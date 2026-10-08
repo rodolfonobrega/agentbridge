@@ -154,6 +154,10 @@ function askSchema(agent: string) {
             enum: ['RATE_LIMITED', 'NOT_LOGGED_IN', 'NOT_INSTALLED', 'TIMEOUT', 'AGENT_FAILED'],
           },
         },
+        offline: {
+          type: 'boolean',
+          description: 'Disable web search, web fetch, and external network tools (strict offline / air-gapped mode)',
+        },
       },
       required: ['prompt'],
     },
@@ -300,7 +304,7 @@ function prepare(agent: string, args: any, env: NodeJS.ProcessEnv) {
   const mk = (a: string) => `AGENTBRIDGE_MODEL_${a.toUpperCase()}`;
   const model = args.model ?? env[mk(agent)] ?? (isEndpoint(agent) ? safeEndpointModel(agent, env) : DEFAULT_MODEL[agent]);
   const opts: any = { prompt: args.prompt, permissions: perms, model };
-  for (const k of ['effort', 'cwd', 'session', 'systemPrompt', 'harness']) {
+  for (const k of ['effort', 'cwd', 'session', 'systemPrompt', 'harness', 'offline']) {
     if (args[k] != null) opts[k] = args[k];
   }
   if (env.AGENTBRIDGE_CHILD_CWD) opts.cwd = env.AGENTBRIDGE_CHILD_CWD;

@@ -103,12 +103,17 @@ function latestSessionFor(env: NodeJS.ProcessEnv, cwd: string): string | undefin
   return best?.id;
 }
 
-export function settingsFor(permissions: string, mcpNames: string[] = []): any {
+export function settingsFor(permissions: string, mcpNames: string[] = [], offline = false): any {
   const allow = mcpNames.map((n) => `mcp(${n}/*)`);
   const deny =
-    permissions === 'full'
+    permissions === 'full' && !offline
       ? []
-      : ['command(*)', 'unsandboxed(*)', ...(permissions === 'edit' ? ['write_file(.agents/)'] : ['write_file(*)'])];
+      : [
+          'command(*)',
+          'unsandboxed(*)',
+          ...(offline ? ['execute_url(*)'] : []),
+          ...(permissions === 'edit' ? ['write_file(.agents/)'] : permissions === 'full' ? [] : ['write_file(*)']),
+        ];
   return { permissions: { ...(allow.length ? { allow } : {}), ...(deny.length ? { deny } : {}) } };
 }
 
@@ -280,7 +285,7 @@ const adapter: AgentAdapter = {
       );
       hm = makeHome({
         env,
-        settings: settingsFor(perms, mcpNames),
+        settings: settingsFor(perms, mcpNames, !!o.offline),
         mcpServers,
         shared: sess.mode !== 'ephemeral',
         rules: o.systemPrompt,

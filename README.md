@@ -216,7 +216,7 @@ Supports standard batch CLI runs (`codex exec`) as well as persistent JSON-RPC 2
 | HTTP endpoints (Ollama, OpenRouter) | Direct API or harness (`claude`/`pi`) | emulated | Plain chat (no tools) by default; full tools with harness | Pass `--harness claude` or `--harness pi` to enable tools & web |
 | Proxy (`ab serve`) | Client function calling | per request / session | Client functions supported; hosted server tools not available | Register a client-side search function tool |
 
-> **Web Search & Tool Permissions Note:** By default, AgentBridge applies strict sandboxing to protect your machine. For live internet research, web searches, or executing network commands, models require permission clearance or an execution harness. See **[docs/REFERENCE.md#web-search-tools-and-network-permissions-across-agents--modes](docs/REFERENCE.md#web-search-tools-and-network-permissions-across-agents--modes)** for the complete guide.
+> **Web Search, Tools & Offline Mode:** By default, AgentBridge applies strict sandboxing to protect your machine. For live internet research, web searches, or executing network commands, models require permission clearance or an execution harness. Conversely, to strictly isolate agents from the web (air-gapped / offline privacy mode), pass `--offline` in the CLI or `offline: true` in code/MCP. See **[docs/REFERENCE.md#web-search-tools-and-network-permissions-across-agents--modes](docs/REFERENCE.md#web-search-tools-and-network-permissions-across-agents--modes)** for the complete guide.
 
 Full details, flags and caveats: **[docs/REFERENCE.md](docs/REFERENCE.md)**.
 

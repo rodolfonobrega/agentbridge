@@ -220,7 +220,7 @@ async function resolveVariant(effort: string, model?: string): Promise<string> {
   return hit;
 }
 
-function permissionBlock(p?: string) {
+function permissionBlock(p?: string, offline = false) {
   const full = p === 'full';
   const secretsDeny = {
     '*': 'allow',
@@ -238,19 +238,20 @@ function permissionBlock(p?: string) {
     guard.list = secretsDeny;
     guard.external_directory = { '*': 'deny' };
   }
+  const web = offline ? 'deny' : 'allow';
   switch (p) {
     case 'full':
-      return { edit: 'allow', bash: 'allow', webfetch: 'allow', websearch: 'allow', external_directory: 'allow' };
+      return { edit: 'allow', bash: 'allow', webfetch: web, websearch: web, external_directory: 'allow' };
     case 'edit':
-      return { ...guard, edit: 'allow', bash: 'deny', webfetch: 'allow', websearch: 'allow' };
+      return { ...guard, edit: 'allow', bash: 'deny', webfetch: web, websearch: web };
     default:
-      return { ...guard, edit: 'deny', bash: 'deny', webfetch: 'allow', websearch: 'allow' };
+      return { ...guard, edit: 'deny', bash: 'deny', webfetch: web, websearch: web };
   }
 }
 
 function buildConfig(o: RunOptions): Record<string, any> {
   const cfg: Record<string, any> = {
-    permission: permissionBlock(o.permissions),
+    permission: permissionBlock(o.permissions, !!o.offline),
     autoupdate: false,
     share: 'disabled',
   };
