@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnProc, runCollect, resolveBinary } from '../dist/core/spawn.js';
 import { AgentError } from '../dist/core/errors.js';
-import { createLineSplitter, splitJsonl } from '../dist/core/events.js';
+import { createLineSplitter } from '../dist/core/events.js';
 import { run, ask, validateOptions } from '../dist/index.js';
 
 const N = process.execPath;
@@ -112,7 +112,6 @@ for (const bin of ['claude', 'codex', 'opencode']) {
 test('line splitter / jsonl', () => {
   const s = createLineSplitter();
   assert.deepEqual(s.push('a\r\nb'), ['a']); assert.deepEqual(s.push('c\n'), ['bc']); assert.deepEqual(s.flush(), []);
-  assert.deepEqual(splitJsonl('{"a":1}\nnope\n\n[2]'), [{ a: 1 }, [2]]);
 });
 
 test('index: validation -> BAD_OPTION', async () => {

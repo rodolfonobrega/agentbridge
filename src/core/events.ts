@@ -78,8 +78,6 @@ export const ev = {
   }),
 };
 
-export const EVENT_TYPES = ['session', 'text', 'thinking', 'tool', 'usage', 'error', 'raw', 'fallback'] as const;
-
 /** Parse one line as JSON; returns undefined if blank/not JSON. */
 export function parseJsonLine(line: string): any | undefined {
   const s = line.trim();
@@ -151,9 +149,4 @@ export function createLineSplitter({ maxLine = 16 * 1024 * 1024 }: LineSplitterO
       return r ? [r] : [];
     },
   };
-}
-
-/** Split a whole string into jsonl records (skips blanks). */
-export function splitJsonl(str: string): any[] {
-  return str.split(/\r?\n/).map(parseJsonLine).filter((x) => x !== undefined);
 }

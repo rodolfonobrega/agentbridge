@@ -351,34 +351,6 @@ export function summarize(r: RunRecord | null): RunSummary | null {
   };
 }
 
-export function recordSubagent(
-  runId: string,
-  entry: Partial<SubagentEntry> & { id: string; name?: string },
-  env: NodeJS.ProcessEnv = process.env
-): void {
-  const liveRun = live.get(runId);
-  const r = liveRun ? liveRun.rec : loadRun(runId, env);
-  if (!r) return;
-  r.subagents ||= [];
-  const existing = r.subagents.find((s) => s.id === entry.id);
-  if (existing) {
-    Object.assign(existing, entry);
-  } else {
-    r.subagents.push({
-      id: entry.id,
-      name: entry.name || 'subagent',
-      parentId: entry.parentId || null,
-      parentToolId: entry.parentToolId || null,
-      task: entry.task || '',
-      state: entry.state || 'running',
-      startedAt: entry.startedAt || Date.now(),
-      endedAt: entry.endedAt || null,
-      tokens: entry.tokens,
-    });
-  }
-  save(r, env);
-}
-
 export interface InboxMessage {
   id: string;
   t: number;

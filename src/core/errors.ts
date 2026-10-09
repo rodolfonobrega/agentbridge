@@ -33,9 +33,6 @@ export class AgentError extends Error {
   }
 }
 
-export const isAgentError = (e: unknown, code?: string): e is AgentError =>
-  e instanceof AgentError && (!code || e.code === code);
-
 // Provider-side "you are out of budget / slow down / we are full" messages. Deliberately specific: our own
 // "context hard limit reached" and plain "limit" words must NOT match (they are not something another agent can fix).
 const RATE_PATTERNS = [
