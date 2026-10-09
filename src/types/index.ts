@@ -57,6 +57,7 @@ export interface FallbackAttempt {
 }
 
 export type HarnessKind = 'auto' | 'claude' | 'pi' | 'none';
+export type TransportKind = 'cli' | 'app-server' | 'stdio' | 'auto';
 
 export interface RunOptions {
   prompt: string;
@@ -78,6 +79,8 @@ export interface RunOptions {
   images?: ImageData[];
   harness?: HarnessKind;
   offline?: boolean;
+  transport?: TransportKind;
+  appServer?: boolean;
   [key: string]: any;
 }
 

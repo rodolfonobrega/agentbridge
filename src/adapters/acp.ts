@@ -57,6 +57,21 @@ export function makeAcpAdapter(config: AcpAdapterOptions = {}): AgentAdapter {
         if (!j) continue;
         yield ev.raw(j) as any;
 
+        // In-flight server requests (e.g. approval)
+        if (j.id != null && typeof j.method === 'string') {
+          if (j.method === 'tool/requestApproval' || j.method === 'session/requestApproval' || j.method.endsWith('/requestApproval')) {
+            const isApproved = o.permissions === 'full' || (o.permissions === 'edit' && !j.params?.dangerous);
+            const decision = isApproved ? 'approved' : 'denied';
+            p.stdin.write(JSON.stringify({
+              jsonrpc: '2.0',
+              id: j.id,
+              result: { approved: isApproved, decision, status: decision },
+            }) + '\n');
+            yield ev.tool('acp:approval', j.params, { approved: isApproved }) as any;
+            continue;
+          }
+        }
+
         if (j.id === 1 && !initialized) {
           initialized = true;
           // 2. Start turn / session
@@ -65,10 +80,11 @@ export function makeAcpAdapter(config: AcpAdapterOptions = {}): AgentAdapter {
             model: o.model,
             cwd: o.cwd,
             permissions: o.permissions,
+            session: o.session,
           });
         } else if (j.method === 'session/created' || j.method === 'session/started') {
           sessionId = j.params?.sessionId || j.params?.id;
-          if (sessionId) yield ev.session(sessionId) as any;
+          if (sessionId && o.session?.mode !== 'ephemeral') yield ev.session(sessionId) as any;
         } else if (j.method === 'text/delta' || j.method === 'agent/message/delta') {
           const delta = j.params?.delta || j.params?.text || '';
           text += delta;

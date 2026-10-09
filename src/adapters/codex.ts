@@ -147,74 +147,9 @@ function listModels(): string[] {
   }
 }
 
-async function* runAppServer(o: any, t0: number): AsyncGenerator<AgentEvent, RunResult, void> {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(o.env || {}) };
-  if (!o.env?.OPENAI_API_KEY) delete env.OPENAI_API_KEY;
-  if (!o.env?.CODEX_API_KEY) delete env.CODEX_API_KEY;
+import { codexDaemonPool } from './codex-daemon.js';
 
-  const p = spawnProc('codex', ['app-server'], {
-    cwd: o.cwd,
-    env,
-    keepStdinOpen: true,
-    timeoutMs: o.timeoutMs,
-    signal: o.signal,
-    agent: 'codex',
-  });
-
-  const sendRpc = (id: number | null, method: string, params: any = {}) => {
-    const msg = id !== null
-      ? JSON.stringify({ jsonrpc: '2.0', id, method, params })
-      : JSON.stringify({ jsonrpc: '2.0', method, params });
-    p.stdin.write(msg + '\n');
-  };
-
-  sendRpc(1, 'initialize', { clientInfo: { name: 'agentbridge', version: '0.3.0' } });
-  let text = '', sessionId: string | undefined;
-  let usage: any = { input: 0, output: 0, cost: null };
-  let initialized = false;
-
-  for await (const line of p.lines) {
-    const j = parseJsonLine(line);
-    if (!j) continue;
-    yield ev.raw(j) as any;
-
-    if (j.id === 1 && !initialized) {
-      initialized = true;
-      sendRpc(null, 'initialized');
-      sendRpc(2, 'turn/start', {
-        prompt: o.prompt,
-        model: o.model,
-        approvalPolicy: o.permissions === 'full' ? 'never' : 'on-request',
-      });
-    } else if (j.method === 'thread/started' || j.method === 'thread.started') {
-      sessionId = j.params?.threadId || j.params?.thread_id;
-      if (sessionId) yield ev.session(sessionId) as any;
-    } else if (j.method === 'item/agentMessage/delta') {
-      const delta = j.params?.delta || '';
-      text += delta;
-      yield ev.text(delta) as any;
-    } else if (j.method === 'item/reasoning/delta') {
-      yield ev.thinking(j.params?.delta || '') as any;
-    } else if (j.method === 'turn/completed') {
-      const u = j.params?.usage || {};
-      usage = { input: u.inputTokens || 0, output: u.outputTokens || 0, cost: null };
-      yield ev.usage(usage.input, usage.output) as any;
-      break;
-    }
-  }
-
-  const r = await p.wait();
-  return {
-    text,
-    sessionId,
-    usage,
-    exitCode: r.exitCode,
-    model: o.model || 'default',
-    durationMs: Date.now() - t0,
-    timedOut: false,
-    sandbox: sandboxInfo(o),
-  };
-}
+export { codexDaemonPool };
 
 const adapter: AgentAdapter = {
   name: 'codex',
@@ -229,7 +164,8 @@ const adapter: AgentAdapter = {
     (o as any).writableRoots = writableRoots;
     const t0 = Date.now();
     if (opts?.transport === 'app-server' || opts?.appServer === true) {
-      return yield* runAppServer(o, t0);
+      const daemon = codexDaemonPool.get(o.cwd || process.cwd());
+      return yield* daemon.runTurn(o, t0);
     }
     let prompt = o.prompt;
     if (o.permissions === 'plan') prompt = `${PLAN_NOTE}\n\n${prompt}`;

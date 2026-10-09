@@ -113,7 +113,7 @@ test('N1 (round 7): codex root cause — its MCP subprocess does NOT inherit the
 // codex-cli 0.155.1) — codex reads a bearer token from ITS OWN process env at request time and sends it as an Authorization
 // header; only the ENV VAR NAME goes into codex's config/argv, never the value. src/bridge/mcp.mjs execute() and
 // src/bridge/subagent.mjs runOnce() use exactly this for codex: the grandchild bridge runs IN-PROCESS (no separate spawn at
-// all — see serveHttp()) and codex is pointed at it via `-c mcp_servers.agentbridge.url=...` + `bearer_token_env_var=...`.
+// all — see serveHttp()) and codex is pointed at it via `-c mcp_servers.agentbridge_http.url=...` + `bearer_token_env_var=...`.
 test('N1 (round 8): codex HTTP transport — real end-to-end delegation, key visible NEITHER on disk NOR via WMI CommandLine', T, async () => {
   const { runAsSubagent } = await import('../dist/bridge/subagent.js');
   const key = 'SECRET-' + Math.random().toString(36).slice(2) + '-' + Date.now(); // known in advance so we can scan for it LIVE

@@ -102,8 +102,11 @@ const KNOWN = new Set([
   'harness',
   'offline',
   'defaultPermissions',
+  'transport',
+  'appServer',
 ]);
 const HARNESS_MODES = ['auto', 'claude', 'pi', 'none'];
+const TRANSPORTS = ['cli', 'app-server', 'stdio', 'auto'];
 const FALLBACK_ON = ['RATE_LIMITED', 'NOT_LOGGED_IN', 'NOT_INSTALLED', 'TIMEOUT', 'AGENT_FAILED'];
 const bad = (m: string) => new AgentError('BAD_OPTION', m);
 const isObj = (v: any): boolean => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -128,6 +131,12 @@ export function validateOptions(opts: RunOptions): RunOptions {
   }
   if (o.harness != null && !HARNESS_MODES.includes(o.harness)) {
     throw bad(`harness must be one of ${HARNESS_MODES.join('|')}`);
+  }
+  if (o.transport != null && !TRANSPORTS.includes(o.transport)) {
+    throw bad(`transport must be one of ${TRANSPORTS.join('|')}`);
+  }
+  if (o.appServer != null && typeof o.appServer !== 'boolean') {
+    throw bad('appServer must be a boolean');
   }
   if (o.offline != null && typeof o.offline !== 'boolean') {
     throw bad('offline must be a boolean');

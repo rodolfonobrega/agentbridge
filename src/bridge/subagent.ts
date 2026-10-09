@@ -140,7 +140,8 @@ async function runOnce({
   const bind = randomBytes(12).toString('hex');
   const seen = new Set<string>();
   const tool = toolName || `ask_${callee}`;
-  const prompt = `You MUST call the MCP tool "${tool}" (server "agentbridge") exactly once, passing this as its "prompt" argument, verbatim:\n\n${task}\n\nPass ONLY the "prompt" argument (no model, session or other arguments). Then reply with the tool's returned text and nothing else. Do not answer yourself.`;
+  const serverName = caller === 'codex' ? 'agentbridge_http' : 'agentbridge';
+  const prompt = `You MUST call the MCP tool "${tool}" (server "${serverName}") exactly once, passing this as its "prompt" argument, verbatim:\n\n${task}\n\nPass ONLY the "prompt" argument (no model, session or other arguments). Then reply with the tool's returned text and nothing else. Do not answer yourself.`;
   const events: AgentEvent[] = [];
 
   let httpBridge: any = null;
@@ -161,11 +162,11 @@ async function runOnce({
     rest.extraArgs = [
       ...(rest.extraArgs || []),
       '-c',
-      `mcp_servers.agentbridge.url="${httpBridge.url}"`,
+      `mcp_servers.${serverName}.url="${httpBridge.url}"`,
       '-c',
-      'mcp_servers.agentbridge.bearer_token_env_var="AGENTBRIDGE_ATTEST_KEY"',
+      `mcp_servers.${serverName}.bearer_token_env_var="AGENTBRIDGE_ATTEST_KEY"`,
       '-c',
-      'mcp_servers.agentbridge.default_tools_approval_mode="approve"',
+      `mcp_servers.${serverName}.default_tools_approval_mode="approve"`,
     ];
   } else {
     mcp = mcpConfigFor(caller, {

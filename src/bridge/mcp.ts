@@ -444,15 +444,16 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
   if (env.AGENTBRIDGE_DEFAULT_TIMEOUT_S) grandchildEnv.AGENTBRIDGE_DEFAULT_TIMEOUT_S = env.AGENTBRIDGE_DEFAULT_TIMEOUT_S;
   let httpBridge: any = null;
   if (agent === 'codex') {
+    const serverName = 'agentbridge_http';
     httpBridge = await serveHttp({ env: grandchildEnv });
     opts.extraArgs = [
       ...(opts.extraArgs || []),
       '-c',
-      `mcp_servers.agentbridge.url="${httpBridge.url}"`,
+      `mcp_servers.${serverName}.url="${httpBridge.url}"`,
       '-c',
-      'mcp_servers.agentbridge.bearer_token_env_var="AGENTBRIDGE_ATTEST_KEY"',
+      `mcp_servers.${serverName}.bearer_token_env_var="AGENTBRIDGE_ATTEST_KEY"`,
       '-c',
-      'mcp_servers.agentbridge.default_tools_approval_mode="approve"',
+      `mcp_servers.${serverName}.default_tools_approval_mode="approve"`,
     ];
   } else {
     opts.mcpServers = mcpConfigFor(agent, {
