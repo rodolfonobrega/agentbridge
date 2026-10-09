@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0] - 2026-10-09
+
+### Changes
+  - 7d37238 fix(install): prioritize standard json for opencode configs and assert execPath in ide tests
+  - b913c42 fix(tooling): complete Phase 7 audit items (A19, A32, A45-A53, A56, A71) - installers, contracts, catalog and release automation
+  - befd1b8 fix(phase6): harden storage, configuration, memory and dashboard security (A25, A26, A27, A28, A33, A34, A35, A40, A54, A66, A67)
+  - accf2df fix(telemetry): complete Phase 5 telemetry, quotas, context and accounts hardening (A18, A20, A21, A22, A23, A24, A29, A30, A41, A42, A62, A65)
+  - e39ccb1 fix(adapters): complete Phase 4 adapters, roster, consensus and schema hardening (A06, A31, A36, A37, A43, A44, A61, A63, A64, A69, A70, A72)
+  - b90c58a fix(isolation): complete Phase 3 worktree sandboxes, streaming budgets and return cleanup (A07, A08, A09, A38, A39, A60)
+  - 8ed3d4b fix(codex): complete Phase 2 app-server concurrency and stability (A03, A04, A05, A58, A59, A68)
+  - 8a338ff fix(security): complete Phase 1 audit remediation (A01, A02, A10-A17, A57)
+  - cf50a72 feat(cli): interactive terminal installer with ASCII art, rich probing and quickstart guide
+
+
 ## [0.3.5] - 2026-10-09
 
 ### Changes
