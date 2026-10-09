@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { validateOptions } from '../dist/index.js';
 import { validate as validateSchema } from '../dist/extras/schema.js';
 import { parseReviewVerdict, runEnsemble } from '../dist/extras/consensus.js';
@@ -202,4 +205,122 @@ test('A06 & A70: Cursor adapter rejects unsupported options', async () => {
       return true;
     }
   );
+});
+
+test('A71: shared cli-json-lines runner keeps cursor behavior (fake binary: parity, NOT_LOGGED_IN, ABORTED, TIMEOUT)', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'ab-fake-cursor-'));
+  const node = process.execPath;
+  writeFileSync(
+    path.join(dir, 'fake-cursor.mjs'),
+    `import { writeFileSync } from 'node:fs'
+const args = process.argv.slice(2)
+const pick = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : undefined }
+const mode = pick('--fake-mode') || 'happy'
+const dump = pick('--fake-args-file')
+if (dump) writeFileSync(dump, JSON.stringify(args))
+if (mode === 'happy') {
+  const nl = String.fromCharCode(10)
+  const line = (o) => process.stdout.write(JSON.stringify(o) + nl)
+  line({ type: 'session', id: 's1' })
+  line({ type: 'message', delta: 'Hello ' })
+  line({ type: 'message', content: 'World ' })
+  line({ type: 'tool_call', name: 'read_file', params: { path: 'a.ts' } })
+  line({ type: 'usage', input: 3, output: 4, cost: 0.02 })
+  process.stdout.write('plain trailing line' + nl)
+} else if (mode === 'auth') {
+  process.stderr.write('error: unauthorized')
+  process.exit(1)
+} else {
+  setInterval(() => {}, 1000)
+}
+`
+  );
+  if (process.platform === 'win32') {
+    writeFileSync(path.join(dir, 'cursor.cmd'), '@echo off\r\n"' + node + '" "%~dp0fake-cursor.mjs" %*\r\n');
+  } else {
+    const sh = path.join(dir, 'cursor');
+    writeFileSync(sh, '#!/bin/sh\n"' + node + '" "' + path.join(dir, 'fake-cursor.mjs') + '" "$@"\n');
+    chmodSync(sh, 0o755);
+  }
+  const env = { PATH: dir + path.delimiter + process.env.PATH };
+  const { default: cursor } = await import('../dist/adapters/cursor.js');
+  const drain = async (opts = {}) => {
+    const events = [];
+    const it = cursor.run({ prompt: 'test prompt', env, permissions: 'read-only', ...opts });
+    let x;
+    for (;;) {
+      x = await it.next();
+      if (x.done) break;
+      events.push(x.value);
+    }
+    return { events, result: x.value };
+  };
+  try {
+    // behavior parity: argv order, prompt prefix, event mapping, result fields
+    const dumpFile = path.join(dir, 'args.json');
+    const { events, result } = await drain({ model: 'gpt-4o', extraArgs: ['--fake-mode', 'happy', '--fake-args-file', dumpFile] });
+    assert.deepEqual(JSON.parse(readFileSync(dumpFile, 'utf8')), [
+      'agent', '--output-format', 'json', '--model', 'gpt-4o', '--fake-mode', 'happy', '--fake-args-file', dumpFile,
+      '--prompt', '[READ-ONLY MODE: Do NOT edit files or run modifying commands]\n\ntest prompt',
+    ]);
+    assert.equal(events.filter((e) => e.type === 'raw').length, 5);
+    assert.deepEqual(events.filter((e) => e.type === 'text').map((e) => e.delta), ['Hello ', 'World ', 'plain trailing line\n']);
+    assert.deepEqual(events.find((e) => e.type === 'session'), { type: 'session', id: 's1' });
+    assert.deepEqual(events.find((e) => e.type === 'tool'), { type: 'tool', name: 'read_file', input: { path: 'a.ts' } });
+    assert.deepEqual(events.find((e) => e.type === 'usage'), { type: 'usage', input: 3, output: 4 });
+    assert.deepEqual(result.usage, { input: 3, output: 4, cost: 0.02 });
+    assert.equal(result.sessionId, 's1');
+    assert.equal(result.model, 'gpt-4o');
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.timedOut, false);
+    assert.equal(result.text, 'Hello World plain trailing line');
+
+    // default result model when o.model is unset
+    const { result: r2 } = await drain({ extraArgs: ['--fake-mode', 'happy'] });
+    assert.equal(r2.model, 'claude-3.7-sonnet');
+
+    // auth regex -> NOT_LOGGED_IN (exit 1, no stdout, stderr matches /auth|login|unauthorized/i)
+    await assert.rejects(
+      async () => {
+        await drain({ extraArgs: ['--fake-mode', 'auth'] });
+      },
+      (e) => {
+        assert.equal(e.code, 'NOT_LOGGED_IN');
+        assert.equal(e.agent, 'cursor');
+        assert.equal(e.message, 'Cursor CLI is not authenticated: error: unauthorized');
+        return true;
+      }
+    );
+
+    // abort signal -> ABORTED
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 100);
+    await assert.rejects(
+      async () => {
+        await drain({ signal: ac.signal, extraArgs: ['--fake-mode', 'hang'] });
+      },
+      (e) => {
+        assert.equal(e.code, 'ABORTED');
+        assert.equal(e.message, 'Cursor CLI execution was aborted');
+        assert.equal(e.partial, '');
+        return true;
+      }
+    );
+
+    // timeout -> TIMEOUT
+    await assert.rejects(
+      async () => {
+        await drain({ timeoutMs: 300, extraArgs: ['--fake-mode', 'hang'] });
+      },
+      (e) => {
+        assert.equal(e.code, 'TIMEOUT');
+        assert.equal(e.message, 'Cursor CLI timed out after 300ms');
+        assert.equal(e.timedOut, true);
+        assert.equal(e.partial, '');
+        return true;
+      }
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
