@@ -12,11 +12,17 @@ The MCP server `agentbridge` exposes other coding agents as tools. Each runs as 
 - `ask_<agent>`: run and wait. Agents: `codex`, `opencode`, `agy`, `pi`, plus any endpoint added with `ab endpoint add` (e.g. `ask_ollama`, custom OpenAI/Anthropic/OpenRouter endpoints).
 - `dispatch_<agent>`: start asynchronously, returns a run id at once. Then `wait_run` (blocks, with `timeoutSeconds`), `check_run` (status, last events, tokens), `cancel_run`, `list_runs`.
 - `send_message` / `check_messages`: inbox for a run id or agent name (no live injection into a running agent).
+- **Git Checkpoint Tools (Fail-safe Workspace Snapshots):**
+  - `checkpoint_create(message, cwd?)`: creates an instant non-destructive hidden-ref git snapshot (`refs/agentbridge/checkpoints/...`). Use **before** delegating risky code modifications.
+  - `checkpoint_list(cwd?)`: lists recent workspace checkpoints with id, timestamp, message, and session id.
+  - `checkpoint_diff(id, cwd?)`: returns unified git diff between current workspace and the checkpoint.
+  - `checkpoint_rollback(id, cwd?)`: safely restores workspace to the checkpoint, recovering modified files and pruning untracked files created since the snapshot.
 
 ## When to use which
 
 - **Short, bounded task (under ~2 min):** `ask_<agent>`.
 - **Long task, or several in parallel:** `dispatch_<agent>` for each, keep working, then `wait_run` on every id. Use an `idempotencyKey` so a retry does not start a duplicate.
+- **Risky refactor or complex changes:** First call `checkpoint_create(message="Before refactor")`, run the delegation with `ask_*` or `dispatch_*`, verify tests, and if broken, call `checkpoint_rollback(id)`.
 - **Second opinion or review:** ask a *different* agent than the one that wrote the code; give it the file paths and the question, not your conclusion.
 - **Cheap bulk work (summaries, searches, boilerplate):** pick a cheap model/agent; reserve strong models for hard problems.
 
@@ -98,4 +104,43 @@ AgentBridge seamlessly supports both plain chat and full coding tools for Ollama
   ab ask ollama "o que e injecao de dependencia?" --model llama3.2
   ab ask openrouter "resuma os principios SOLID" --model meta-llama/llama-3.3-70b-instruct
   ```
+
+## Advanced CLI Workflows for Autonomous Agents
+
+If you have shell execution access, you can run high-level orchestration workflows directly:
+
+- **TDD Auto-Repair Loop (`ab fix`):**
+  Runs tests, catches errors in bounded buffers, prompts the agent with edit permissions, and rolls back if failing:
+  ```bash
+  ab fix claude "npm test" --prompt "Fix token renewal" --max-attempts 3
+  ```
+- **Multi-Agent Review & Consensus (`ab review`, `ab ensemble`):**
+  Implementer codes, reviewer inspects git diff under read-only permissions with structured verdicts:
+  ```bash
+  ab review codex claude "Implement rate limiter" --max-turns 3
+  ab ensemble "Analyze database deadlock" claude codex agy --judge claude
+  ```
+- **DAG Pipeline Orchestration (`ab pipeline`):**
+  Executes topological dependency graphs of multi-agent tasks with checkpoints:
+  ```bash
+  ab pipeline pipeline.json --checkpoint-each
+  ```
+- **Shared Project Memory (`ab memory`):**
+  Stores and injects repository rules and past decisions:
+  ```bash
+  ab memory add "Enforce strict TypeScript and zero dependencies"
+  ab memory decision "auth" "Use JWT with HMAC-SHA256" --agent claude
+  ab memory list
+  ```
+- **Multiple Accounts Management (`ab account`):**
+  Per-profile directory isolation, multi-login, and proactive quota:
+  ```bash
+  ab account list [agent]
+  ab account add claude work --copy-current
+  ab account use claude work
+  ab account quota claude
+  ```
+- **Live Visual Time Machine & Dashboard (`ab ui`):**
+  Explore runs, tokens, cost, subagent trees, and time-machine checkpoints at `http://127.0.0.1:8788`.
+
 

@@ -52,8 +52,15 @@ AgentBridge is a unified hub and orchestration bridge that connects every coding
 | `ab run <agent> "<prompt>" --stream` | Runs `<agent>` streaming live tokens and tool events | Interactive or detailed executions |
 | `ab race "<prompt>" <agent1> <agent2>` | First agent with an accepted answer wins, cancels others | Hedging fast models against complex prompts |
 | `ab fanout "<prompt>" <agent1> <agent2>` | Runs prompt across multiple agents and collects all answers | Code reviews, contrasting architecture plans |
+| `ab fix <agent> "<test-cmd>"` | Autonomous TDD auto-repair loop with rollback on failure | Self-healing broken code or tests automatically |
+| `ab review <coder> <reviewer> "<task>"` | Two-agent implementer/reviewer loop with git diff inspection | High-assurance code generation with peer critique |
+| `ab ensemble "<task>" <a1> <a2>...` | Parallel multi-agent execution with plurality voting / judge | Critical consensus decision-making |
+| `ab pipeline <pipeline.json>` | Executes DAG task workflows with topological wave parallelization | Multi-step agent dependency plans |
 | `ab checkpoint create "<msg>"` | Takes an instant zero-overhead git snapshot | **Before** making large or risky file refactors |
 | `ab checkpoint rollback <id>` | Restores repository state to checkpoint (untracked + modified) | If your changes break tests and you need a clean reset |
+| `ab memory add "<rule>"` / `decision` | Records conventions and architectural decisions in project | Enforcing persistent team standards |
+| `ab account list` / `add` / `use` | Manages isolated multiple account profiles per agent CLI | Rotating accounts or multi-identity testing |
+| `ab quota [agent]` | Queries proactive token/time usage limits | Pre-checking quotas before long jobs |
 | `ab serve --port 8787` | Starts the OpenAI/Anthropic compat proxy server | Connecting BYOK applications or GEPA |
 | `ab ui --open` | Launches the local telemetry dashboard (`http://127.0.0.1:8788`) | Inspecting real-time tokens, costs, run lineage |
 | `ab install all --permissions full` | Installs/updates the MCP bridge across all agents | Registering MCP server or resetting permission ceiling to full |
@@ -76,8 +83,8 @@ When the user or another agent asks you to delegate work, use the `agentbridge` 
   Polls progress, status, tokens, and recent events of an async run.
 - **`cancel_run(id)`**:
   Kills the child agent process.
-- **`checkpoint_create(message, cwd?)`** & **`checkpoint_rollback(id, cwd?)`**:
-  Git hidden-ref snapshots callable directly from MCP.
+- **`checkpoint_create(message, cwd?)`**, **`checkpoint_list(cwd?)`**, **`checkpoint_diff(id, cwd?)`** & **`checkpoint_rollback(id, cwd?)`**:
+  Git hidden-ref snapshots callable directly from MCP for fail-safe code modification.
 
 ### Delegation Best Practices for Agents:
 1. **Write self-contained prompts:** The subagent does NOT share your conversation history. Provide exact file paths, desired behavior, and constraints.

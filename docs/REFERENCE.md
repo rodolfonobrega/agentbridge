@@ -549,7 +549,275 @@ Agents calling the bridge have native access to:
 
 ---
 
-## New providers (Cursor, Grok, Gemini, Devin, ACP)
+## Multiple accounts and managed profiles (`ab account`)
+
+Inspired by Orca, AgentBridge provides isolated profile directories ("Managed Homes") for each account, eliminating credential collisions, session leaks, and multi-tenant token conflicts.
+
+### Architecture & Isolation
+Each account is assigned an isolated directory under `~/.agentbridge/profiles/<agent>/<accountName>/`:
+- **Claude Code:** Automatically sets `CLAUDE_CONFIG_DIR = profileDir` and strips conflicting global environment variables (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`).
+- **Codex:** Automatically sets `CODEX_HOME = profileDir`.
+- **Pi:** Automatically sets `PI_CODING_AGENT_DIR = profileDir`.
+- **OpenCode:** Sets `OPENCODE_DATA_DIR = profileDir` and `XDG_DATA_HOME = parentDir`.
+- **Antigravity:** Sets `ANTIGRAVITY_CONFIG_DIR = profileDir`.
+
+### CLI Usage
+```bash
+# List all registered accounts with status and active indicators
+ab account list [agent] [--json]
+
+# Add an account copying your existing system login (zero re-authentication friction)
+ab account add claude work --copy-current
+
+# Add an account and immediately launch interactive login into the isolated folder
+ab account add claude personal --login
+
+# Switch default active account for an agent
+ab account use claude work          # or: ab account switch claude work
+
+# Remove an account (pass --purge to also delete its profile directory)
+ab account remove claude temp --purge
+
+# Proactively inspect quota across all accounts registered for an agent
+ab account quota claude
+```
+
+### Library API
+```js
+import {
+  listAccounts,
+  addAccount,
+  setActiveAccount,
+  getActiveAccount,
+  removeAccount,
+  getAccountEnv,
+  getAccountsAsPool,
+} from '@rodolfonobrega/agentbridge';
+
+// Add new isolated account
+const acc = addAccount('claude', 'work', { copyCurrent: true });
+
+// Get env for running a process under that account
+const env = getAccountEnv('claude', 'work');
+
+// Convert all accounts directly to an AccountPool config
+const poolConfig = getAccountsAsPool();
+```
+
+---
+
+## TDD auto-repair loop (`ab fix`)
+
+`ab fix` runs an autonomous Test-Driven Development (TDD) repair loop. If your tests fail, AgentBridge takes a git checkpoint, feeds the test failure output to the agent under `edit` permissions, verifies the fix, and automatically retries. If attempts are exhausted without passing, it automatically rolls back your workspace.
+
+### CLI Usage
+```bash
+# Run tests and let Claude automatically fix any failures
+ab fix claude "npm test" --prompt "Fix token renewal expiration bug" --max-attempts 3
+
+# Fix without rolling back on failure (leaves current edits in workspace)
+ab fix claude "pytest" --no-rollback
+```
+
+### Options:
+- `<agent>`: Agent name (`claude`, `codex`, `opencode`, etc.).
+- `"<test-command>"`: Shell command that executes tests and exits with code 0 on success.
+- `--prompt`: Optional high-level guidance or bug description for the agent.
+- `--max-attempts N`: Maximum repair attempts before giving up (default: 3).
+- `--no-rollback`: Disable automatic git checkpoint rollback when max attempts are reached.
+- `--json`: Output machine-readable JSON execution history and checkpoints.
+
+### Library API
+```js
+import { autoRepair } from '@rodolfonobrega/agentbridge';
+
+const result = await autoRepair({
+  agent: 'claude',
+  testCommand: 'npm test',
+  prompt: 'Fix failing unit tests in auth.test.ts',
+  maxAttempts: 3,
+  autoRollback: true,
+  cwd: process.cwd(),
+});
+
+console.log(result.success, result.attempts, result.rolledBack);
+```
+
+---
+
+## Multi-agent review loop and consensus (`ab review`, `ab ensemble`)
+
+Cross-model peer verification and ensemble voting for high-assurance tasks.
+
+### 1. Two-Agent Review Loop (`ab review`)
+One agent writes the code with `edit` permissions while a second agent acts as reviewer under `read-only` permissions, inspecting generated git diffs and issuing structured `APPROVED` / `REJECTED` verdicts.
+
+```bash
+ab review codex claude "Implement sliding window rate limiter in src/limiter.ts" --max-turns 3 --strict
+```
+- `<coder>`: Agent implementing the solution (`codex`, `claude`, etc.).
+- `<reviewer>`: Agent inspecting the diffs (`claude`, `codex`, etc.).
+- `--max-turns N`: Maximum implement-and-review feedback cycles (default: 3).
+- `--strict`: Requires explicit machine-readable JSON approval verdict.
+
+### 2. Multi-Agent Ensemble Voting & Synthesis (`ab ensemble`)
+Runs multiple agents in parallel on the same prompt and computes consensus via plurality voting or a synthesizer judge model.
+
+```bash
+# Plurality voting across 3 models
+ab ensemble "Analyze database deadlock in query X" claude codex agy
+
+# Judge synthesis mode (judge synthesizes the best unified answer)
+ab ensemble "Propose migration architecture" claude codex agy --judge claude --judge-mode synthesize
+
+# Judge selection mode (judge picks the single best agent response)
+ab ensemble "Optimize SQL query" claude codex pi --judge codex --judge-mode select
+```
+
+### Library API
+```js
+import { runReviewLoop, runEnsemble } from '@rodolfonobrega/agentbridge';
+
+const review = await runReviewLoop({
+  implementer: 'codex',
+  reviewer: 'claude',
+  task: 'Add exponential backoff to retry logic',
+  maxTurns: 3,
+});
+
+const consensus = await runEnsemble({
+  prompt: 'What causes EADDRINUSE on port 8080 during reload?',
+  agents: ['claude', 'codex', 'agy'],
+  judge: 'claude',
+  judgeMode: 'synthesize',
+});
+```
+
+---
+
+## DAG pipeline task orchestrator (`ab pipeline`)
+
+Executes complex multi-agent workflows defined as Directed Acyclic Graphs (DAGs) with topological wave scheduling and dependency resolution.
+
+### Pipeline Definition (`pipeline.json`)
+```json
+{
+  "name": "Feature Implementation Pipeline",
+  "concurrency": 2,
+  "checkpointPerWave": true,
+  "steps": [
+    {
+      "id": "spec",
+      "agent": "claude",
+      "prompt": "Write architectural spec for cache invalidation",
+      "permissions": "plan"
+    },
+    {
+      "id": "impl",
+      "agent": "codex",
+      "prompt": "Implement cache based on spec: {{spec.output}}",
+      "permissions": "edit",
+      "dependsOn": ["spec"]
+    },
+    {
+      "id": "tests",
+      "agent": "claude",
+      "prompt": "Write tests for implementation: {{impl.output}}",
+      "permissions": "edit",
+      "dependsOn": ["impl"]
+    }
+  ]
+}
+```
+
+### CLI Usage
+```bash
+ab pipeline pipeline.json [--checkpoint-each] [--cwd path] [--json]
+```
+
+### Library API
+```js
+import { runPipeline } from '@rodolfonobrega/agentbridge';
+
+const result = await runPipeline(pipelineDefinition, {
+  cwd: process.cwd(),
+  checkpointPerWave: true,
+});
+console.log(result.success, result.wavesExecuted);
+```
+
+---
+
+## Shared project memory (`ab memory`)
+
+Stores project-specific conventions, rules, and architectural decisions directly in `<cwd>/.agentbridge/memory.json` (with automatic fallback to `~/.agentbridge/memory/<repoHash>.json`). AgentBridge automatically formats and injects these conventions into agent prompts.
+
+### CLI Usage
+```bash
+# Add an architectural rule
+ab memory add "Always use strict TypeScript with zero runtime dependencies"
+
+# Record a technical decision
+ab memory decision "database" "Use SQLite with WAL mode" --agent claude
+
+# List current project rules and decisions
+ab memory list [--json]
+
+# Clear stored conventions
+ab memory clear
+```
+
+### Library API
+```js
+import { loadMemory, addRule, addDecision, formatMemoryForPrompt } from '@rodolfonobrega/agentbridge';
+
+addRule('Do not modify package.json dependencies without confirmation');
+addDecision('state-management', 'Adopt Zustand for UI state', 'claude');
+
+// Injects [PROJECT CONVENTIONS & MEMORY] into prompt:
+const promptHeader = formatMemoryForPrompt(process.cwd());
+```
+
+---
+
+## Proactive quota probing (`ab quota`)
+
+Instead of waiting for an HTTP 429 error, AgentBridge proactively polls provider usage APIs (Anthropic OAuth 5-hour/7-day windows and ChatGPT Wham backend endpoints).
+
+### CLI Usage
+```bash
+# Check quota health across all agents
+ab quota
+
+# Check a specific agent with custom threshold
+ab quota claude --threshold 85%
+
+# Output machine-readable JSON
+ab quota --json
+```
+
+---
+
+## Zero-friction IDE & CLI MCP installers (`ab install <target>`)
+
+Registers the AgentBridge MCP server across all supported editors and CLIs with atomic JSON merging preserving existing settings.
+
+### Supported Targets
+```bash
+ab install cursor         # .cursor/mcp.json and ~/.cursor/mcp.json
+ab install vscode         # .vscode/mcp.json and User mcp.json
+ab install claude-desktop # claude_desktop_config.json
+ab install zed            # ~/.config/zed/settings.json
+ab install windsurf       # ~/.codeium/windsurf/mcp_config.json
+ab install claude         # claude mcp add-json or workspace .mcp.json
+ab install codex          # ~/.codex/config.toml ([mcp_servers.agentbridge])
+ab install pi             # ~/.pi/agent/mcp.json
+ab install opencode       # opencode.json
+ab install agy            # Antigravity CLI agents
+ab install all            # Detects and configures all present CLIs on PATH
+```
+
+---
 
 AgentBridge supports an extended roster of modern AI agents and protocols:
 
