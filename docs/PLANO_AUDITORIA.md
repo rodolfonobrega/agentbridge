@@ -21,13 +21,13 @@ Snapshot base: `cf50a72`
   - [x] `A17` — Rollback de checkpoint preserva staging e limpa arquivos criados pós-snapshot
   - [x] `A57` — Inclusão de config-permissions.test.mjs e descoberta de testes no package.json e CI
 
-- [ ] **Fase 2: Concorrência e Estabilidade do Codex App-Server (P1/P2)**
-  - [ ] `A03` — Serialização e roteamento de turnos e approvals por threadId/turnId no codex daemon
-  - [ ] `A04` — Chaveamento do pool de daemons por conta/env efetivo além do cwd
-  - [ ] `A05` — Eliminação de unhandled rejection e verificação de abort entre RPCs
-  - [ ] `A58` — Deadlines com sinal de abort no handshake inicial e em todas as chamadas sendRpc
-  - [ ] `A59` — Paridade e aplicação de permissões/sandbox/modelo em cada turno do app-server
-  - [ ] `A68` — Propagação explícita de erro e verificação de status terminal no fechamento do daemon
+- [x] **Fase 2: Concorrência e Estabilidade do Codex App-Server (P1/P2)**
+  - [x] `A03` — Serialização e roteamento de turnos e approvals por threadId/turnId no codex daemon
+  - [x] `A04` — Chaveamento do pool de daemons por conta/env efetivo além do cwd
+  - [x] `A05` — Eliminação de unhandled rejection e verificação de abort entre RPCs
+  - [x] `A58` — Deadlines com sinal de abort no handshake inicial e em todas as chamadas sendRpc
+  - [x] `A59` — Paridade e aplicação de permissões/sandbox/modelo em cada turno do app-server
+  - [x] `A68` — Propagação explícita de erro e verificação de status terminal no fechamento do daemon
 
 - [ ] **Fase 3: Isolamento de Worktrees, Sandboxes e Execuções CLI (P1/P2)**
   - [ ] `A07` — Modo --stream na CLI passa pelo executor de worktree e orçamento

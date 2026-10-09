@@ -173,7 +173,7 @@ const adapter: AgentAdapter = {
     (o as any).writableRoots = writableRoots;
     const t0 = Date.now();
     if (opts?.transport === 'app-server' || opts?.appServer === true) {
-      const daemon = codexDaemonPool.get(o.cwd || process.cwd());
+      const daemon = codexDaemonPool.get(o.cwd || process.cwd(), o.env);
       return yield* daemon.runTurn(o, t0);
     }
     let prompt = o.prompt;

@@ -137,6 +137,11 @@ When delegating tasks via `ask_*` or `dispatch_*`, AgentBridge enforces **determ
   - **Image Proxy SSRF & DNS Rebinding Protection:** Image fetching inspects both IPv4 and IPv6 representations (including mapped hex variants) and resolves hostnames to verified public IPs before connecting.
   - **Dashboard CSRF Protection:** The UI dashboard (`ab ui`) blocks cross-origin POST mutations via strict Origin and `Sec-Fetch-Site` verification.
 
+- **Codex App-Server Concurrency & Stability:**
+  - **Sequential Turn Serialization:** When multiple concurrent requests target the same Codex daemon, turns are strictly serialized with FIFO ordering to prevent `activeTurn` state collisions and ensure approvals and stream deltas correlate accurately.
+  - **Account & Environment Pool Keying:** Codex daemon instances are keyed by workspace path, `CODEX_HOME`, account identity, and API key, preventing cross-profile credential reuse.
+  - **Strict RPC Deadlines & Clean Cancellation:** Handshake (`initialize`) and all RPCs enforce deadlines and respect `AbortSignal` without unhandled Promise rejections. Failed turn statuses (`status: failed` or error descriptors) are explicitly caught and propagated as `AGENT_FAILED`.
+
 ## Proactive Quota Awareness & The Escalation Ladder ("A Escadinha")
 
 To avoid burning expensive subscription tokens or hitting 429 rate limits midway through a task, you can query remaining token quotas and dynamically step down the escalation ladder:

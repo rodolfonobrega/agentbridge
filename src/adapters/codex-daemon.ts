@@ -78,43 +78,50 @@ const EFFORT: Record<string, string> = {
   max: 'xhigh',
 };
 
-interface ActiveTurnContext {
+export interface ActiveTurnContext {
   queue: AsyncQueue<AgentEvent>;
   turnId?: string;
   threadId?: string;
   permissions: string;
   text: string;
   usage: Usage;
-  doneResolve?: (value: void) => void;
-  doneReject?: (err: any) => void;
+  completed?: boolean;
   aborted?: boolean;
 }
 
 export class CodexAppServerDaemon {
   readonly cwd: string;
+  readonly envExtra?: Record<string, string>;
   private p!: ProcessHandle;
   private nextReqId = 1;
   private pendingRequests = new Map<number, { resolve: (res: any) => void; reject: (err: any) => void }>();
   private activeThreadId?: string;
-  private activeTurn?: ActiveTurnContext;
+  public activeTurn?: ActiveTurnContext;
   private isAlive = false;
+  private hasSpawned = false;
   private initPromise?: Promise<void>;
   private idleTimer?: NodeJS.Timeout;
+  private turnQueue: Promise<void> = Promise.resolve();
 
-  constructor(cwd: string) {
+  constructor(cwd: string, envExtra?: Record<string, string>) {
     this.cwd = path.resolve(cwd || process.cwd());
+    this.envExtra = envExtra;
+  }
+
+  get spawned(): boolean {
+    return this.hasSpawned;
   }
 
   get alive(): boolean {
     return this.isAlive && !this.p?.child?.killed && this.p?.child?.exitCode === null;
   }
 
-  async ensureStarted(envExtra?: Record<string, string>): Promise<void> {
+  async ensureStarted(envExtra?: Record<string, string>, signal?: AbortSignal): Promise<void> {
     if (this.initPromise) return this.initPromise;
     this.initPromise = (async () => {
-      const env: NodeJS.ProcessEnv = { ...process.env, ...(envExtra || {}) };
-      if (!envExtra?.OPENAI_API_KEY) delete env.OPENAI_API_KEY;
-      if (!envExtra?.CODEX_API_KEY) delete env.CODEX_API_KEY;
+      const env: NodeJS.ProcessEnv = { ...process.env, ...(this.envExtra || {}), ...(envExtra || {}) };
+      if (!envExtra?.OPENAI_API_KEY && !this.envExtra?.OPENAI_API_KEY) delete env.OPENAI_API_KEY;
+      if (!envExtra?.CODEX_API_KEY && !this.envExtra?.CODEX_API_KEY) delete env.CODEX_API_KEY;
 
       const p = spawnProc('codex', ['app-server'], {
         cwd: this.cwd,
@@ -124,14 +131,17 @@ export class CodexAppServerDaemon {
       });
       this.p = p;
       this.isAlive = true;
+      this.hasSpawned = true;
 
       // Start background reader loop
       this.listenBackground();
 
-      // Handshake: initialize
-      await this.sendRpc('initialize', {
-        clientInfo: { name: 'agentbridge', version: '0.3.0' },
-      });
+      // Handshake: initialize with 30s deadline and abort signal
+      await this.sendRpc(
+        'initialize',
+        { clientInfo: { name: 'agentbridge', version: '0.3.5' } },
+        { signal, timeoutMs: 30000 }
+      );
       // Send notification initialized
       this.sendNotification('initialized');
       this.refreshIdleTimer();
@@ -142,6 +152,13 @@ export class CodexAppServerDaemon {
     } catch (e) {
       this.isAlive = false;
       this.initPromise = undefined;
+      if (this.p) {
+        try {
+          this.p.kill();
+        } catch {
+          /* ignore */
+        }
+      }
       throw e;
     }
   }
@@ -151,20 +168,59 @@ export class CodexAppServerDaemon {
     this.p.stdin.write(JSON.stringify(obj) + '\n');
   }
 
-  private sendRpc(method: string, params: any = {}): Promise<any> {
+  public sendRpc(
+    method: string,
+    params: any = {},
+    opts: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ): Promise<any> {
     const id = this.nextReqId++;
     return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
+      let timer: NodeJS.Timeout | undefined;
+      const onAbort = () => {
+        cleanup();
+        reject(new AgentError('ABORTED', `Codex RPC "${method}" aborted`, { agent: 'codex' }));
+      };
+      const cleanup = () => {
+        this.pendingRequests.delete(id);
+        if (timer) clearTimeout(timer);
+        if (opts.signal) opts.signal.removeEventListener('abort', onAbort);
+      };
+
+      if (opts.signal?.aborted) {
+        return reject(new AgentError('ABORTED', `Codex RPC "${method}" aborted`, { agent: 'codex' }));
+      }
+      if (opts.signal) opts.signal.addEventListener('abort', onAbort, { once: true });
+
+      const timeoutMs = opts.timeoutMs ?? 30000;
+      if (timeoutMs > 0) {
+        timer = setTimeout(() => {
+          cleanup();
+          reject(new AgentError('TIMEOUT', `Codex RPC "${method}" timed out after ${timeoutMs}ms`, { agent: 'codex', timedOut: true }));
+        }, timeoutMs);
+        timer.unref();
+      }
+
+      this.pendingRequests.set(id, {
+        resolve: (val) => {
+          cleanup();
+          resolve(val);
+        },
+        reject: (err) => {
+          cleanup();
+          reject(err);
+        },
+      });
+
       try {
         this.sendRaw({ jsonrpc: '2.0', id, method, params });
       } catch (err) {
-        this.pendingRequests.delete(id);
+        cleanup();
         reject(err);
       }
     });
   }
 
-  private sendResponse(id: number | string, result: any) {
+  public sendResponse(id: number | string, result: any) {
     this.sendRaw({ jsonrpc: '2.0', id, result });
   }
 
@@ -202,9 +258,8 @@ export class CodexAppServerDaemon {
         }
       }
     } catch (err) {
-      if (this.activeTurn) {
+      if (this.activeTurn && !this.activeTurn.completed) {
         this.activeTurn.queue.fail(err);
-        this.activeTurn.doneReject?.(err);
       }
     } finally {
       this.isAlive = false;
@@ -212,9 +267,8 @@ export class CodexAppServerDaemon {
         req.reject(new AgentError('AGENT_FAILED', 'Codex app-server exited unexpectedly'));
       }
       this.pendingRequests.clear();
-      if (this.activeTurn) {
-        this.activeTurn.queue.close();
-        this.activeTurn.doneResolve?.();
+      if (this.activeTurn && !this.activeTurn.completed) {
+        this.activeTurn.queue.fail(new AgentError('AGENT_FAILED', 'Codex app-server exited unexpectedly before turn completion'));
       }
     }
   }
@@ -296,9 +350,20 @@ export class CodexAppServerDaemon {
         cachedInput: src.cachedInputTokens || this.activeTurn.usage.cachedInput,
         reasoning: src.reasoningOutputTokens || this.activeTurn.usage.reasoning,
       };
+
+      const status = params?.turn?.status;
+      const turnErr = params?.turn?.error;
+      if (status === 'failed' || status === 'error' || turnErr) {
+        const msg =
+          turnErr?.message ||
+          (typeof turnErr === 'string' ? turnErr : `Codex turn completed with error status: ${status}`);
+        this.activeTurn.queue.fail(new AgentError('AGENT_FAILED', msg, { agent: 'codex' }));
+        return;
+      }
+
+      this.activeTurn.completed = true;
       this.activeTurn.queue.push(ev.usage(this.activeTurn.usage.input, this.activeTurn.usage.output));
       this.activeTurn.queue.close();
-      this.activeTurn.doneResolve?.();
     }
   }
 
@@ -314,119 +379,172 @@ export class CodexAppServerDaemon {
   }
 
   async *runTurn(o: RunOptions, t0: number): AsyncGenerator<AgentEvent, RunResult, void> {
-    await this.ensureStarted(o.env);
+    if (o.signal?.aborted) {
+      throw new AgentError('ABORTED', 'Codex turn aborted before starting', { agent: 'codex' });
+    }
 
-    const queue = new AsyncQueue<AgentEvent>();
-    let doneResolve!: (value: void) => void;
-    let doneReject!: (err: any) => void;
-    const donePromise = new Promise<void>((res, rej) => {
-      doneResolve = res;
-      doneReject = rej;
+    // A03: Serialize turns on this daemon instance to prevent activeTurn overwrite
+    let releaseLock!: () => void;
+    const currentLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
     });
-
-    const turnCtx: ActiveTurnContext = {
-      queue,
-      permissions: o.permissions || 'full',
-      text: '',
-      usage: { input: 0, output: 0 },
-      doneResolve,
-      doneReject,
-    };
-    this.activeTurn = turnCtx;
-
-    // Abort signal handling
-    let abortListener: (() => void) | undefined;
-    if (o.signal) {
-      abortListener = () => {
-        turnCtx.aborted = true;
-        if (turnCtx.turnId && turnCtx.threadId) {
-          this.sendRpc('turn/interrupt', { threadId: turnCtx.threadId, turnId: turnCtx.turnId }).catch(() => {});
-        }
-        queue.fail(new AgentError('ABORTED', 'Codex turn aborted', { agent: 'codex' }));
-        doneReject(new AgentError('ABORTED', 'Codex turn aborted', { agent: 'codex' }));
-      };
-      if (o.signal.aborted) {
-        abortListener();
-      } else {
-        o.signal.addEventListener('abort', abortListener, { once: true });
-      }
-    }
-
-    // Timeout handling
-    let timeoutTimer: NodeJS.Timeout | undefined;
-    if (o.timeoutMs) {
-      timeoutTimer = setTimeout(() => {
-        if (turnCtx.turnId && turnCtx.threadId) {
-          this.sendRpc('turn/interrupt', { threadId: turnCtx.threadId, turnId: turnCtx.turnId }).catch(() => {});
-        }
-        queue.fail(new AgentError('TIMEOUT', `Codex turn timed out after ${o.timeoutMs}ms`, { agent: 'codex', timedOut: true }));
-        doneReject(new AgentError('TIMEOUT', `Codex turn timed out after ${o.timeoutMs}ms`, { agent: 'codex', timedOut: true }));
-      }, o.timeoutMs);
-      timeoutTimer.unref();
-    }
+    const waitPrevious = this.turnQueue;
+    this.turnQueue = this.turnQueue.then(
+      () => currentLock,
+      () => currentLock
+    );
+    await waitPrevious;
 
     try {
-      // Manage Thread: new / continue / fork / ephemeral
-      const sessionMode = o.session?.mode || 'new';
-      let threadId = this.activeThreadId;
+      if (o.signal?.aborted) {
+        throw new AgentError('ABORTED', 'Codex turn aborted before startup', { agent: 'codex' });
+      }
 
-      if (sessionMode === 'continue' && o.session?.id) {
-        threadId = o.session.id;
-        this.activeThreadId = threadId;
-      } else if (sessionMode === 'fork' && o.session?.id) {
-        const forkRes = await this.sendRpc('thread/fork', { threadId: o.session.id });
-        threadId = forkRes?.thread?.id || forkRes?.threadId;
-        this.activeThreadId = threadId;
-        if (threadId) yield ev.session(threadId);
-      } else if (!threadId || sessionMode === 'new' || sessionMode === 'ephemeral') {
-        const sb = SANDBOX[o.permissions || 'full'] || 'workspace-write';
-        const startRes = await this.sendRpc('thread/start', {
-          cwd: this.cwd,
-          model: o.model || null,
-          approvalPolicy: o.permissions === 'full' ? 'never' : 'on-request',
-          sandbox: sb,
-          developerInstructions: o.systemPrompt || null,
-          ephemeral: sessionMode === 'ephemeral',
-        });
-        threadId = startRes?.thread?.id || startRes?.threadId;
-        this.activeThreadId = threadId;
-        if (threadId && sessionMode !== 'ephemeral') {
-          yield ev.session(threadId);
+      await this.ensureStarted(o.env, o.signal);
+
+      if (o.signal?.aborted) {
+        throw new AgentError('ABORTED', 'Codex turn aborted after startup', { agent: 'codex' });
+      }
+
+      const queue = new AsyncQueue<AgentEvent>();
+
+      const turnCtx: ActiveTurnContext = {
+        queue,
+        permissions: o.permissions || 'full',
+        text: '',
+        usage: { input: 0, output: 0 },
+      };
+      this.activeTurn = turnCtx;
+
+      // Abort signal handling
+      let abortListener: (() => void) | undefined;
+      if (o.signal) {
+        abortListener = () => {
+          turnCtx.aborted = true;
+          if (turnCtx.turnId && turnCtx.threadId) {
+            this.sendRpc(
+              'turn/interrupt',
+              { threadId: turnCtx.threadId, turnId: turnCtx.turnId },
+              { timeoutMs: 5000 }
+            ).catch(() => {});
+          }
+          queue.fail(new AgentError('ABORTED', 'Codex turn aborted', { agent: 'codex' }));
+        };
+        if (o.signal.aborted) {
+          abortListener();
+        } else {
+          o.signal.addEventListener('abort', abortListener, { once: true });
         }
       }
 
-      turnCtx.threadId = threadId;
-
-      // Start Turn
-      const turnParams: any = {
-        threadId,
-        input: [{ type: 'text', text: o.prompt }],
-        approvalPolicy: o.permissions === 'full' ? 'never' : 'on-request',
-      };
-      if (o.effort) turnParams.effort = EFFORT[o.effort];
-      if (o.jsonSchema) turnParams.outputSchema = o.jsonSchema;
-
-      const turnRes = await this.sendRpc('turn/start', turnParams);
-      turnCtx.turnId = turnRes?.turn?.id || turnRes?.turnId;
-
-      // Stream events from queue to caller
-      for await (const event of queue) {
-        yield event;
+      // Timeout handling
+      let timeoutTimer: NodeJS.Timeout | undefined;
+      if (o.timeoutMs) {
+        timeoutTimer = setTimeout(() => {
+          if (turnCtx.turnId && turnCtx.threadId) {
+            this.sendRpc(
+              'turn/interrupt',
+              { threadId: turnCtx.threadId, turnId: turnCtx.turnId },
+              { timeoutMs: 5000 }
+            ).catch(() => {});
+          }
+          queue.fail(
+            new AgentError('TIMEOUT', `Codex turn timed out after ${o.timeoutMs}ms`, {
+              agent: 'codex',
+              timedOut: true,
+            })
+          );
+        }, o.timeoutMs);
+        timeoutTimer.unref();
       }
 
-      return {
-        text: turnCtx.text,
-        sessionId: sessionMode === 'ephemeral' ? undefined : threadId,
-        usage: turnCtx.usage,
-        exitCode: 0,
-        model: o.model || 'default',
-        durationMs: Date.now() - t0,
-        timedOut: false,
-        transport: 'app-server',
-      };
+      try {
+        // Manage Thread: new / continue / fork / ephemeral
+        const sessionMode = o.session?.mode || 'new';
+        let threadId = this.activeThreadId;
+
+        if (sessionMode === 'continue' && o.session?.id) {
+          threadId = o.session.id;
+          this.activeThreadId = threadId;
+        } else if (sessionMode === 'fork' && o.session?.id) {
+          const forkRes = await this.sendRpc('thread/fork', { threadId: o.session.id }, { signal: o.signal });
+          threadId = forkRes?.thread?.id || forkRes?.threadId;
+          this.activeThreadId = threadId;
+          if (threadId) yield ev.session(threadId);
+        } else if (!threadId || sessionMode === 'new' || sessionMode === 'ephemeral') {
+          const sb = SANDBOX[o.permissions || 'full'] || 'workspace-write';
+          const startRes = await this.sendRpc(
+            'thread/start',
+            {
+              cwd: this.cwd,
+              model: o.model || null,
+              approvalPolicy: o.permissions === 'full' ? 'never' : 'on-request',
+              sandbox: sb,
+              developerInstructions: o.systemPrompt || null,
+              ephemeral: sessionMode === 'ephemeral',
+            },
+            { signal: o.signal }
+          );
+          threadId = startRes?.thread?.id || startRes?.threadId;
+          this.activeThreadId = threadId;
+          if (threadId && sessionMode !== 'ephemeral') {
+            yield ev.session(threadId);
+          }
+        }
+
+        turnCtx.threadId = threadId;
+
+        if (o.signal?.aborted) {
+          throw new AgentError('ABORTED', 'Codex turn aborted before turn start', { agent: 'codex' });
+        }
+
+        // A59: Support input text and multimodal images
+        const turnInput: any[] = [{ type: 'text', text: o.prompt }];
+        if (o.images?.length) {
+          for (const img of o.images) {
+            if (img.data && img.mediaType) {
+              turnInput.push({
+                type: 'image',
+                source: { type: 'base64', media_type: img.mediaType, data: img.data },
+              });
+            }
+          }
+        }
+
+        // Start Turn
+        const turnParams: any = {
+          threadId,
+          input: turnInput,
+          approvalPolicy: o.permissions === 'full' ? 'never' : 'on-request',
+        };
+        if (o.model) turnParams.model = o.model;
+        if (o.effort) turnParams.effort = EFFORT[o.effort];
+        if (o.jsonSchema) turnParams.outputSchema = o.jsonSchema;
+
+        const turnRes = await this.sendRpc('turn/start', turnParams, { signal: o.signal });
+        turnCtx.turnId = turnRes?.turn?.id || turnRes?.turnId;
+
+        // Stream events from queue to caller
+        for await (const event of queue) {
+          yield event;
+        }
+
+        return {
+          text: turnCtx.text,
+          sessionId: sessionMode === 'ephemeral' ? undefined : threadId,
+          usage: turnCtx.usage,
+          exitCode: 0,
+          model: o.model || 'default',
+          durationMs: Date.now() - t0,
+          timedOut: false,
+          transport: 'app-server',
+        };
+      } finally {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        if (o.signal && abortListener) o.signal.removeEventListener('abort', abortListener);
+      }
     } finally {
-      if (timeoutTimer) clearTimeout(timeoutTimer);
-      if (o.signal && abortListener) o.signal.removeEventListener('abort', abortListener);
+      releaseLock();
       this.activeTurn = undefined;
       this.refreshIdleTimer();
     }
@@ -445,15 +563,23 @@ export class CodexAppServerDaemon {
   }
 }
 
-/** Global Daemon Pool indexed by resolved workspace path */
+function getDaemonPoolKey(cwd: string, env?: Record<string, string>): string {
+  const resolvedCwd = path.resolve(cwd || process.cwd()).toLowerCase();
+  const codexHome = env?.CODEX_HOME || process.env.CODEX_HOME || '';
+  const apiKey = env?.OPENAI_API_KEY || env?.CODEX_API_KEY || process.env.OPENAI_API_KEY || '';
+  const acct = env?.AGENTBRIDGE_ACCOUNT_NAME || '';
+  return `${resolvedCwd}::${codexHome}::${acct}::${apiKey ? apiKey.slice(-8) : ''}`;
+}
+
+/** Global Daemon Pool indexed by resolved workspace path and effective account environment */
 class DaemonPool {
   private daemons = new Map<string, CodexAppServerDaemon>();
 
-  get(cwd: string): CodexAppServerDaemon {
-    const key = path.resolve(cwd || process.cwd()).toLowerCase();
+  get(cwd: string, env?: Record<string, string>): CodexAppServerDaemon {
+    const key = getDaemonPoolKey(cwd, env);
     let daemon = this.daemons.get(key);
-    if (!daemon || !daemon.alive) {
-      daemon = new CodexAppServerDaemon(cwd);
+    if (!daemon || (daemon.spawned && !daemon.alive)) {
+      daemon = new CodexAppServerDaemon(cwd, env);
       this.daemons.set(key, daemon);
     }
     return daemon;
