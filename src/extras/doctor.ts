@@ -6,6 +6,7 @@ import { existsSync, writeFileSync, unlinkSync, readFileSync, mkdtempSync, rmSyn
 import { resolveBinary, runCollect } from '../core/spawn.js';
 import { findBinary as findAgy } from '../adapters/agy.js';
 import { findBinary as findPi } from '../adapters/pi.js';
+import { skillRoots } from '../core/shared-resources.js';
 
 const home = os.homedir();
 const CRED: Record<string, () => string | undefined> = {
@@ -245,10 +246,22 @@ export async function doctor({
   const agentsWithMcp = Object.entries(info).filter(([_, a]) => Array.isArray(a.mcpServers) && a.mcpServers.length > 0);
   if (agentsWithMcp.length > 0) {
     const list = agentsWithMcp.map(([n, a]) => `${n}: [${a.mcpServers.join(', ')}]`).join('; ');
+    const pt = process.env.AGENTBRIDGE_MCP_PASSTHROUGH;
     add(
       'mcp isolation policy',
       'ok',
-      `host MCPs configured: ${list} (Note: subagent delegation isolates external MCPs by default)`
+      `host MCPs configured: ${list}. Delegated children do not inherit them by default; ${
+        pt ? `passthrough allowlist: ${pt} (needs permissions edit/full, blocked when offline)` : 'set AGENTBRIDGE_MCP_PASSTHROUGH=<names|*> to allow chosen servers'
+      }`
+    );
+  }
+  const roots = skillRoots(cwd);
+  if (roots.length) {
+    add(
+      'skill roots',
+      'ok',
+      roots.map((r) => `${r.scope}:${r.path} (${r.skills})`).join('; ') +
+        ' (children see skills only with skills:true or AGENTBRIDGE_ENABLE_SKILLS=1)'
     );
   }
   checks.sort((x, y) => x.name.localeCompare(y.name));

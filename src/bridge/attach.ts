@@ -7,13 +7,28 @@ import path from 'node:path';
 import os from 'node:os';
 
 export interface PassthroughMcpOptions {
+  /** What the caller asks for. Can only narrow the operator allowlist, never widen it. */
   passthrough?: string | string[];
   sourceDir?: string;
+  /** Working directory of the child; its git root's `.mcp.json` is also a source. */
+  cwd?: string;
   offline?: boolean;
   permissions?: string;
   env?: NodeJS.ProcessEnv;
 }
 
+const listOf = (raw: unknown): string[] =>
+  (Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : [])
+    .map((s) => String(s).trim().toLowerCase())
+    .filter(Boolean);
+
+/**
+ * Host MCP servers a delegated child may inherit.
+ * Gates, in order: offline blocks everything; read-only/plan get nothing; the operator allowlist
+ * (AGENTBRIDGE_MCP_PASSTHROUGH) is the ceiling and a caller's `passthrough` can only select a subset of it.
+ * Only stdio servers (with a `command`) are passed, always with `exposure: "direct"` (a deferred server
+ * never shows its tools to the model).
+ */
 export function getPassthroughMcpServers(opts: PassthroughMcpOptions = {}): Record<string, any> {
   const env = opts.env || process.env;
   const isOffline = opts.offline || env.AGENTBRIDGE_OFFLINE === '1' || env.AGENTBRIDGE_OFFLINE === 'true';
@@ -22,39 +37,51 @@ export function getPassthroughMcpServers(opts: PassthroughMcpOptions = {}): Reco
   const perms = opts.permissions || env.AGENTBRIDGE_PERMS || 'read-only';
   if (perms === 'read-only' || perms === 'plan') return {};
 
-  const raw = opts.passthrough ?? env.AGENTBRIDGE_MCP_PASSTHROUGH;
-  if (!raw) return {};
-
-  const allowed = (Array.isArray(raw) ? raw : String(raw).split(','))
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  const ceiling = listOf(env.AGENTBRIDGE_MCP_PASSTHROUGH);
+  if (!ceiling.length) return {};
+  const asked = listOf(opts.passthrough);
+  const anyOk = ceiling.includes('*');
+  const allowed = asked.length
+    ? asked.includes('*')
+      ? ceiling
+      : asked.filter((n) => anyOk || ceiling.includes(n))
+    : ceiling;
   if (!allowed.length) return {};
 
-  const sourceDir = opts.sourceDir || env.AGENTBRIDGE_MCP_SOURCE_DIR || path.join(os.homedir(), '.pi', 'agent');
-  const mcpFile = path.join(sourceDir, 'mcp.json');
-  if (!existsSync(mcpFile)) return {};
-
-  try {
-    const data = JSON.parse(readFileSync(mcpFile, 'utf8'));
-    const sourceServers = data?.mcpServers || {};
-    const result: Record<string, any> = {};
-
-    for (const [name, cfg] of Object.entries<any>(sourceServers)) {
-      if (name.toLowerCase() === 'agentbridge') continue;
-      const match = allowed.includes('*') || allowed.includes(name.toLowerCase());
-      if (match && cfg && typeof cfg === 'object') {
-        result[name] = {
-          command: cfg.command,
-          args: cfg.args || [],
-          env: cfg.env || {},
-          exposure: cfg.exposure || 'direct',
-        };
+  const files = [path.join(opts.sourceDir || env.AGENTBRIDGE_MCP_SOURCE_DIR || path.join(os.homedir(), '.pi', 'agent'), 'mcp.json')];
+  if (opts.cwd) {
+    let d = path.resolve(opts.cwd);
+    for (;;) {
+      if (existsSync(path.join(d, '.mcp.json'))) {
+        files.push(path.join(d, '.mcp.json'));
+        break;
       }
+      if (existsSync(path.join(d, '.git'))) break;
+      const up = path.dirname(d);
+      if (up === d) break;
+      d = up;
     }
-    return result;
-  } catch {
-    return {};
   }
+
+  const result: Record<string, any> = {};
+  for (const f of files) {
+    if (!existsSync(f)) continue;
+    let servers: Record<string, any> = {};
+    try {
+      servers = JSON.parse(readFileSync(f, 'utf8'))?.mcpServers || {};
+    } catch {
+      continue;
+    }
+    for (const [name, cfg] of Object.entries<any>(servers)) {
+      const key = name.toLowerCase();
+      if (key === 'agentbridge' || name in result) continue;
+      if (!/^[A-Za-z0-9_-]+$/.test(name)) continue;
+      if (!allowed.includes('*') && !allowed.includes(key)) continue;
+      if (!cfg || typeof cfg !== 'object' || typeof cfg.command !== 'string') continue;
+      result[name] = { command: cfg.command, args: cfg.args || [], env: cfg.env || {}, exposure: 'direct' };
+    }
+  }
+  return result;
 }
 
 export interface McpConfigOptions {

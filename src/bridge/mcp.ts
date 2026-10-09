@@ -487,9 +487,16 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
   if (env.AGENTBRIDGE_ATTEST_BIND) grandchildEnv.AGENTBRIDGE_ATTEST_BIND = env.AGENTBRIDGE_ATTEST_BIND;
   if (env.AGENTBRIDGE_ROOT) grandchildEnv.AGENTBRIDGE_ROOT = env.AGENTBRIDGE_ROOT;
   if (env.AGENTBRIDGE_DEFAULT_TIMEOUT_S) grandchildEnv.AGENTBRIDGE_DEFAULT_TIMEOUT_S = env.AGENTBRIDGE_DEFAULT_TIMEOUT_S;
-  if (args.skills !== undefined) opts.skills = args.skills;
+  if (args.skills != null) {
+    if (typeof args.skills !== 'boolean') throw new Error('skills must be a boolean');
+    opts.skills = args.skills;
+  }
+  if (args.mcpPassthrough != null && !(Array.isArray(args.mcpPassthrough) && args.mcpPassthrough.every((x: any) => typeof x === 'string'))) {
+    throw new Error('mcpPassthrough must be an array of server names');
+  }
   const passthroughServers = getPassthroughMcpServers({
-    passthrough: args.mcpPassthrough || (opts as any).mcpPassthrough,
+    passthrough: args.mcpPassthrough,
+    cwd: opts.cwd || process.cwd(),
     offline: !!opts.offline,
     permissions: perms,
     env: { ...env, ...grandchildEnv },
@@ -508,14 +515,12 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
       `mcp_servers.${serverName}.default_tools_approval_mode="approve"`,
     ];
     for (const [name, srv] of Object.entries<any>(passthroughServers)) {
-      opts.extraArgs.push(
-        '-c',
-        `mcp_servers.${name}.command=${JSON.stringify(srv.command)}`,
-        '-c',
-        `mcp_servers.${name}.default_tools_approval_mode="approve"`
-      );
-      if (srv.args?.length) {
-        opts.extraArgs.push('-c', `mcp_servers.${name}.args=[${srv.args.map((x: any) => JSON.stringify(x)).join(',')}]`);
+      const k = `mcp_servers.${name}`;
+      opts.extraArgs.push('-c', `${k}.command=${JSON.stringify(srv.command)}`, '-c', `${k}.default_tools_approval_mode="approve"`);
+      if (srv.args?.length) opts.extraArgs.push('-c', `${k}.args=[${srv.args.map((x: any) => JSON.stringify(x)).join(',')}]`);
+      const envs = Object.entries(srv.env || {});
+      if (envs.length) {
+        opts.extraArgs.push('-c', `${k}.env={${envs.map(([x, y]) => `${JSON.stringify(x)}=${JSON.stringify(String(y))}`).join(',')}}`);
       }
     }
   } else {

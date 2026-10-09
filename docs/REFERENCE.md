@@ -315,8 +315,10 @@ AgentBridge enforces permissions deterministically at the OS and CLI runtime lev
 7. **Subagent MCP Isolation & Passthrough Policy:**
    - **Isolation by Default:** When delegating to subagents via `ask_*` or `dispatch_*`, AgentBridge isolates external MCP servers to prevent prompt injection or exfiltration loops.
    - **Host MCP Inspection with `ab doctor`:** Running `ab doctor` automatically detects and lists host MCP servers declared in `~/.pi/agent/mcp.json`, `.mcp.json`, `~/.codex/config.toml`, and `.gemini/config/mcp_config.json`.
-   - **Allowed MCP Passthrough:** When external MCPs are explicitly enabled via `AGENTBRIDGE_MCP_PASSTHROUGH` and `AGENTBRIDGE_MCP_SOURCE_DIR`, allowed servers are passed into the subagent sandbox.
-   - **Offline Gate:** When `offline: true` is passed to a run, external MCP passthrough is **strictly disabled** regardless of configuration.
+   - **Allowed MCP Passthrough:** the operator sets the ceiling with `AGENTBRIDGE_MCP_PASSTHROUGH` (names, or `*`; unset = none) and `AGENTBRIDGE_MCP_SOURCE_DIR`; the project `.mcp.json` is also read. A call's `mcpPassthrough` can only select a subset of that ceiling. Only stdio servers are passed, always `exposure: "direct"`, for every harness (Codex gets them as `-c mcp_servers.*` including env).
+   - **Offline Gate:** When `offline: true` is passed to a run, external MCP passthrough is **strictly disabled** regardless of configuration. It is also disabled under `read-only` and `plan`.
+   - **Skills:** `skills: true` / `AGENTBRIDGE_ENABLE_SKILLS=1` drops Pi's `-ns` and links `~/.pi/agent/skills` into the per-run home (junction on Windows, removed before the home is deleted, so the real folder is never touched). Project skill roots (`.agents/skills`, `.claude/skills`) are resolved up to the git root; untracked ones are copied into `--worktree` sandboxes without appearing in the diff.
+   - **Account profiles:** `ab account add` links skills/prompts/plugins/hooks/`AGENTS.md` (never credentials, sessions or history) and mirrors Codex `[mcp_servers.*]` into the new profile; `--no-share` disables it, `--copy-current` copies everything. `ab account remove --purge` unlinks before deleting.
 8. **MCP Bridge Ceiling (`AGENTBRIDGE_PERMS`) & How to Change It:**
    - When AgentBridge runs as an MCP server, child runs can never exceed the install-time permission ceiling.
    - **Default Ceiling is `full`:** The agent has full power to use terminal commands, shell, and file editing.

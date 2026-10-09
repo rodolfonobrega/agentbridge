@@ -57,11 +57,15 @@ export async function cmdAccount(
     const copyCurrent = Boolean(flags['copy-current'] || flags.copy);
     const rec = addAccount(agent, name, {
       copyCurrent,
+      share: flags['no-share'] !== true,
       baseDir: flags.baseDir,
     });
 
     out(`Added account "${rec.name}" for "${rec.agent}".`);
     out(`Profile directory: ${rec.profileDir}`);
+    if (!copyCurrent && flags['no-share'] !== true) {
+      out('Skills, prompts, plugins and MCP servers are shared from your main setup (credentials and sessions stay separate). Use --no-share to start empty.');
+    }
 
     if (flags.login) {
       out(`\nLaunching interactive login for "${agent}" with profile "${name}"...`);

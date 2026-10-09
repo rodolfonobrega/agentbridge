@@ -151,6 +151,13 @@ When delegating to subagents via `ask_*` or `dispatch_*`:
    - Passing `offline: true` strictly blocks external MCP passthrough.
    - Restricting permissions to `read-only` or `plan` suppresses mutating tools and arbitrary command execution.
 
+### How to Let a Child Use Your MCPs and Skills
+- **Operator (ceiling):** register the bridge with `AGENTBRIDGE_MCP_PASSTHROUGH=rea` (list, or `*`), optionally `AGENTBRIDGE_MCP_SOURCE_DIR` and `AGENTBRIDGE_ENABLE_SKILLS=1`. Without it, nothing is passed.
+- **Caller (per call):** `ask_pi({ prompt, permissions: "edit", mcpPassthrough: ["rea"], skills: true })`. The call can only pick a subset of the operator allowlist.
+- Only stdio servers are passed, with `exposure: "direct"`. The project `.mcp.json` (up to the git root) is a source too.
+- Skills: Pi gets your skills linked into its per-run home; project `.agents/skills` / `.claude/skills` are found up to the git root, and uncommitted ones are copied into `--worktree` sandboxes.
+- New accounts (`ab account add`) share skills, prompts, plugins and Codex MCP servers with your main setup but keep their own login (`--no-share` to start empty).
+
 ### Pre-Flight Checklist Before Delegating Tasks Needing Special Tools:
 - [ ] **Check with `ab doctor`:** Run `ab doctor` to see all host MCP servers detected across local agent configurations.
 - [ ] **Probe Subagent Tools:** Run `ask_<agent>({ "prompt": "List your available tools", "permissions": "read-only" })` to verify what tools the child agent can see.

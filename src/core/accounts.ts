@@ -1,6 +1,7 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync, cpSync, rmSync, readdirSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, cpSync, rmSync, readdirSync, statSync, lstatSync } from 'node:fs';
 import path from 'node:path';
 import { homedir } from 'node:os';
+import { syncSharedResources, unlinkResource } from './shared-resources.js';
 
 export interface AccountRecord {
   name: string;
@@ -124,6 +125,8 @@ export function addAccount(
   name: string,
   options: {
     copyCurrent?: boolean;
+    /** Link skills/prompts/plugins (and mirror Codex MCP servers) from the system agent dir. Default true. */
+    share?: boolean;
     env?: Record<string, string>;
     baseDir?: string;
   } = {}
@@ -146,6 +149,15 @@ export function addAccount(
     if (srcDir && existsSync(srcDir)) {
       try {
         cpSync(srcDir, profileDir, { recursive: true });
+      } catch {
+        /* best effort */
+      }
+    }
+  } else if (options.share !== false) {
+    const srcDir = getDefaultSystemAgentDir(ag);
+    if (srcDir && existsSync(srcDir) && path.resolve(srcDir) !== path.resolve(profileDir)) {
+      try {
+        syncSharedResources(ag, srcDir, profileDir);
       } catch {
         /* best effort */
       }
@@ -197,10 +209,28 @@ export function removeAccount(
   saveAccountsManifest(manifest, options.baseDir);
 
   if (options.deleteProfileDir && removed.profileDir) {
+    // Drop shared-resource links first so the recursive delete can never reach the user's real skills/plugins.
+    let safe = true;
     try {
-      rmSync(removed.profileDir, { recursive: true, force: true });
+      for (const e of readdirSync(removed.profileDir)) {
+        const p = path.join(removed.profileDir, e);
+        let link = false;
+        try {
+          link = lstatSync(p).isSymbolicLink();
+        } catch {
+          /* gone */
+        }
+        if (link && !unlinkResource(p)) safe = false;
+      }
     } catch {
-      /* ignore */
+      /* dir missing */
+    }
+    if (safe) {
+      try {
+        rmSync(removed.profileDir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
     }
   }
   return true;

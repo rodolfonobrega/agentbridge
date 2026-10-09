@@ -22,6 +22,7 @@ import { ev, parseJsonLine } from '../core/events.js';
 import { validateOptions } from '../index.js';
 import { home } from '../bridge/runs.js';
 import { extractJson, validate as validateSchema } from '../extras/schema.js';
+import { linkResource, unlinkResource } from '../core/shared-resources.js';
 import { AgentAdapter, AgentEvent, RunOptions, RunResult, Usage } from '../types/index.js';
 
 const NAME = 'pi';
@@ -153,12 +154,16 @@ export interface AgentDirOptions {
   extraSettings?: Record<string, any>;
   appendSystem?: string;
   passEnv?: string[];
+  /** Link the user's `skills/` into the per-run dir so Pi can discover them (the dir is otherwise empty). */
+  shareSkills?: boolean;
 }
 
 export interface AgentDirResult {
   dir: string;
   src: string;
   authBefore?: string | null;
+  /** Links into the user's real dir; they are removed (never followed) before the per-run dir is deleted. */
+  links?: string[];
 }
 
 /** Per-run agent dir. `src` is the user's real agent dir; only the files pi needs to authenticate and pick models are carried over. */
@@ -168,13 +173,19 @@ export function makeAgentDir({
   extraSettings = {},
   appendSystem,
   passEnv = [],
+  shareSkills = false,
 }: AgentDirOptions): AgentDirResult {
   const dir = mkdtempSync(path.join(tmpdir(), 'ab-pi-'));
+  const links: string[] = [];
   try {
     for (const f of ['models.json', 'auth.json']) {
       if (existsSync(path.join(src, f))) {
         copyFileSync(path.join(src, f), path.join(dir, f));
       }
+    }
+    if (shareSkills) {
+      const r = linkResource(path.join(src, 'skills'), path.join(dir, 'skills'));
+      if (r === 'linked') links.push(path.join(dir, 'skills'));
     }
     const settings = readJson(path.join(src, 'settings.json')) || {};
     for (const k of STRIP_SETTINGS) delete settings[k];
@@ -190,14 +201,14 @@ export function makeAgentDir({
     }
     if (appendSystem) writeFileSync(path.join(dir, 'APPEND_SYSTEM.md'), appendSystem);
   } catch (e) {
-    destroyAgentDir({ dir, src });
+    destroyAgentDir({ dir, src, links });
     throw e;
   }
-  return { dir, src };
+  return { dir, src, links };
 }
 
 /** Delete the per-run dir; first carry a refreshed OAuth token back so a login that expired during the run is not lost. */
-export function destroyAgentDir(d?: { dir?: string; src?: string; authBefore?: string | null }): void {
+export function destroyAgentDir(d?: { dir?: string; src?: string; authBefore?: string | null; links?: string[] }): void {
   if (!d?.dir) return;
   try {
     if (d.src) {
@@ -215,6 +226,10 @@ export function destroyAgentDir(d?: { dir?: string; src?: string; authBefore?: s
   } catch {
     /* best effort */
   }
+  // Never let the recursive delete reach through a link into the user's real skills.
+  let safe = true;
+  for (const l of d.links || []) if (!unlinkResource(l)) safe = false;
+  if (!safe) return;
   try {
     rmSync(d.dir, { recursive: true, force: true });
   } catch {
@@ -408,10 +423,12 @@ const adapter: AgentAdapter = {
     let tmpSessions: string | undefined;
     try {
       const mcpNames = Object.keys(o.mcpServers || {});
+      const skillsOn = o.skills === true || env.AGENTBRIDGE_ENABLE_SKILLS === '1' || env.AGENTBRIDGE_ENABLE_SKILLS === 'true';
       ad = makeAgentDir({
         src: agentDirOf(env),
         mcpServers: o.mcpServers,
         appendSystem: o.systemPrompt,
+        shareSkills: skillsOn,
         passEnv: ['AGENTBRIDGE_ATTEST_KEY'].filter((k) => o.env?.[k] != null),
         extraSettings: {
           retry: { enabled: true, maxRetries: 1, baseDelayMs: 1000, maxAgentDelayMs: 5000 },
@@ -435,9 +452,7 @@ const adapter: AgentAdapter = {
           '--mode',
           'json',
           '--no-approve',
-          ...(o.skills !== true && env.AGENTBRIDGE_ENABLE_SKILLS !== '1' && env.AGENTBRIDGE_ENABLE_SKILLS !== 'true'
-            ? ['-ns']
-            : []),
+          ...(skillsOn ? [] : ['-ns']),
           '-np',
           '-ne',
           ...(mcpNames.length ? ['-e', 'builtin:mcp'] : []),

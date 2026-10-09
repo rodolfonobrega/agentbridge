@@ -83,29 +83,22 @@ When delegating tasks via `ask_*` or `dispatch_*`, AgentBridge enforces **determ
   - **OpenCode (`opencode`) & Codex (`codex`):** Configurations injected by bridge take precedence, and sandboxes (`read-only`, `plan`) block unauthorized system commands.
 
 - **How to Control MCP & Skills Passthrough:**
-  1. **Directly in MCP Tool Calls (`ask_*` / `dispatch_*`):**
-     Pass `mcpPassthrough` with the names of host MCP servers to inherit, and set `skills: true`:
+  1. **The operator decides what is allowed (the ceiling).** Set it where the AgentBridge bridge is registered (`env` of the `agentbridge` MCP entry):
+     - `AGENTBRIDGE_MCP_PASSTHROUGH=rea` (comma list such as `rea,playwright`, or `*` for every stdio server found). Unset means no passthrough at all.
+     - `AGENTBRIDGE_MCP_SOURCE_DIR=/path` (dir holding the source `mcp.json`; default `~/.pi/agent`). The project's `.mcp.json` (nearest, up to the git root) is read too.
+     - `AGENTBRIDGE_ENABLE_SKILLS=1` turns skills on for every Pi child.
+  2. **The caller can only narrow it, per call (`ask_*` / `dispatch_*`):**
      ```json
-     {
-       "tool": "ask_pi",
-       "arguments": {
-         "prompt": "Reverse engineer target binary and extract endpoints",
-         "permissions": "edit",
-         "mcpPassthrough": ["rea"],
-         "skills": true
-       }
-     }
+     { "tool": "ask_pi", "arguments": { "prompt": "Analyze the binary", "permissions": "edit", "mcpPassthrough": ["rea"], "skills": true } }
      ```
-  2. **Environment & Host Configuration:**
-     You can declare persistent passthrough in your harness environment or launch config:
-     - `AGENTBRIDGE_MCP_PASSTHROUGH=rea` (or comma-separated list `rea,playwright` or `*` for all host servers).
-     - `AGENTBRIDGE_ENABLE_SKILLS=1` (allows child Pi processes to discover skills from `~/.agents/skills/`).
-     - `AGENTBRIDGE_MCP_SOURCE_DIR=/path/to/source` (directory containing the source `mcp.json`; defaults to `~/.pi/agent`).
-  3. **Exposure Mode in Pi:** Any MCP server declared in `~/.pi/agent/mcp.json` must use `"exposure": "direct"` (the `"deferred"` mode does NOT expose tool schemas to the model).
-  4. **Safety & Offline Gates:**
-     - **Offline Gate:** If `offline: true` is passed, external MCP passthrough is **strictly blocked** to prevent network or data exfiltration.
-     - **Permission Gate:** Subagents under `read-only` or `plan` modes will not receive mutating MCP tools. Use `permissions: "edit"` or `permissions: "full"`.
-  5. **Skill Discovery:** Coding agents like Pi and Codex look for skills in the global Agent Skills directory (`~/.agents/skills/`). When `skills: true` is passed, Pi will discover all installed skills (e.g. `reverse-engineer-anything` v33).
+     `mcpPassthrough` selects a subset of the operator allowlist (asking for something outside it, or `"*"`, never widens it). `skills: true` makes Pi discover your skills for that run.
+  3. **Only stdio servers are passed** (entries with a `command`), always with `"exposure": "direct"` (a `deferred` server never shows its tools to the model). Works for Pi, Claude, OpenCode, Antigravity and Codex (env included).
+  4. **Gates that cannot be overridden:**
+     - `offline: true` blocks all passthrough.
+     - `read-only` / `plan` get no passthrough; use `permissions: "edit"` or `"full"`.
+  5. **Skills:** Pi's per-run home is empty, so with `skills: true` the bridge links your `~/.pi/agent/skills` into it (a junction on Windows, removed safely afterwards) and Pi also reads `~/.agents/skills` and the project's `.agents/skills` / `.claude/skills` up to the git root.
+  6. **Worktrees (`--worktree`):** project skill folders that are not committed (`.agents/skills`, `.claude/skills`) are copied into the sandbox and kept out of the diff.
+  7. **Accounts (`ab account add <agent> <name>`):** new profiles keep their own login and sessions but share your skills, prompts, plugins and, for Codex, your `[mcp_servers.*]` (via junction/symlink, copy as fallback). `--no-share` starts empty; `--copy-current` copies everything including the login.
 
 - **Pre-Delegation Checklist (Verifying MCP & Tool Readiness):**
   - **Verify with `ab doctor`:** Run `ab doctor` to inspect which host MCPs are detected for each installed harness (`claude`, `codex`, `pi`, `opencode`, `agy`).

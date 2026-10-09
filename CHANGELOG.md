@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.4] - 2026-10-09
+
+### Shared Skills, MCPs and Safer Passthrough (learned from Orca and T3 Code)
+
+- **Fix:** `skills` and `mcpPassthrough` were missing from the option allowlist, so `skills: true` failed with `BAD_OPTION`. Both are accepted now.
+- **Passthrough is operator-controlled:** `AGENTBRIDGE_MCP_PASSTHROUGH` is the ceiling and a call's `mcpPassthrough` can only narrow it (previously a caller could ask for `*`). Project `.mcp.json` is read as a source, only stdio servers are passed, always `exposure: "direct"`, and Codex now receives the server `env`.
+- **Account profiles share resources:** `ab account add` links skills, prompts, plugins, hooks and `AGENTS.md` (never credentials or sessions) and mirrors Codex `[mcp_servers.*]` into the new profile, using NTFS junctions on Windows with a copy fallback. `--no-share` opts out. `--purge` unlinks first so real skills are never deleted.
+- **Pi skills:** with `skills: true` the per-run home gets the user's `skills/` linked in; cleanup removes the link before deleting the directory.
+- **Skill roots:** project `.agents/skills` and `.claude/skills` are resolved up to the git root; `--worktree` sandboxes copy uncommitted ones (kept out of the diff). `ab doctor` lists the roots and the passthrough state.
+
 ## [0.3.3] - 2026-10-09
 
 ### MCP Passthrough, Skills Discovery & Host Diagnostics

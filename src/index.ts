@@ -119,6 +119,8 @@ const KNOWN = new Set([
   'defaultPermissions',
   'transport',
   'appServer',
+  'skills',
+  'mcpPassthrough',
 ]);
 const HARNESS_MODES = ['auto', 'claude', 'pi', 'none'];
 const TRANSPORTS = ['cli', 'app-server', 'stdio', 'auto'];

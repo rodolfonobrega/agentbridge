@@ -4,6 +4,7 @@ import { mkdtempSync, cpSync, rmSync, realpathSync, existsSync, mkdirSync } from
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runBudgeted } from './budget.js';
+import { seedProjectSkills } from '../core/shared-resources.js';
 
 const G = [
   '-c',
@@ -53,9 +54,18 @@ export function createSandbox(cwd = process.cwd()): Sandbox {
     root = wt;
     sub = path.relative(realpathSync(top), cwd);
     const patch = tryGit(top, ['diff', 'HEAD', '--binary']);
+    let dirty = false;
     if (patch && patch.trim()) {
       try {
         git(wt, ['apply', '--whitespace=nowarn', '-'], { input: patch });
+        dirty = true;
+      } catch {
+        /* baseline stays HEAD */
+      }
+    }
+    if (seedProjectSkills(top, wt).length) dirty = true;
+    if (dirty) {
+      try {
         git(wt, ['add', '-A']);
         git(wt, ['commit', '-q', '-m', 'ab-baseline']);
       } catch {
