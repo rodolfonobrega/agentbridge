@@ -75,10 +75,15 @@ function prep(body: any, opts: any = {}, req?: any) {
   const turns: any[] = [],
     names = new Map<string, string>();
   for (const m of body.messages) {
+    if (!m || typeof m !== 'object' || typeof m.role !== 'string')
+      throw new HttpError(400, 'messages: each entry must be an object with a string role', 'invalid_request_error');
     if (m.role !== 'user' && m.role !== 'assistant')
       throw new HttpError(400, `messages: unsupported role "${m.role}"`, 'invalid_request_error');
     turns.push(...anthropicTurns(m.role, m.content, names));
   }
+  // content that renders to nothing (thinking-only, empty arrays) must reach the guard below, not crash on turns[]
+  if (!turns.length)
+    throw new HttpError(400, 'messages: must contain at least one message with content', 'invalid_request_error');
   if (turns[turns.length - 1].role === 'assistant')
     throw new HttpError(
       400,

@@ -1,5 +1,5 @@
 // Shared helpers for the OpenAI/Anthropic compat proxy
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomBytes, createHash } from 'node:crypto';
@@ -334,7 +334,32 @@ export async function drive(
 
 // ---------- running ----------
 let cwd: string | undefined;
-export const sessions = new Map<string, { agent: string; id: string }>();
+/** Best-effort removal of the shared API-mode scratch dir; called when a proxy shuts down. */
+export function disposeProxyScratch(): void {
+  const dir = cwd;
+  cwd = undefined;
+  if (!dir) return;
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch {
+    /* best-effort */
+  }
+}
+const SESSIONS_CAP = 500;
+class SessionMap extends Map<string, { agent: string; id: string }> {
+  // Evict-oldest cap: rewriting an existing key moves it to the newest position.
+  set(key: string, v: { agent: string; id: string }): this {
+    super.delete(key);
+    const out = super.set(key, v);
+    while (this.size > SESSIONS_CAP) {
+      const oldest = this.keys().next();
+      if (oldest.done) break;
+      super.delete(oldest.value);
+    }
+    return out;
+  }
+}
+export const sessions = new SessionMap();
 export const est = (s?: string): number => Math.ceil((s || '').length / 4);
 const HOLD = Symbol('hold');
 const FINISH: Record<string, string> = {

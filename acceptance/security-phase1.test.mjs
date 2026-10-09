@@ -69,7 +69,7 @@ test('A16: UI server rejects cross-origin mutations (CSRF protection)', async ()
   execFileSync('git', ['commit', '-m', 'init'], { cwd: dir, stdio: 'ignore' });
   const cp = createCheckpoint(dir, { message: 'snap1' });
 
-  const ui = await startUi({ port: 0 });
+  const ui = await startUi({ port: 0, allowedRoot: tmpdir() });
 
   const req = (headers) =>
     new Promise((ok, bad) => {

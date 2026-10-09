@@ -1,9 +1,9 @@
 // agentbridge compat proxy: OpenAI + Anthropic compatible HTTP API over the local agent CLIs
 import http from 'node:http';
 import { readFileSync, realpathSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { timingSafeEqual } from 'node:crypto';
-import { HttpError, sendJson, listModels } from './common.js';
+import { HttpError, sendJson, listModels, disposeProxyScratch } from './common.js';
 import * as openai from './openai.js';
 import * as anthropic from './anthropic.js';
 import { createConfig, ConfigHolder, ProxyConfig } from './config.js';
@@ -91,7 +91,14 @@ export async function startProxy(o: ProxyOptions = {}): Promise<RunningProxy> {
     ...(pool ? { pool } : {}),
     ...(o.fallback ? { fallback: o.fallback } : {}),
   };
+  let port = o.port ?? 0;
+  const hostOk = (h?: string) => {
+    if (o.allowNonLoopback) return true;
+    const m = /^(\[::1\]|[^:]+)(?::(\d+))?$/.exec(h || '');
+    return !!m && LOOPBACK.has(m[1].replace(/^\[|\]$/g, '')) && (!m[2] || +m[2] === port);
+  };
   const server = http.createServer(async (req, res) => {
+    if (!hostOk(req.headers.host)) return sendJson(res, 403, { error: 'bad host' });
     let url = (req.url || '/').split('?')[0].replace(/\/+$/, '') || '/';
     if (url.startsWith('/agent/v1/') || url === '/agent/v1') {
       (req as any).abMode = 'agent';
@@ -144,7 +151,7 @@ export async function startProxy(o: ProxyOptions = {}): Promise<RunningProxy> {
     server.once('error', bad);
     server.listen(o.port ?? 0, host, () => ok());
   });
-  const port = (server.address() as any).port;
+  port = (server.address() as any).port;
   return {
     server,
     port,
@@ -154,6 +161,7 @@ export async function startProxy(o: ProxyOptions = {}): Promise<RunningProxy> {
       new Promise<void>((r) => {
         cfg.close();
         disposeAgentRuns(agentStore);
+        disposeProxyScratch();
         server.close(() => r());
         (server as any).closeAllConnections?.();
       }),
@@ -163,15 +171,10 @@ export async function startProxy(o: ProxyOptions = {}): Promise<RunningProxy> {
 const isServerEntry = () => {
   if (!process.argv[1]) return false;
   try {
-    if (realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) return true;
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
   } catch {
-    /* ignore */
+    return import.meta.url === pathToFileURL(process.argv[1]).href;
   }
-  return (
-    import.meta.url === new URL(process.argv[1], 'file:///').href ||
-    process.argv[1].endsWith('server/index.js') ||
-    process.argv[1].endsWith('server/index.mjs')
-  );
 };
 
 if (isServerEntry()) {

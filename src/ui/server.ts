@@ -135,34 +135,18 @@ export interface StartUiOptions {
   allowedRoot?: string;
 }
 
-function originOk(req: http.IncomingMessage, allowNonLoopback?: boolean): boolean {
+function originOk(req: http.IncomingMessage, allowNonLoopback?: boolean, port = 80): boolean {
   const secSite = req.headers['sec-fetch-site'];
-  if (secSite && secSite !== 'same-origin' && secSite !== 'same-site' && secSite !== 'none') {
+  if (secSite && secSite !== 'same-origin' && secSite !== 'none') return false;
+  const src = req.headers.origin || req.headers.referer;
+  if (!src) return true;
+  try {
+    const u = new URL(src);
+    // same hostname is not enough: another local app on a different port is still a CSRF vector
+    return (LOOPBACK.has(u.hostname.toLowerCase()) || !!allowNonLoopback) && (u.port ? +u.port : 80) === port;
+  } catch {
     return false;
   }
-  const origin = req.headers.origin;
-  if (origin) {
-    try {
-      const u = new URL(origin);
-      const h = u.hostname.toLowerCase();
-      if (!LOOPBACK.has(h) && !allowNonLoopback) return false;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  const referer = req.headers.referer;
-  if (referer) {
-    try {
-      const u = new URL(referer);
-      const h = u.hostname.toLowerCase();
-      if (!LOOPBACK.has(h) && !allowNonLoopback) return false;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  return true;
 }
 
 /** startUi({port=8788, host='127.0.0.1', token, env, allowNonLoopback, allowMutations, allowedRoot}) -> {server, url, port, close()} */
@@ -199,7 +183,7 @@ export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
       ? path.resolve(o.allowedRoot)
       : env.AGENTBRIDGE_ROOT
         ? path.resolve(env.AGENTBRIDGE_ROOT)
-        : null;
+        : path.resolve(process.cwd());
     if (rootConstraint) {
       const rel = path.relative(rootConstraint, requestedCwd);
       if (rel.startsWith('..') || path.isAbsolute(rel)) {
@@ -218,7 +202,7 @@ export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
         if (!(req.method === 'POST' && /^\/api\/checkpoints\/[\w-]+\/rollback$/.test(p))) {
           return json(res, 405, { error: 'read-only dashboard' });
         }
-        if (!originOk(req, o.allowNonLoopback)) {
+        if (!originOk(req, o.allowNonLoopback, port)) {
           return json(res, 403, { error: 'cross-origin request blocked' });
         }
         if (o.allowMutations === false) {

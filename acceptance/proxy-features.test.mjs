@@ -2,7 +2,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startProxy } from '../dist/server/index.js';
-import { createLimiter, buildPrompt, incrementalPrompt, resolveModel, readParams } from '../dist/server/common.js';
+import { createLimiter, buildPrompt, incrementalPrompt, resolveModel, readParams, sessions, disposeProxyScratch } from '../dist/server/common.js';
 import { ev } from '../dist/core/events.js';
 
 const seen = [];
@@ -118,6 +118,23 @@ test('anthropic: stop_reason max_tokens / stop_sequence / end_turn from the adap
   assert.equal(j.stop_reason, 'end_turn');
 });
 
+test('anthropic: malformed messages are rejected as 400s, not 502s', async () => {
+  const m = (body) => post('/v1/messages', { model: 'fake/m1', max_tokens: 10, ...body });
+  // thinking-only content renders to no turns; previously a TypeError on turns[-1] surfaced as 502 agent_failed
+  let r = await m({ messages: [{ role: 'user', content: [{ type: 'thinking' }] }] });
+  assert.equal(r.status, 400);
+  assert.equal((await r.json()).error.type, 'invalid_request_error');
+  r = await m({ messages: [{ role: 'user', content: [] }] });
+  assert.equal(r.status, 400);
+  r = await m({ messages: [null] });
+  assert.equal(r.status, 400);
+  r = await m({ messages: [42] });
+  assert.equal(r.status, 400);
+  // the same prep guards back /v1/messages/count_tokens
+  r = await post('/v1/messages/count_tokens', { model: 'fake/m1', messages: [{ role: 'user', content: [{ type: 'thinking' }] }] });
+  assert.equal(r.status, 400);
+});
+
 test('config aliases and payload defaults reach the adapter', async () => {
   current = fake(['x']); seen.length = 0;
   await chat({ model: 'quick' });
@@ -152,9 +169,28 @@ test('fallback chain: text held back from a failed attempt is dropped, not sent 
 });
 
 // ---------- agent mode ----------
+import http from 'node:http';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+
+test('host header is validated against DNS rebinding', async () => {
+  const withHost = (host) => new Promise((ok, bad) => {
+    const rq = http.request({ host: '127.0.0.1', port: proxy.port, path: '/', headers: { host } }, (res) => {
+      let b = '';
+      res.on('data', (d) => (b += d));
+      res.on('end', () => ok({ status: res.statusCode, body: b }));
+    });
+    rq.on('error', bad);
+    rq.end();
+  });
+  const evil = await withHost('evil.example.com');
+  assert.equal(evil.status, 403);
+  assert.match(evil.body, /bad host/);
+  assert.equal((await withHost(`127.0.0.1:${proxy.port + 1}`)).status, 403, 'wrong port');
+  assert.equal((await withHost(`[::1]:${proxy.port}`)).status, 200, 'IPv6 loopback host passes');
+  assert.equal((await fetch(proxy.url + '/')).status, 200, 'the default 127.0.0.1:<port> host passes');
+});
 
 const writer = { name: 'fake', async *run(opts) {
   seen.push(opts);
@@ -243,4 +279,30 @@ test('agent mode: the same x-ab-session keeps working in one sandbox', async () 
     const c = await t.call('/v1/chat/completions', agentBody, { 'x-ab-session': 's2' });
     assert.notEqual(c.headers.get('x-agentbridge-run'), a.headers.get('x-agentbridge-run'));
   } finally { await t.done(); }
+});
+
+// ---------- leak guards ----------
+test('sessions registry is capped at 500 entries, evicting the oldest', () => {
+  const prior = [...sessions.entries()];
+  try {
+    for (let i = 0; i < 502; i++) sessions.set(`cap:${i}`, { agent: 'fake', id: String(i) });
+    assert.ok(sessions.size <= 500, `expected size <= 500, got ${sessions.size}`);
+    assert.equal(sessions.has('cap:0'), false); // oldest evicted
+    assert.equal(sessions.has('cap:501'), true); // newest kept
+    assert.equal(sessions.has('cap:2'), true); // only the oldest ones were dropped
+  } finally {
+    sessions.clear();
+    for (const [k, v] of prior) sessions.set(k, v);
+  }
+});
+
+test('disposeProxyScratch removes the proxy scratch dir and stays safe on a second call', async () => {
+  current = { name: 'fake', async *run(opts) { seen.push(opts); return { text: 'ok', usage: { input: 1, output: 1 } }; } };
+  await chat({ messages: [{ role: 'user', content: 'hi' }] }); // creates the process-wide scratch dir when missing
+  const dir = seen.at(-1).cwd; // API-mode runs receive the shared scratch dir as opts.cwd
+  assert.match(path.basename(dir), /^agentbridge-proxy-/);
+  assert.ok(existsSync(dir), 'the API-mode run used a real scratch dir');
+  disposeProxyScratch();
+  assert.equal(existsSync(dir), false, 'scratch dir removed on dispose');
+  disposeProxyScratch(); // second call is a no-op and must not throw
 });

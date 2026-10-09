@@ -1,5 +1,7 @@
 // Images in requests
 import dns from 'node:dns/promises';
+import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
 import { HttpError } from './common.js';
 import { ImageInput } from '../types/index.js';
@@ -7,7 +9,8 @@ import { ImageInput } from '../types/index.js';
 export const IMAGE_AGENTS = new Set(['claude', 'codex', 'opencode']);
 const MAX_IMAGES = 8,
   MAX_BYTES = 10 * 1024 * 1024,
-  TYPES = /^image\/(png|jpe?g|gif|webp)$/i;
+  TYPES = /^image\/(png|jpe?g|gif|webp)$/i,
+  DOWNLOAD_BUDGET_MS = 15000; // wall-clock budget for one pinned request (headers + body)
 
 const bad = (m: string, code = 'invalid_image') => new HttpError(400, m, 'invalid_request_error', code);
 
@@ -105,6 +108,16 @@ export function isPrivateIp(ip: string): boolean {
   return true; // Malformed IP defaults to blocked
 }
 
+/**
+ * Picks the address a fetch may connect to out of already-resolved DNS results, refusing
+ * whenever ANY result is private. Exported so the pinning decision stays unit-testable.
+ */
+export function pickAddress(addrs: { address: string }[], host = '?'): string {
+  if (!addrs.length || addrs.some((a) => isPrivateIp(a.address)))
+    throw bad(`image URL points to a private or local address (${host})`, 'image_url_blocked');
+  return addrs[0].address;
+}
+
 async function assertPublic(url: URL): Promise<string> {
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const addrs = net.isIP(host)
@@ -112,10 +125,7 @@ async function assertPublic(url: URL): Promise<string> {
     : await dns.lookup(host, { all: true }).catch(() => {
         throw bad(`image host "${host}" could not be resolved`);
       });
-  if (!addrs.length || addrs.some((a) => isPrivateIp(a.address))) {
-    throw bad(`image URL points to a private or local address (${host})`, 'image_url_blocked');
-  }
-  return addrs[0].address;
+  return pickAddress(addrs, host);
 }
 
 function parseDataUrl(u: string): ImageInput {
@@ -123,12 +133,84 @@ function parseDataUrl(u: string): ImageInput {
   if (!m) throw bad('malformed data: URL');
   const mediaType = m[1].toLowerCase();
   if (!TYPES.test(mediaType)) throw bad(`unsupported image type "${mediaType}"`);
-  const data = m[3] ? m[4] : Buffer.from(decodeURIComponent(m[4]), 'binary').toString('base64');
+  let data: string;
+  if (m[3]) data = m[4];
+  else {
+    try {
+      data = Buffer.from(decodeURIComponent(m[4]), 'binary').toString('base64');
+    } catch {
+      throw bad('malformed data: URL'); // malformed percent-encoding bubbles as URIError otherwise
+    }
+  }
   if (Buffer.byteLength(data, 'base64') > MAX_BYTES) throw bad('image is larger than 10 MB', 'image_too_large');
   return { mediaType, data };
 }
 
-async function fetchImage(raw: string, fetchImpl: typeof fetch = fetch): Promise<ImageInput> {
+/** Host header for the original URL, with brackets restored around IPv6 literals. */
+function hostHeaderOf(url: URL): string {
+  const host = url.hostname.includes(':') ? `[${url.hostname}]` : url.hostname;
+  return url.port ? `${host}:${url.port}` : host;
+}
+
+interface FetchedImage {
+  status: number;
+  ok: boolean;
+  headers: { get(name: string): string | null };
+  body: AsyncIterable<Buffer>;
+  /** Releases the download timer (pinned transport only; a no-op for an injected fetchImpl). */
+  done: () => void;
+}
+
+/**
+ * Single-shot http/https GET that connects to the address `assertPublic` validated, while SNI
+ * (`servername`) and the Host header still carry the original hostname. This pins the socket to
+ * the validated IP so no second, unpinned DNS resolution can redirect the connection into
+ * private infrastructure (TOCTOU / DNS-rebinding fix). The whole request is bounded by a
+ * wall-clock timer that destroys the socket on expiry.
+ */
+function pinnedRequest(url: URL, ip: string): Promise<FetchedImage> {
+  const isHttps = url.protocol === 'https:';
+  const mod = isHttps ? https : http;
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  const options: https.RequestOptions = {
+    host: ip,
+    agent: false, // one-shot connection; never reuse a pooled socket resolved elsewhere
+    path: `${url.pathname}${url.search}`,
+    headers: { host: hostHeaderOf(url), accept: '*/*' },
+    ...(isHttps ? { servername: host } : {}),
+  };
+  return new Promise((resolve, reject) => {
+    const req = mod.request(options, (res) => {
+      const status = res.statusCode || 0;
+      resolve({
+        status,
+        ok: status >= 200 && status <= 299,
+        headers: {
+          get: (name: string) => {
+            const v = res.headers[name.toLowerCase()];
+            return Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
+          },
+        },
+        body: res,
+        done: () => clearTimeout(timer),
+      });
+    });
+    const timer = setTimeout(() => req.destroy(new Error('image download timed out')), DOWNLOAD_BUDGET_MS);
+    timer.unref();
+    req.on('error', () => reject(bad('image URL could not be fetched', 'image_fetch_failed')));
+    req.end();
+  });
+}
+
+/**
+ * Fetches an image URL, following at most 4 hops and re-resolving/re-validating each hop.
+ *
+ * Transport contract: when the caller injects an explicit `fetchImpl` (tests), it is used the
+ * historical fetch-shaped way (redirect: 'manual', 10s AbortSignal). Production always goes
+ * through `pinnedRequest`, whose socket connects to the very IP `assertPublic` validated, so
+ * a DNS server flipping answers between validation and connection cannot bypass the filter.
+ */
+async function fetchImage(raw: string, fetchImpl?: typeof fetch): Promise<ImageInput> {
   let url!: URL;
   for (let hop = 0; hop < 4; hop++) {
     try {
@@ -137,24 +219,60 @@ async function fetchImage(raw: string, fetchImpl: typeof fetch = fetch): Promise
       throw bad('malformed image URL');
     }
     if (url.protocol !== 'http:' && url.protocol !== 'https:') throw bad('image URLs must be http(s) or data:');
-    await assertPublic(url);
-    const res = await fetchImpl(url, { redirect: 'manual', signal: AbortSignal.timeout(10000) }).catch(() => {
-      throw bad('image URL could not be fetched', 'image_fetch_failed');
-    });
-    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
-      url = new URL(res.headers.get('location')!, url);
+    const ip = await assertPublic(url);
+    const r: FetchedImage = fetchImpl
+      ? await fetchImpl(url, { redirect: 'manual', signal: AbortSignal.timeout(10000) })
+          .then(
+            (res): FetchedImage => ({
+              status: res.status,
+              ok: res.ok,
+              headers: res.headers,
+              body: res.body as unknown as AsyncIterable<Buffer>,
+              done: () => {},
+            })
+          )
+          .catch(() => {
+            throw bad('image URL could not be fetched', 'image_fetch_failed');
+          })
+      : await pinnedRequest(url, ip);
+    const dispose = () => {
+      r.done();
+      (r.body as unknown as { destroy?: () => void } | null | undefined)?.destroy?.(); // 204/304 responses carry a null body
+    };
+    if (r.status >= 300 && r.status < 400 && r.headers.get('location')) {
+      dispose();
+      let next: URL;
+      try {
+        next = new URL(r.headers.get('location')!, url);
+      } catch {
+        throw bad('malformed redirect location');
+      }
+      url = next;
       continue;
     }
-    if (!res.ok) throw bad(`image URL answered ${res.status}`, 'image_fetch_failed');
-    const mediaType = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-    if (!TYPES.test(mediaType)) throw bad(`image URL is not a supported image (${mediaType || 'no content-type'})`);
+    if (!r.ok) {
+      dispose();
+      throw bad(`image URL answered ${r.status}`, 'image_fetch_failed');
+    }
+    const mediaType = (r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (!TYPES.test(mediaType)) {
+      dispose();
+      throw bad(`image URL is not a supported image (${mediaType || 'no content-type'})`);
+    }
     const chunks: Buffer[] = [];
     let n = 0;
-    for await (const c of res.body as any) {
-      n += c.length;
-      if (n > MAX_BYTES) throw bad('image is larger than 10 MB', 'image_too_large');
-      chunks.push(c);
+    try {
+      for await (const c of r.body) {
+        n += c.length;
+        if (n > MAX_BYTES) throw bad('image is larger than 10 MB', 'image_too_large');
+        chunks.push(c);
+      }
+    } catch (e) {
+      dispose();
+      if (e instanceof HttpError) throw e; // the size cap, or other deliberate rejections
+      throw bad('image URL could not be fetched', 'image_fetch_failed');
     }
+    r.done();
     return { mediaType, data: Buffer.concat(chunks).toString('base64') };
   }
   throw bad('too many redirects fetching the image', 'image_fetch_failed');

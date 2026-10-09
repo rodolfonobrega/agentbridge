@@ -42,7 +42,7 @@ test('UI server Time Machine endpoints: list, diff, and rollback', async () => {
   writeFileSync(path.join(repo, 'file.txt'), 'version 2 modified\n', 'utf8');
   const cp2 = createCheckpoint(repo, { message: 'second snapshot' });
 
-  const ui = await startUi({ port: 0 });
+  const ui = await startUi({ port: 0, allowedRoot: tmpdir() });
   try {
     // 1. GET /api/checkpoints?cwd=...
     const resList = await req(ui.port, `/api/checkpoints?cwd=${encodeURIComponent(repo)}`);
@@ -81,6 +81,27 @@ test('UI server Time Machine endpoints: list, diff, and rollback', async () => {
       method: 'GET',
     });
     assert.equal(resGetRollback.status, 405);
+  } finally {
+    await ui.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('rollback hardening: cross-port origin, same-site fetch metadata and out-of-root cwd are rejected', async () => {
+  const repo = setupRepo();
+  const cp = createCheckpoint(repo, { message: 'hardening snapshot' });
+  const ui = await startUi({ port: 0, allowedRoot: tmpdir() });
+  try {
+    const rb = (headers, cwd = repo) =>
+      req(ui.port, `/api/checkpoints/${cp.id}/rollback?cwd=${encodeURIComponent(cwd)}`, { method: 'POST', headers });
+    assert.equal((await rb({ origin: `http://127.0.0.1:${ui.port + 1}` })).status, 403, 'loopback origin on another local port is same-site, not same-origin');
+    assert.equal((await rb({ referer: `http://127.0.0.1:${ui.port + 1}/app` })).status, 403, 'referer mirrors the origin check');
+    assert.equal((await rb({ 'sec-fetch-site': 'same-site' })).status, 403, 'same-site is a cross-port request');
+    assert.equal((await rb({ 'sec-fetch-site': 'same-origin' })).status, 200, 'same-origin fetch metadata still passes');
+    assert.equal((await rb({ origin: `http://127.0.0.1:${ui.port}` })).status, 200, 'origin on the server port passes');
+    const outside = await rb({}, path.dirname(tmpdir()));
+    assert.equal(outside.status, 400);
+    assert.match(JSON.parse(outside.body).error, /outside authorized root/);
   } finally {
     await ui.close();
     rmSync(repo, { recursive: true, force: true });
