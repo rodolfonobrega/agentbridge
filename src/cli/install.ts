@@ -107,27 +107,27 @@ export function getOpencodeUserConfigPaths(home: string = homedir()): string[] {
   const paths: string[] = [];
   if (process.env.XDG_CONFIG_HOME) {
     paths.push(
-      path.join(process.env.XDG_CONFIG_HOME, 'opencode', 'opencode.jsonc'),
-      path.join(process.env.XDG_CONFIG_HOME, 'opencode', 'opencode.json')
+      path.join(process.env.XDG_CONFIG_HOME, 'opencode', 'opencode.json'),
+      path.join(process.env.XDG_CONFIG_HOME, 'opencode', 'opencode.jsonc')
     );
   }
   if (process.platform === 'win32') {
     if (process.env.LOCALAPPDATA) {
       paths.push(
-        path.join(process.env.LOCALAPPDATA, 'opencode', 'opencode.jsonc'),
-        path.join(process.env.LOCALAPPDATA, 'opencode', 'opencode.json')
+        path.join(process.env.LOCALAPPDATA, 'opencode', 'opencode.json'),
+        path.join(process.env.LOCALAPPDATA, 'opencode', 'opencode.jsonc')
       );
     }
     if (process.env.APPDATA) {
       paths.push(
-        path.join(process.env.APPDATA, 'opencode', 'opencode.jsonc'),
-        path.join(process.env.APPDATA, 'opencode', 'opencode.json')
+        path.join(process.env.APPDATA, 'opencode', 'opencode.json'),
+        path.join(process.env.APPDATA, 'opencode', 'opencode.jsonc')
       );
     }
   }
   paths.push(
-    path.join(home, '.config', 'opencode', 'opencode.jsonc'),
-    path.join(home, '.config', 'opencode', 'opencode.json')
+    path.join(home, '.config', 'opencode', 'opencode.json'),
+    path.join(home, '.config', 'opencode', 'opencode.jsonc')
   );
   return paths;
 }

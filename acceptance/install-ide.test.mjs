@@ -15,7 +15,7 @@ test('installIde into Cursor: project and user scope', () => {
     assert.ok(existsSync(projRes.path));
 
     const projJson = JSON.parse(readFileSync(projRes.path, 'utf8'));
-    assert.equal(projJson.mcpServers.agentbridge.command, 'node');
+    assert.equal(projJson.mcpServers.agentbridge.command, process.execPath);
     assert.deepEqual(projJson.mcpServers.agentbridge.args.slice(-1), ['bridge']);
 
     // Idempotent run: modified is false
@@ -29,7 +29,7 @@ test('installIde into Cursor: project and user scope', () => {
     assert.equal(userRes.modified, true);
 
     const userJson = JSON.parse(readFileSync(mockUserPath, 'utf8'));
-    assert.equal(userJson.mcpServers.agentbridge.command, 'node');
+    assert.equal(userJson.mcpServers.agentbridge.command, process.execPath);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -70,7 +70,7 @@ test('installIde into VS Code: project scope and preserving existing settings wi
     assert.equal(parsed.version, '0.2.0');
     assert.equal(parsed.otherSettings.active, true);
     assert.equal(parsed.mcpServers.existing_tool.command, 'python');
-    assert.equal(parsed.mcpServers.agentbridge.command, 'node');
+    assert.equal(parsed.mcpServers.agentbridge.command, process.execPath);
     assert.deepEqual(parsed.mcpServers.agentbridge.args.slice(-1), ['bridge']);
 
     // Second run is idempotent
@@ -101,7 +101,7 @@ test('installIde into Claude Desktop: merges config and updates server definitio
 
     const merged = JSON.parse(readFileSync(mockClaudeConfig, 'utf8'));
     assert.equal(merged.mcpServers.other_mcp.command, 'docker');
-    assert.equal(merged.mcpServers.agentbridge.command, 'node');
+    assert.equal(merged.mcpServers.agentbridge.command, process.execPath);
     assert.deepEqual(merged.mcpServers.agentbridge.args.slice(-1), ['bridge']);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
@@ -119,7 +119,7 @@ test('installIde into Zed and Windsurf', () => {
     const zedParsed = JSON.parse(readFileSync(zedConfig, 'utf8'));
     assert.ok(zedParsed.mcpServers.agentbridge);
     assert.ok(zedParsed.context_servers.agentbridge);
-    assert.equal(zedParsed.context_servers.agentbridge.command, 'node');
+    assert.equal(zedParsed.context_servers.agentbridge.command, process.execPath);
 
     // Windsurf
     const windsurfConfig = path.join(tmp, 'mcp_config.json');
@@ -127,7 +127,7 @@ test('installIde into Zed and Windsurf', () => {
     assert.equal(wsRes.modified, true);
 
     const wsParsed = JSON.parse(readFileSync(windsurfConfig, 'utf8'));
-    assert.equal(wsParsed.mcpServers.agentbridge.command, 'node');
+    assert.equal(wsParsed.mcpServers.agentbridge.command, process.execPath);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
