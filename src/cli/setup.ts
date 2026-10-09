@@ -11,6 +11,9 @@ import { cmdInstall, cmdEndpoint } from './install.js';
 import { doctor } from '../extras/doctor.js';
 import { loadEndpoints } from '../adapters/endpoint.js';
 
+import { existsSync, copyFileSync, mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 interface SetupOptions {
   interactive?: boolean;
   scope?: 'user' | 'project' | 'local';
@@ -34,6 +37,7 @@ interface DetectedAgent {
   path?: string | null;
   version?: string | null;
   extra?: string | null;
+  category?: 'cli' | 'endpoint' | 'ide';
 }
 
 function getColors() {
@@ -43,10 +47,15 @@ function getColors() {
     bold: hasColor ? '\x1b[1m' : '',
     dim: hasColor ? '\x1b[2m' : '',
     cyan: hasColor ? '\x1b[36m' : '',
+    brightCyan: hasColor ? '\x1b[96m' : '',
     green: hasColor ? '\x1b[32m' : '',
+    brightGreen: hasColor ? '\x1b[92m' : '',
     yellow: hasColor ? '\x1b[33m' : '',
+    brightYellow: hasColor ? '\x1b[93m' : '',
     blue: hasColor ? '\x1b[34m' : '',
+    brightBlue: hasColor ? '\x1b[94m' : '',
     magenta: hasColor ? '\x1b[35m' : '',
+    brightMagenta: hasColor ? '\x1b[95m' : '',
     red: hasColor ? '\x1b[31m' : '',
     gray: hasColor ? '\x1b[90m' : '',
   };
@@ -90,6 +99,7 @@ async function scanEnvironment(): Promise<DetectedAgent[]> {
     installed: !!claudeBin,
     path: claudeBin,
     version: claudeVer,
+    category: 'cli',
   });
 
   // OpenAI Codex
@@ -101,6 +111,7 @@ async function scanEnvironment(): Promise<DetectedAgent[]> {
     installed: !!codexBin,
     path: codexBin,
     version: codexVer,
+    category: 'cli',
   });
 
   // OpenCode
@@ -112,6 +123,7 @@ async function scanEnvironment(): Promise<DetectedAgent[]> {
     installed: !!opencodeBin,
     path: opencodeBin,
     version: opencodeVer,
+    category: 'cli',
   });
 
   // Pi
@@ -123,6 +135,7 @@ async function scanEnvironment(): Promise<DetectedAgent[]> {
     installed: !!piBin,
     path: piBin,
     version: piVer,
+    category: 'cli',
   });
 
   // Ollama
@@ -136,6 +149,7 @@ async function scanEnvironment(): Promise<DetectedAgent[]> {
     path: ollamaBin,
     version: ollamaVer || (ollamaServer.version ? `v${ollamaServer.version}` : null),
     extra: ollamaServer.running ? 'Server online at 127.0.0.1:11434' : 'Server offline',
+    category: 'endpoint',
   });
 
   // Antigravity CLI
@@ -147,28 +161,109 @@ async function scanEnvironment(): Promise<DetectedAgent[]> {
     installed: !!agyBin,
     path: agyBin,
     version: agyVer,
+    category: 'cli',
+  });
+
+  // IDE Detection (Cursor, VS Code, Zed, Windsurf, Claude Desktop)
+  const home = homedir();
+  const isWin = process.platform === 'win32';
+  const isMac = process.platform === 'darwin';
+
+  const cursorExists =
+    existsSync(path.join(home, '.cursor')) ||
+    existsSync(path.join(process.cwd(), '.cursor')) ||
+    (isWin && existsSync(path.join(process.env.APPDATA || '', 'Cursor')));
+  list.push({
+    name: 'cursor',
+    displayName: 'Cursor IDE',
+    installed: cursorExists,
+    category: 'ide',
+  });
+
+  const vscodeExists =
+    existsSync(path.join(home, '.vscode')) ||
+    existsSync(path.join(process.cwd(), '.vscode')) ||
+    (isWin && existsSync(path.join(process.env.APPDATA || '', 'Code')));
+  list.push({
+    name: 'vscode',
+    displayName: 'VS Code',
+    installed: vscodeExists,
+    category: 'ide',
+  });
+
+  const claudeDesktopExists =
+    (isWin && existsSync(path.join(process.env.APPDATA || '', 'Claude'))) ||
+    (isMac && existsSync(path.join(home, 'Library', 'Application Support', 'Claude')));
+  list.push({
+    name: 'claude-desktop',
+    displayName: 'Claude Desktop',
+    installed: claudeDesktopExists,
+    category: 'ide',
+  });
+
+  const zedExists =
+    existsSync(path.join(home, '.config', 'zed')) ||
+    (isWin && existsSync(path.join(process.env.LOCALAPPDATA || '', 'Zed')));
+  list.push({
+    name: 'zed',
+    displayName: 'Zed Editor',
+    installed: zedExists,
+    category: 'ide',
+  });
+
+  const windsurfExists =
+    existsSync(path.join(home, '.windsurf')) ||
+    existsSync(path.join(home, '.codeium')) ||
+    (isWin && existsSync(path.join(process.env.APPDATA || '', 'Windsurf')));
+  list.push({
+    name: 'windsurf',
+    displayName: 'Windsurf IDE',
+    installed: windsurfExists,
+    category: 'ide',
   });
 
   return list;
 }
 
 function printHeader(c: ReturnType<typeof getColors>, io: { out: (msg: string) => void }) {
-  const line = '─'.repeat(66);
+  const ascii = [
+    `   ${c.brightCyan} ___                    __  ____       _     __           ${c.reset}`,
+    `  ${c.brightCyan} /   | ____ ____  ____  / /_/ __ )_____(_)___/ /___ ____   ${c.reset}`,
+    ` ${c.brightBlue}  / /| |/ __ \`/ _ \\/ __ \\/ __/ __  / ___/ / __  / __ \`/ _ \\  ${c.reset}`,
+    `${c.brightBlue}  / ___ / /_/ /  __/ / / / /_/ /_/ / /  / / /_/ / /_/ /  __/  ${c.reset}`,
+    `${c.magenta} /_/  |_\\__, /\\___/_/ /_/\\__/_____/_/  /_/\\__,_/\\__, /\\___/   ${c.reset}`,
+    `${c.brightMagenta}       /____/                                  /____/         ${c.reset}`
+  ];
+  for (const line of ascii) io.out(line);
+  io.out('');
+
+  const line = '─'.repeat(70);
   io.out(`${c.cyan}╭${line}╮${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}   ${c.bold}${c.magenta}⚡ AGENTBRIDGE${c.reset} — ${c.bold}Interactive Multi-Agent Setup Wizard${c.reset}   ${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}   ${c.dim}Connect Claude Code, Codex, OpenCode, Pi, Antigravity & Ollama${c.reset} ${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.magenta}⚡ AGENTBRIDGE${c.reset} — ${c.bold}Interactive Multi-Agent Setup & Onboarding Wizard${c.reset}  ${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}  ${c.dim}Connect Claude Code, Codex, OpenCode, Pi, Antigravity, Ollama & IDEs${c.reset}  ${c.cyan}│${c.reset}`);
   io.out(`${c.cyan}╰${line}╯${c.reset}\n`);
 }
 
 function printDetected(agents: DetectedAgent[], c: ReturnType<typeof getColors>, io: { out: (msg: string) => void }) {
-  io.out(`${c.bold}${c.blue}✦ Probing local environment:${c.reset}`);
-  for (const a of agents) {
+  const cliAgents = agents.filter((a) => a.category === 'cli' || a.category === 'endpoint');
+  const ides = agents.filter((a) => a.category === 'ide');
+
+  io.out(`${c.bold}${c.brightBlue}✦ Probing Coding Agent CLIs & Runtimes:${c.reset}`);
+  for (const a of cliAgents) {
     if (a.installed) {
-      const v = a.version ? `${c.dim}(v${a.version})${c.reset}` : '';
+      const v = a.version ? `${c.dim}(${a.version})${c.reset}` : '';
       const extra = a.extra ? ` ${c.cyan}[${a.extra}]${c.reset}` : '';
       io.out(`  ${c.green}✔${c.reset} ${c.bold}${a.displayName.padEnd(24)}${c.reset} ${v}${extra}`);
     } else {
       io.out(`  ${c.gray}○${c.reset} ${c.dim}${a.displayName.padEnd(24)} Not found (optional)${c.reset}`);
+    }
+  }
+
+  const installedIdes = ides.filter((i) => i.installed);
+  if (installedIdes.length > 0) {
+    io.out(`\n${c.bold}${c.brightBlue}✦ Probing Installed IDEs & Desktop Editors:${c.reset}`);
+    for (const ide of installedIdes) {
+      io.out(`  ${c.green}✔${c.reset} ${c.bold}${ide.displayName.padEnd(24)}${c.reset} ${c.dim}(Config detected)${c.reset}`);
     }
   }
   io.out('');
@@ -499,25 +594,85 @@ export async function cmdSetup(
     }
   }
 
+  // Sincronização explícita de skills se installSkill estiver ativo
+  if (installSkill) {
+    try {
+      const canonicalSkill = path.resolve(fileURLToPath(new URL('../../skills/agentbridge-delegate/SKILL.md', import.meta.url)));
+      if (existsSync(canonicalSkill)) {
+        // Projeto local
+        const p1 = path.join(process.cwd(), '.agents', 'skills', 'agentbridge-delegate');
+        mkdirSync(p1, { recursive: true });
+        copyFileSync(canonicalSkill, path.join(p1, 'SKILL.md'));
+
+        const p2 = path.join(process.cwd(), '.claude', 'skills', 'agentbridge-delegate');
+        mkdirSync(p2, { recursive: true });
+        copyFileSync(canonicalSkill, path.join(p2, 'SKILL.md'));
+
+        // Usuário global se scope for 'user'
+        if (scope === 'user') {
+          const u1 = path.join(homedir(), '.agents', 'skills', 'agentbridge-delegate');
+          mkdirSync(u1, { recursive: true });
+          copyFileSync(canonicalSkill, path.join(u1, 'SKILL.md'));
+
+          if (existsSync(path.join(homedir(), '.claude'))) {
+            const u2 = path.join(homedir(), '.claude', 'skills', 'agentbridge-delegate');
+            mkdirSync(u2, { recursive: true });
+            copyFileSync(canonicalSkill, path.join(u2, 'SKILL.md'));
+          }
+        }
+      }
+    } catch {
+      /* ignore skill copy errors */
+    }
+  }
+
   // Success summary card
   io.out('');
-  io.out(`${c.green}╭${divider}╮${c.reset}`);
-  io.out(`${c.green}│${c.reset}   ${c.bold}${c.green}🎉 AgentBridge Setup Complete!${c.reset}${' '.repeat(38)}${c.green}│${c.reset}`);
-  io.out(`${c.green}├${divider}┤${c.reset}`);
-  io.out(`${c.green}│${c.reset}   • Scope:            ${c.bold}${scope}${c.reset}${' '.repeat(Math.max(0, 48 - scope.length))}${c.green}│${c.reset}`);
-  io.out(`${c.green}│${c.reset}   • Permissions:      ${c.bold}${permissions}${c.reset}${' '.repeat(Math.max(0, 48 - permissions.length))}${c.green}│${c.reset}`);
+  const boxWidth = 72;
+  const cardDivider = '─'.repeat(boxWidth - 2);
+  io.out(`${c.green}╭${cardDivider}╮${c.reset}`);
+  io.out(`${c.green}│${c.reset}  ${c.bold}${c.green}🎉 AgentBridge Setup Complete!${c.reset}${' '.repeat(40)}${c.green}│${c.reset}`);
+  io.out(`${c.green}├${cardDivider}┤${c.reset}`);
+  io.out(`${c.green}│${c.reset}  • Scope:            ${c.bold}${scope}${c.reset}${' '.repeat(Math.max(0, 50 - scope.length))}${c.green}│${c.reset}`);
+  io.out(`${c.green}│${c.reset}  • Permissions:      ${c.bold}${permissions}${c.reset}${' '.repeat(Math.max(0, 50 - permissions.length))}${c.green}│${c.reset}`);
   const targetStr = targets.join(', ');
-  io.out(`${c.green}│${c.reset}   • Configured:       ${c.bold}${targetStr}${c.reset}${' '.repeat(Math.max(0, 48 - targetStr.length))}${c.green}│${c.reset}`);
-  const skillStr = installSkill ? 'agentbridge-delegate installed' : 'skipped';
-  io.out(`${c.green}│${c.reset}   • Skills:           ${skillStr}${' '.repeat(Math.max(0, 48 - skillStr.length))}${c.green}│${c.reset}`);
-  io.out(`${c.green}├${divider}┤${c.reset}`);
-  io.out(`${c.green}│${c.reset}   ${c.bold}Quick Start Commands:${c.reset}${' '.repeat(43)}${c.green}│${c.reset}`);
-  io.out(`${c.green}│${c.reset}     ${c.cyan}ab ask claude "Hello"${c.reset}           Ask a single question             ${c.green}│${c.reset}`);
-  io.out(`${c.green}│${c.reset}     ${c.cyan}ab run codex "Write tests"${c.reset}       Run in agentic workspace mode     ${c.green}│${c.reset}`);
-  io.out(`${c.green}│${c.reset}     ${c.cyan}ab fanout "Review diff" a b${c.reset}      Run multi-agent consensus         ${c.green}│${c.reset}`);
-  io.out(`${c.green}│${c.reset}     ${c.cyan}ab ui --open${c.reset}                     Launch visual web dashboard       ${c.green}│${c.reset}`);
-  io.out(`${c.green}│${c.reset}     ${c.cyan}ab doctor${c.reset}                        Run comprehensive health check    ${c.green}│${c.reset}`);
-  io.out(`${c.green}╰${divider}╯${c.reset}\n`);
+  io.out(`${c.green}│${c.reset}  • Configured:       ${c.bold}${targetStr}${c.reset}${' '.repeat(Math.max(0, 50 - targetStr.length))}${c.green}│${c.reset}`);
+  const skillStr = installSkill ? 'agentbridge-delegate installed & synchronized' : 'skipped';
+  io.out(`${c.green}│${c.reset}  • Skills:           ${c.cyan}${skillStr}${c.reset}${' '.repeat(Math.max(0, 50 - skillStr.length))}${c.green}│${c.reset}`);
+  io.out(`${c.green}├${cardDivider}┤${c.reset}`);
+  io.out(`${c.green}│${c.reset}  ${c.bold}Quick Start Commands:${c.reset}${' '.repeat(47)}${c.green}│${c.reset}`);
+  io.out(`${c.green}│${c.reset}    ${c.cyan}ab ask claude "Hello"${c.reset}            Ask a single question              ${c.green}│${c.reset}`);
+  io.out(`${c.green}│${c.reset}    ${c.cyan}ab run codex "Write tests"${c.reset}        Run in agentic workspace mode      ${c.green}│${c.reset}`);
+  io.out(`${c.green}│${c.reset}    ${c.cyan}ab fanout "Review diff" a b${c.reset}       Run multi-agent consensus          ${c.green}│${c.reset}`);
+  io.out(`${c.green}│${c.reset}    ${c.cyan}ab ui --open${c.reset}                      Launch visual web dashboard        ${c.green}│${c.reset}`);
+  io.out(`${c.green}│${c.reset}    ${c.cyan}ab doctor${c.reset}                         Run comprehensive health check     ${c.green}│${c.reset}`);
+  io.out(`${c.green}╰${cardDivider}╯${c.reset}\n`);
+
+  // Rich Interactive Documentation Guide for the User
+  io.out(`${c.cyan}╭${cardDivider}╮${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.brightCyan}📖 GUIA DE USO & DOCUMENTAÇÃO RÁPIDA${c.reset}${' '.repeat(34)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}├${cardDivider}┤${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.yellow}1. Como seus Agentes se Comunicam (MCP Tools):${c.reset}${' '.repeat(22)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}     Agora qualquer agente configurado pode chamar outros como ferramentas:${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}     • ${c.green}ask_<agente>(prompt, permissions="edit")${c.reset} - Chamada síncrona${' '.repeat(13)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}     • ${c.green}dispatch_<agente>(prompt)${c.reset} - Disparo assíncrono / paralelo${' '.repeat(14)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}     • ${c.green}check_quota(agent="codex")${c.reset} - Consulta cota antes de tarefas caras${' '.repeat(7)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}     • ${c.green}checkpoint_create("mensagem")${c.reset} - Snapshot Git invisível e seguro${' '.repeat(9)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}${' '.repeat(70)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.yellow}2. Zero-Accident Safety Lock (Trava de Segurança):${c.reset}${' '.repeat(18)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}     • Por padrão, delegações rodam em ${c.bold}read-only${c.reset} (sem perigo de estragar).  ${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}     • Para autorizar edição de arquivos ou testes, passe explicitamente:   ${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}       ${c.bold}permissions: "edit"${c.reset} ou ${c.bold}permissions: "full"${c.reset}.${' '.repeat(32)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}${' '.repeat(70)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.yellow}3. Ultra-Baixa Latência no Codex (Daemon App-Server):${c.reset}${' '.repeat(15)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}     • Adicione ${c.bold}--transport app-server${c.reset} no CLI ou ${c.bold}transport: "app-server"${c.reset}  ${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}       nas ferramentas MCP para manter o daemon aquecido na memória,        ${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}       eliminando cold-starts e permitindo aprovações em tempo real!         ${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}${' '.repeat(70)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.yellow}4. Painel Visual & Telemetria em Tempo Real:${c.reset}${' '.repeat(24)}${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}     • Rode ${c.bold}ab ui --open${c.reset} para ver em tempo real o consumo de tokens,      ${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}│${c.reset}       árvores de subagentes delegados e histórico de checkpoints!          ${c.cyan}│${c.reset}`);
+  io.out(`${c.cyan}╰${cardDivider}╯${c.reset}\n`);
 
   if (runDoctorAtEnd) {
     io.out(`${c.bold}${c.blue}✦ Running "ab doctor" verification:${c.reset}`);

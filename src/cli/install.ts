@@ -205,6 +205,13 @@ export async function cmdInstall(
   io: { out: (msg: any) => void; err: (msg: any) => void }
 ): Promise<void> {
   const target = _[0];
+  if (!target) {
+    if (process.stdin.isTTY && !flags.yes && !flags['non-interactive']) {
+      const { cmdSetup } = await import('./setup.js');
+      return cmdSetup(_, flags, io);
+    }
+    return cmdInstall(['all'], flags, io);
+  }
   if (target === 'all') {
     let done = 0;
     for (const t of TARGETS) {
