@@ -189,3 +189,9 @@ export async function askWithSchema(agent: any, runOpts: any, o: any = {}): Prom
     });
   return res;
 }
+
+/** Schema prompt suffix shared by the pi/opencode adapters (kept verbatim at the call sites). */
+export const schemaSuffix = (schema: any) =>
+  `\n\nRespond with ONLY a single JSON value (no prose, no markdown fences) that validates against this JSON Schema:\n${JSON.stringify(
+    schema
+  )}`;

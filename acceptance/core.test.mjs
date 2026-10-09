@@ -163,6 +163,16 @@ test('maxLine / maxBuffer caps give a clear AGENT_FAILED', async () => {
   await assert.rejects(q.wait(), { code: 'AGENT_FAILED', message: /maxBuffer/ });
 });
 
+test('maxLine caps a completed line that arrives within one chunk', () => {
+  // a line completing inside a single chunk previously bypassed the cap (e.g. a huge one-line JSON burst)
+  assert.throws(() => createLineSplitter({ maxLine: 10 }).push('x'.repeat(11) + '\n'), { code: 'AGENT_FAILED', message: /maxLine/ });
+  const s = createLineSplitter({ maxLine: 10 });
+  let err = null;
+  try { s.push('b\n' + 'x'.repeat(11) + '\n'); } catch (e) { err = e; }
+  assert.deepEqual(err.lines, ['b']); // lines completed before the oversized one are attached, not lost
+  assert.deepEqual(createLineSplitter({ maxLine: 10 }).push('x'.repeat(10) + '\n'), ['x'.repeat(10)]); // exactly maxLine still passes
+});
+
 test('bad cwd => BAD_OPTION; bad timeoutMs => BAD_OPTION', () => {
   assert.throws(() => spawnProc(N, ['-v'], { cwd: path.join(tmpdir(), 'no-such-dir-xyz-1') }), { code: 'BAD_OPTION' });
   for (const t of [0, -5, NaN, 'x']) assert.throws(() => spawnProc(N, ['-v'], { timeoutMs: t }), { code: 'BAD_OPTION' });

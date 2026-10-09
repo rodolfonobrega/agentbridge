@@ -124,6 +124,11 @@ export function createLineSplitter({ maxLine = 16 * 1024 * 1024 }: LineSplitterO
         let line = pending.length ? pending.join('') + chunk.slice(start, i) : chunk.slice(start, i);
         pending = []; plen = 0;
         if (line.charCodeAt(line.length - 1) === 13) line = line.slice(0, -1);
+        if (line.length > maxLine) {
+          const err = over();
+          (err as any).lines = out;
+          throw err;
+        } // lines completed before the oversized one are attached, not lost
         out.push(line);
         start = i + 1;
       }

@@ -89,6 +89,8 @@ export function chatTurns(messages: any[]): ChatTurnsResult {
     turns: Turn[] = [],
     names = new Map<string, string>();
   for (const m of messages) {
+    if (!m || typeof m !== 'object' || typeof m.role !== 'string')
+      throw new HttpError(400, '`messages` entries must be objects with a string role', 'invalid_request_error', 'invalid_messages');
     if (m.role === 'system' || m.role === 'developer') {
       sys.push(contentText(m.content));
       continue;

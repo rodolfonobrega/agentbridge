@@ -8,7 +8,7 @@ import { AgentError } from '../core/errors.js';
 import { ev } from '../core/events.js';
 import { hintFor } from '../core/hints.js';
 import { spawnProc, runCollect, resolveBinary, killTree, ProcessHandle } from '../core/spawn.js';
-import { extractJson, validate } from '../extras/schema.js';
+import { extractJson, schemaSuffix, validate } from '../extras/schema.js';
 import { AgentAdapter, AgentEvent, RunOptions, RunResult, Usage } from '../types/index.js';
 
 const BIN = 'opencode';
@@ -279,11 +279,6 @@ function buildConfig(o: RunOptions): Record<string, any> {
 export function validateSchema(v: any, s: any): string[] {
   return validate(s, v);
 }
-
-const schemaSuffix = (schema: any) =>
-  `\n\nRespond with ONLY a single JSON value (no prose, no markdown fences) that validates against this JSON Schema:\n${JSON.stringify(
-    schema
-  )}`;
 
 const freePort = (): Promise<number> =>
   new Promise((res, rej) => {

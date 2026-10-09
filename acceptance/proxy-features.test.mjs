@@ -135,6 +135,22 @@ test('anthropic: malformed messages are rejected as 400s, not 502s', async () =>
   assert.equal(r.status, 400);
 });
 
+test('chat: malformed messages are rejected as 400s, not 502s', async () => {
+  const m = (body) => post('/v1/chat/completions', { model: 'fake/m1', ...body });
+  // null/42 entries previously TypeError'd on m.role inside chatTurns, surfacing as 502 agent_failed
+  let r = await m({ messages: [{ role: 'user', content: 'hi' }, null] });
+  assert.equal(r.status, 400);
+  let j = await r.json();
+  assert.equal(j.error.type, 'invalid_request_error');
+  assert.equal(j.error.code, 'invalid_messages');
+  r = await m({ messages: [42] });
+  assert.equal(r.status, 400);
+  r = await m({ messages: [null] });
+  assert.equal(r.status, 400);
+  r = await m({ messages: [] });
+  assert.equal(r.status, 400); // still reaches the existing empty-messages guard
+});
+
 test('config aliases and payload defaults reach the adapter', async () => {
   current = fake(['x']); seen.length = 0;
   await chat({ model: 'quick' });

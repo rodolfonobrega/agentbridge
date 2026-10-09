@@ -21,7 +21,7 @@ import { AgentError, looksRateLimited, retryAfterMs } from '../core/errors.js';
 import { ev, parseJsonLine } from '../core/events.js';
 import { validateOptions } from '../index.js';
 import { home } from '../bridge/runs.js';
-import { extractJson, validate as validateSchema } from '../extras/schema.js';
+import { extractJson, schemaSuffix, validate as validateSchema } from '../extras/schema.js';
 import { linkResource, unlinkResource } from '../core/shared-resources.js';
 import { AgentAdapter, AgentEvent, RunOptions, RunResult, Usage } from '../types/index.js';
 
@@ -244,10 +244,6 @@ export function destroyAgentDir(d?: { dir?: string; src?: string; authBefore?: s
   }
 }
 
-const schemaSuffix = (schema: any) =>
-  `\n\nRespond with ONLY a single JSON value (no prose, no markdown fences) that validates against this JSON Schema:\n${JSON.stringify(
-    schema
-  )}`;
 const textOf = (m: any): string =>
   Array.isArray(m?.content)
     ? m.content

@@ -717,17 +717,15 @@ export async function callAny(name: string, args: any, ctx: any = {}): Promise<a
   }
   if (['wait_run', 'check_run', 'cancel_run'].includes(name)) {
     const id = args?.id;
-    if (typeof id !== 'string' || !loadRun(id, env)) return errResult(`Unknown run id: ${id}`);
+    const r0 = loadRun(id as string, env);
+    if (typeof id !== 'string' || !r0) return errResult(`Unknown run id: ${id}`);
     let r: any;
     if (name === 'cancel_run') {
       const c = cancelRun(id, env);
       if (c.error) return errResult(c.error);
       r = c.rec;
     } else {
-      r =
-        name === 'wait_run'
-          ? await waitRun(id, (Number(args.timeoutSeconds) || 30) * 1000, env)
-          : loadRun(id, env);
+      r = name === 'wait_run' ? await waitRun(id, (Number(args.timeoutSeconds) || 30) * 1000, env) : r0;
     }
     const done = r.state === 'done';
     const out: any = { ...summarize(r), ...(done ? { text: r.result?.text, result: r.result } : {}) };
