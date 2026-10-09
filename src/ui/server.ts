@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
 import { stats, loadTrackedRun } from '../telemetry/stats.js';
 import { loadRun } from '../bridge/runs.js';
+import { listCheckpoints, diffCheckpoint, rollbackCheckpoint } from '../extras/checkpoint.js';
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
 const FILES: Record<string, [string, string]> = {
@@ -162,9 +163,13 @@ export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
   const server = http.createServer((req, res) => {
     try {
       if (!hostOk(req.headers.host)) return json(res, 403, { error: 'bad host' });
-      if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'read-only dashboard' });
       const u = new URL(req.url || '/', 'http://x'),
         p = u.pathname.replace(/\/+$/, '') || '/';
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        if (!(req.method === 'POST' && /^\/api\/checkpoints\/[\w-]+\/rollback$/.test(p))) {
+          return json(res, 405, { error: 'read-only dashboard' });
+        }
+      }
       if (p.startsWith('/api/') && !authOk(req, o.token)) return json(res, 401, { error: 'missing or invalid token' });
       if (FILES[p]) {
         const [f, type] = FILES[p];
@@ -229,6 +234,35 @@ export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
           subagents: (r as any).subagents,
           events: Array.isArray(events) ? events.slice(-40) : undefined,
         });
+      }
+      if (p === '/api/checkpoints') {
+        const repoCwd = u.searchParams.get('cwd') || process.cwd();
+        try {
+          const list = listCheckpoints(repoCwd);
+          return json(res, 200, { checkpoints: list });
+        } catch (e: any) {
+          return json(res, 400, { error: e.message || String(e) });
+        }
+      }
+      let cpM: RegExpExecArray | null;
+      if ((cpM = /^\/api\/checkpoints\/([\w-]+)\/diff$/.exec(p))) {
+        const repoCwd = u.searchParams.get('cwd') || process.cwd();
+        try {
+          const diff = diffCheckpoint(repoCwd, cpM[1]);
+          return json(res, 200, { id: cpM[1], diff });
+        } catch (e: any) {
+          return json(res, 404, { error: e.message || String(e) });
+        }
+      }
+      if ((cpM = /^\/api\/checkpoints\/([\w-]+)\/rollback$/.exec(p))) {
+        if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
+        const repoCwd = u.searchParams.get('cwd') || process.cwd();
+        try {
+          const result = rollbackCheckpoint(repoCwd, cpM[1]);
+          return json(res, 200, { ok: true, id: cpM[1], ...result });
+        } catch (e: any) {
+          return json(res, 400, { error: e.message || String(e) });
+        }
       }
       return json(res, 404, { error: 'not found' });
     } catch (e: any) {

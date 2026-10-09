@@ -228,6 +228,12 @@ export async function cmdInstall(
   if (target === 'agy') return installAgy(flags, io);
   if (target === 'pi') return installPi(flags, io);
   if (target === 'opencode') return installOpencode(flags, io);
+  if (['cursor', 'vscode', 'code', 'claude-desktop', 'claude_desktop', 'zed', 'windsurf'].includes(target)) {
+    const { installIde } = await import('./install-ide.js');
+    const res = installIde(target as any, { scope: flags.scope, cwd: flags.cwd });
+    io.out(`Installed agentbridge MCP server into ${target} (${res.path})`);
+    return;
+  }
   const { out } = io;
   if (target !== 'claude') throw new UsageError(USAGE);
   const { scope, permissions, env, cwd } = bridgeCtx(flags);

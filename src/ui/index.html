@@ -84,7 +84,40 @@
     <div class="card"><div class="card-h"><h2>Where runs come from</h2></div><div id="origins"></div></div>
   </section>
 
-  <footer class="foot">Read-only view of <code>~/.agentbridge</code> telemetry. Cost appears only for agents that report it (Claude does; others show &ndash;). Token counts for some agents are estimates, marked <span class="est">est.</span></footer>
+  <section class="card" id="time-machine-card">
+    <div class="card-h">
+      <h2>Time Machine &middot; Git Checkpoints</h2>
+      <button id="refresh-checkpoints" class="btn ghost" type="button">Refresh Snapshots</button>
+    </div>
+    <div class="table-wrap">
+      <table id="checkpoints">
+        <thead>
+          <tr>
+            <th>Created</th>
+            <th>ID</th>
+            <th>Session</th>
+            <th>Message</th>
+            <th class="num">Action</th>
+          </tr>
+        </thead>
+        <tbody id="checkpoints-body">
+          <tr><td colspan="5" class="muted" style="text-align:center;padding:12px;">No checkpoints recorded yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="diff-panel" style="margin-top:16px;display:none;">
+      <div class="card-h">
+        <h3 id="diff-title" style="margin:0;font-size:13px;">Diff with current workspace</h3>
+        <div style="display:flex;gap:8px;">
+          <button id="rollback-btn" class="btn" style="background:var(--bad);color:#fff;border-color:var(--bad);" type="button">Rollback to this state</button>
+          <button id="close-diff-btn" class="btn ghost" type="button">Close</button>
+        </div>
+      </div>
+      <pre id="diff-code" class="blk" style="max-height:360px;"></pre>
+    </div>
+  </section>
+
+  <footer class="foot">AgentBridge Dashboard &amp; Time Machine. Cost appears only for agents that report it.</footer>
 </main>
 
 <aside id="drawer" class="drawer" hidden aria-label="Run details">

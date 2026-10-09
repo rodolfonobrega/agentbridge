@@ -2,6 +2,8 @@ import { AgentError, asRateLimited } from './core/errors.js';
 import { ev } from './core/events.js';
 import { loadEndpoints, endpointNames, makeEndpointAdapter } from './adapters/endpoint.js';
 import { AgentAdapter, AgentEvent, FallbackTarget, RunOptions, RunResult } from './types/index.js';
+import { installIde } from './cli/install-ide.js';
+import { SubagentRoster } from './bridge/subagent-roster.js';
 
 export { AgentError, asRateLimited, retryAfterMs, looksRateLimited, rateLimitKind } from './core/errors.js';
 export { ev } from './core/events.js';
@@ -351,8 +353,85 @@ export {
 } from './extras/checkpoint.js';
 export { Budget, runBudgeted } from './extras/budget.js';
 export { doctor } from './extras/doctor.js';
+export {
+  autoRepair,
+  type RepairOptions,
+  type RepairResult,
+  type RepairAttempt,
+} from './extras/repair.js';
+export {
+  runReviewLoop,
+  runEnsemble,
+  parseReviewVerdict,
+  type ReviewLoopOptions,
+  type ReviewLoopResult,
+  type ReviewVerdict,
+  type TurnRecord,
+  type EnsembleOptions,
+  type EnsembleResult,
+  type EnsembleAgentConfig,
+  type AgentEnsembleOutput,
+} from './extras/consensus.js';
+
+// IDE MCP Installer
+export {
+  installIde,
+  getIdeConfigPath,
+  type InstallIdeOptions,
+  type InstallIdeResult,
+  type IdeTarget,
+  type IdeScope,
+} from './cli/install-ide.js';
+
+// CommonMark boundary-aware streaming
+export {
+  splitBufferedAssistantText,
+  createMarkdownStreamFilter,
+  type MarkdownStreamFilter,
+  type MarkdownStreamFilterOptions,
+  type SplitResult,
+} from './core/markdown-stream.js';
+
+// Subagent Native Roster
+export {
+  SubagentRoster,
+  type SubagentNode,
+  type SubagentStatus,
+  type TokenUsage,
+  type RegisterSubagentOptions,
+  type UpdateStatusOptions,
+} from './bridge/subagent-roster.js';
+
+// Project Memory
+export {
+  loadMemory,
+  saveMemory,
+  addRule,
+  addDecision,
+  setVariable,
+  clearMemory,
+  formatMemoryForPrompt,
+  type ProjectMemory,
+  type MemoryDecision,
+} from './telemetry/memory.js';
+
+// Proactive Quota Checking
+export {
+  fetchAnthropicUsage,
+  fetchCodexUsage,
+  getProactiveQuotaStatus,
+  parseAnthropicUsage,
+  parseCodexUsage,
+  formatQuotaStatus,
+  formatQuotaForPrompt,
+  setQuotaFixture,
+  clearQuotaFixtures,
+  type ProactiveQuotaHealth,
+  type AnthropicUsage,
+  type CodexUsage,
+} from './quota/proactive.js';
 
 // Types
 export * from './types/index.js';
 
-export default { agents, run, ask, AgentError };
+export default { agents, run, ask, AgentError, installIde, SubagentRoster };

@@ -261,4 +261,77 @@ $('#d-close').addEventListener('click', closeRun); $('#scrim').addEventListener(
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeRun(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 setInterval(() => { document.querySelectorAll('.run-card .t[data-start]').forEach((e) => { e.textContent = fmtMs(Date.now() - +e.dataset.start); }); }, 1000);
+
+// --- Time Machine (Checkpoints) ---
+let activeCheckpointId = null;
+
+async function loadCheckpoints() {
+  try {
+    const res = await fetch('/api/checkpoints');
+    if (!res.ok) return;
+    const { checkpoints } = await res.json();
+    const tbody = clear($('#checkpoints-body'));
+    if (!checkpoints || checkpoints.length === 0) {
+      tbody.append(h('tr', null, h('td', { colspan: '5', class: 'muted', style: 'text-align:center;padding:12px;', text: 'No checkpoints recorded yet.' })));
+      return;
+    }
+    for (const cp of checkpoints) {
+      const btn = h('button', { class: 'btn ghost view-diff-btn', type: 'button', style: 'padding:2px 8px;font-size:12px;', text: 'Diff' });
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        viewDiff(cp.id);
+      });
+      tbody.append(h('tr', { 'data-cp-id': cp.id },
+        h('td', { text: new Date(cp.createdAt).toLocaleTimeString() }),
+        h('td', null, h('code', { text: cp.id })),
+        h('td', { text: cp.sessionId || 'default' }),
+        h('td', { text: cp.message || '-' }),
+        h('td', { class: 'num' }, btn)
+      ));
+    }
+  } catch (e) {
+    console.error('Failed to load checkpoints', e);
+  }
+}
+
+async function viewDiff(id) {
+  activeCheckpointId = id;
+  const panel = $('#diff-panel');
+  const code = $('#diff-code');
+  const title = $('#diff-title');
+  title.textContent = `Diff with snapshot: ${id}`;
+  code.textContent = 'Loading diff...';
+  panel.style.display = 'block';
+  try {
+    const res = await fetch(`/api/checkpoints/${encodeURIComponent(id)}/diff`);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    code.textContent = data.diff || '(No changes between workspace and this checkpoint)';
+  } catch (e) {
+    code.textContent = `Error loading diff: ${e.message}`;
+  }
+}
+
+$('#rollback-btn')?.addEventListener('click', async () => {
+  if (!activeCheckpointId) return;
+  if (!confirm(`Are you sure you want to rollback working directory to snapshot ${activeCheckpointId}? Any uncommitted changes will be replaced.`)) return;
+  try {
+    const res = await fetch(`/api/checkpoints/${encodeURIComponent(activeCheckpointId)}/rollback`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    alert(`Successfully rolled back to snapshot ${activeCheckpointId}`);
+    $('#diff-panel').style.display = 'none';
+    loadCheckpoints();
+  } catch (e) {
+    alert(`Rollback failed: ${e.message}`);
+  }
+});
+
+$('#close-diff-btn')?.addEventListener('click', () => {
+  $('#diff-panel').style.display = 'none';
+  activeCheckpointId = null;
+});
+
+$('#refresh-checkpoints')?.addEventListener('click', loadCheckpoints);
+
+loadCheckpoints();
 tick();

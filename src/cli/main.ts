@@ -439,17 +439,23 @@ const HELP = `agentbridge (ab) — drive local claude/codex/opencode/agy/pi/curs
   ab ask <agent> [prompt|-] [same flags]           # prints only the result text
   ab fanout "<prompt>" agent[:model] ...           # run all, collect all
   ab race   "<prompt>" agent[:model] ...           # first accepted wins, rest cancelled
+  ab fix <agent> "<test-cmd>" [--prompt p] [--max-attempts 3]  # TDD auto-repair loop with rollback
+  ab review <coder> <reviewer> "<task>" [--max-turns 3]        # Multi-agent review loop with diffs
+  ab ensemble "<task>" <a1> <a2> ... [--judge j]               # Multi-agent consensus voting & synthesis
+  ab pipeline <pipeline.json> [--checkpoint-each]              # DAG task orchestrator with waves & rollback
+  ab quota [agent] [--threshold %]                             # Proactive quota checking
   ab checkpoint create [message] | list | rollback <id> | diff <id>   # git hidden-ref snapshots
+  ab memory add "<rule>" | decision "<topic>" "<decision>" [--agent a] | list [--json] | clear
   ab sessions | ab ps | ab top [--once] | ab stats
   ab context <session> [--agent a]
   ab handoff <session> --to <agent>
   ab watch <run> | ab wait <run> | ab cancel <run>
   ab serve [--port][--host][--token][--allow-non-loopback][--fallback a,b:model][--config file.json][--agent-root DIR][--agent-max-permission edit|full][--accounts file.json --accept-tos-risk][--log file.jsonl]
-  ab ui [--port 8788][--open][--token t]            # live dashboard: runs, tokens, context, fallbacks (read-only, loopback)
+  ab ui [--port 8788][--open][--token t]            # live dashboard: runs, tokens, context, checkpoints, fallbacks
   ab bridge                                        # stdio MCP server
   ab doctor [--live][--json]
   ab setup | ab wizard [--yes]                     # modern interactive terminal setup wizard
-  ab install <claude|codex|opencode|agy|pi|all> [--scope project|user|local] [--permissions read-only|plan|edit|full] [--max-depth N] [--no-agents] [--no-skill] [--auto-approve (codex)]
+  ab install <claude|codex|opencode|agy|pi|cursor|vscode|zed|windsurf|claude-desktop|all> [--scope project|user]
   ab endpoint [list] | add <name> <baseUrl> [--type openai|anthropic] [--model m] [--api-key-env VAR] | remove <name>
 `;
 
@@ -535,6 +541,24 @@ export async function main(): Promise<void> {
         break;
       case 'checkpoint':
         await cmdCheckpoint(_, flags);
+        break;
+      case 'memory':
+        await (await import('../telemetry/memory.js')).cmdMemory(_, flags, { out, err });
+        break;
+      case 'fix':
+        await (await import('../extras/repair.js')).cmdFix(_, flags, { out, err });
+        break;
+      case 'review':
+        await (await import('../extras/consensus.js')).cmdReview(_, flags, { out, err });
+        break;
+      case 'ensemble':
+        await (await import('../extras/consensus.js')).cmdEnsemble(_, flags, { out, err });
+        break;
+      case 'pipeline':
+        await (await import('../extras/pipeline.js')).cmdPipeline(_, flags, { out, err });
+        break;
+      case 'quota':
+        await (await import('../quota/proactive.js')).cmdQuota(_, flags, { out, err });
         break;
       default:
         throw new UsageError(`unknown command "${cmd}". Run "ab --help".`);
