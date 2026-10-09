@@ -606,6 +606,85 @@ Agents calling the bridge have native access to:
 
 ---
 
+## MCP Server Timeouts: Eliminating the 60-Second Hard Cutoff
+
+In real-world MCP workflows, timeouts operate at **two distinct architectural levels**:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. MCP CLIENT (Claude Code, Pi, Cursor, VS Code, Zed)                  │
+│    SERVER PROTOCOL TIMEOUT (Transport Layer JSON-RPC deadline)         │
+│    👉 MCP SDK Default: 60 SECONDS (if timeout property is omitted)     │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ JSON-RPC tools/call over stdio
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 2. AGENTBRIDGE (MCP Server Engine)                                     │
+│    TOOL FUNCTION TIMEOUT (Parameter: timeout / timeoutSeconds)         │
+│    👉 AgentBridge Default: 300 SECONDS (5 minutes)                     │
+│                                                                        │
+│    Monitors and terminates child agent subprocess (Codex/Pi/Claude)    │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1. Protocol / Server-Level Timeout
+The official Model Context Protocol (MCP) TypeScript/Python SDK imposes a strict **60-second** default timeout on any `tools/call` JSON-RPC message. If an MCP server registration omits the `timeout` key, the client cuts the stdio transport at exactly 60 seconds, abruptly killing subagent analysis.
+
+**The Fix in AgentBridge:**
+- All installers (`ab install`, `ab setup`, `installIde`) automatically configure `"timeout": 300` (or the `--timeout <seconds>` flag) on the `agentbridge` server registration across Pi (`mcp.json`), Claude Code (`mcp.json`), OpenCode (`opencode.json`), Codex (`config.toml`), and IDE configs (Cursor, VS Code, Zed, Windsurf, Claude Desktop).
+- Subagent analyses can now run without fear of 60-second transport kills.
+
+### 2. Tool / Function-Level Timeout (`timeout` / `timeoutSeconds`)
+When calling MCP tools like `ask_<agent>` or `dispatch_<agent>`, you or the parent model can specify execution deadlines:
+```json
+{
+  "tool": "ask_codex",
+  "arguments": {
+    "prompt": "Conduct a deep multi-file security audit",
+    "timeout": 600
+  }
+}
+```
+- Both `timeout` and `timeoutSeconds` are fully supported as aliases.
+- Accepts seconds, or milliseconds (values `>= 1000` are converted automatically).
+- Governs the subprocess lifetime managed by AgentBridge.
+
+### 3. Child MCP Servers Configuration (`mcpServers.<name>.timeout`)
+When passing third-party MCP servers via library calls (`mcpServers` option), `McpServerConfig.timeout` is validated and forwarded into:
+- Codex: `-c mcp_servers.<name>.timeout=<seconds>`
+- Pi: `servers[name].timeout` in generated `mcp.json`
+- OpenCode: `cfg.mcp[name].timeout` in generated config
+- Antigravity: `mcp_config.json`
+- Claude: `mcp.json`
+
+---
+
+## Universal Open Agent Skills (`.agents/skills`) & Conflict Prevention
+
+The modern coding agent ecosystem (Pi, Codex, OpenCode, Antigravity, and recent versions of Claude Code) natively searches for **Open Agent Skills** in `.agents/skills/`.
+
+### 1. One Install Covers All Harnesses
+When you install the `agentbridge-delegate` skill, it is placed in `.agents/skills/agentbridge-delegate/SKILL.md`.
+- Pi discovers it automatically.
+- Codex discovers it automatically.
+- OpenCode and Antigravity discover it automatically.
+- There is **no need** to install separate copies into `.claude/skills` or repeat the installation per harness.
+
+### 2. Zero Collision Guarantee (`[Skill conflicts] collision`)
+Pi scans both your workspace root (`./.agents/skills/`) and your global home (`~/.agents/skills/`). Previously, duplicate installations across scopes resulted in:
+```
+[Skill conflicts]
+  "agentbridge-delegate" collision:
+    ✓ auto (project) ~/projects/.agents/skills/agentbridge-delegate/SKILL.md
+    ✗ ~/.agents/skills/agentbridge-delegate/SKILL.md (skipped)
+```
+**How AgentBridge prevents this:**
+- When installing with `--scope project`, the installer checks if `~/.agents/skills/agentbridge-delegate` is already present globally with identical content. If so, it safely skips creating a redundant local copy, keeping your project clean and avoiding Pi collision warnings.
+- Passing `--force` allows overriding this behavior when project-specific customization is needed.
+- `ab install all` deduplicates writes in-memory, writing the skill only once per run.
+
+---
+
 ## Multiple accounts and managed profiles (`ab account`)
 
 Inspired by Orca, AgentBridge provides isolated profile directories ("Managed Homes") for each account, eliminating credential collisions, session leaks, and multi-tenant token conflicts.

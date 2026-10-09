@@ -69,12 +69,20 @@ AgentBridge is engineered with a **Zero-Accident Safety Lock**:
 
 ## MCP Server Timeout: Eliminating the 60-Second Hard Limit
 
-In earlier versions and raw MCP setups, MCP client libraries (such as Anthropic Claude Code, Cursor, and Pi) apply a strict default protocol timeout of **60 seconds** on tool calls unless configured otherwise. When delegating heavy tasks, subagent analysis would be abruptly severed at exactly 1 minute.
+In MCP environments, timeout operates at **two distinct architectural levels**:
 
-AgentBridge resolves this completely:
-1. **Registered Harness Timeout (300s Default):** All installers (`agentbridge install`, `ab setup`, `install-ide`) automatically configure `"timeout": 300` (or the `--timeout <seconds>` flag) on the `agentbridge` MCP server across Pi (`mcp.json`), Claude Code (`mcp.json` / `claude_desktop_config.json`), OpenCode (`opencode.json`), Codex (`config.toml`), and IDE configs (Cursor, VS Code, Zed, Windsurf).
-2. **Passthrough & Custom MCP Server Timeouts:** When supplying `mcpServers` in AgentBridge configurations or API calls, the `timeout` property (`McpServerConfig.timeout`) is fully preserved and forwarded to all underlying adapters (Codex `-c mcp_servers.<name>.timeout=...`, Pi `mcp.json`, OpenCode, Antigravity, and Claude).
-3. **Dynamic Per-Call Override:** You can pass `timeout` or `timeoutSeconds` directly in any `ask_<agent>` or `dispatch_<agent>` tool call to extend the deadline for heavy batch operations.
+1. **Protocol / Server-Level Timeout (MCP Client transport):**
+   - The official MCP SDK client (used by Claude Code, Cursor, Pi, and IDEs) enforces a default **60-second** network deadline for any JSON-RPC `tools/call`.
+   - If the MCP server configuration does not define a `timeout`, the client cuts the connection at 60 seconds regardless of what the subagent is doing.
+   - **Resolution:** AgentBridge installers (`install`, `setup`, `install-ide`) automatically write `"timeout": 300` (or your `--timeout` flag) directly into the client's server entry (e.g. `mcpServers.agentbridge.timeout = 300` in Pi's `mcp.json`, Codex's `config.toml`, OpenCode's `opencode.json`, and IDE JSONs).
+
+2. **Tool / Execution-Level Timeout (Function Parameter):**
+   - Passed directly as an argument inside tool calls (`ask_codex({ prompt: "...", timeout: 600 })` or `timeoutSeconds: 600`).
+   - Instructs AgentBridge how long to let the underlying subagent subprocess run before cancelling it.
+   - Accepts seconds or milliseconds (values `>= 1000` are converted automatically).
+
+3. **Child / Passthrough MCP Timeout:**
+   - When providing `mcpServers` to child agents in AgentBridge options, `McpServerConfig.timeout` is validated and forwarded to all underlying harness adapters (Codex, Pi, OpenCode, Antigravity, and Claude).
 
 ## Universal Skills (`.agents/skills`) & Zero Collision Guarantee
 

@@ -147,9 +147,14 @@ Now, from inside any of them, you can say "ask claude to review this" or "have p
 > 🛡️ **The Safety Lock (Trava de Segurança):**
 > - **Zero-Accident Default (`read-only`):** When you run `ab ask` or when an agent calls `ask_*`, the safety lock is active by default. The agent can inspect code and answer questions, but **cannot modify files or run destructive shell scripts**.
 > - **Intentional Unlocking:** When you want the agent to write code, implement features, or run tests, simply unlock it with `--permissions edit` (or `--permissions full`).
-> - **Full Capability Ceiling:** The permission ceiling defaults to `full` so the bridge never gets in your way when you intend to edit.
-> - **Customizable by Developer:** Prefer agents to always edit files without passing flags? Run `ab config set default-permissions edit` (for your project or globally with `--global`).
-> - **Hardware-Like Circuit Breaker:** Working in high-risk codebases? Lock down the ceiling with `ab config set permissions-ceiling edit` or `read-only`, and no subagent can ever escalate privileges beyond it.
+> ⏱️ **MCP Timeouts (Zero 60s Cutoffs):**
+> - **Protocol / Server-Level Timeout (300s Default):** The official MCP client SDK enforces a strict 60s network cutoff if a server omits `timeout`. AgentBridge installers (`ab install`, `ab setup`, `install-ide`) automatically write `"timeout": 300` into all client configs (Pi, Claude, Codex, OpenCode, Cursor, VS Code, Zed), ensuring long subagent analyses finish uninterrupted.
+> - **Tool / Function Parameter (`timeout` / `timeoutSeconds`):** You or your subagent can pass `timeout: 600` inside `ask_*` / `dispatch_*` calls to grant child processes extra time for heavy batch tasks.
+> - **Child MCP Servers:** `McpServerConfig.timeout` is fully preserved and forwarded across all adapters.
+>
+> 🌐 **Universal Skills (`.agents/skills`) & Conflict Prevention:**
+> - Pi, Codex, OpenCode, and Antigravity all share the open **`.agents/skills/`** directory. Installing once covers all of them!
+> - The installer detects existing global skills (`~/.agents/skills`) and avoids redundant project duplicates, eliminating Pi's `[Skill conflicts] collision` warnings.
 
 ---
 
