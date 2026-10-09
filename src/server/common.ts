@@ -91,6 +91,9 @@ export function resolveModel(
   if (CLAUDE_ALIASES.has(l) || /^claude-/.test(l)) return done({ agent: 'claude', model: m });
   if (/^(gpt-|codex|o[134](-|$)|chatgpt)/.test(l)) return done({ agent: 'codex', model: l === 'codex' ? undefined : m });
   if (m.includes('/')) return done({ agent: 'opencode', model: m });
+  if (endpointNames().includes('ollama') && (/:(cloud|latest|\d+b)/i.test(m) || /^glm-|^qwen|^llama|^deepseek/i.test(m))) {
+    return done({ agent: 'ollama', model: m });
+  }
   throw new HttpError(
     404,
     `The model \`${name}\` does not exist. Use claude/<model>, codex/<model>, agy/<model>, pi/<provider>/<model>, opencode/<provider>/<model> or an alias (sonnet, haiku, opus, gpt-5-codex). Prefix with agent/ for agent mode; add (low|medium|high|max) to set the effort.`,
