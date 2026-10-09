@@ -1,7 +1,21 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync, cpSync, rmSync, readdirSync, statSync, lstatSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, cpSync, rmSync, readdirSync, statSync, lstatSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { homedir } from 'node:os';
 import { syncSharedResources, unlinkResource } from './shared-resources.js';
+
+const VALID_AGENTS = new Set([
+  'claude',
+  'codex',
+  'opencode',
+  'agy',
+  'pi',
+  'cursor',
+  'grok',
+  'gemini',
+  'devin',
+  'acp',
+  'ollama',
+]);
 
 export interface AccountRecord {
   name: string;
@@ -58,14 +72,13 @@ export function saveAccountsManifest(manifest: AccountsManifest, customBase?: st
   const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   writeFileSync(tmp, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
   try {
-    const { renameSync } = require('node:fs');
     renameSync(tmp, filePath);
-  } catch {
-    writeFileSync(filePath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  } catch (err: any) {
     try {
+      writeFileSync(filePath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
       rmSync(tmp, { force: true });
-    } catch {
-      /* ignore */
+    } catch (fallbackErr: any) {
+      throw new Error(`Failed to save accounts manifest to "${filePath}": ${fallbackErr.message || err.message}`);
     }
   }
 }
@@ -134,14 +147,23 @@ export function addAccount(
   if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
     throw new Error(`Invalid account name "${name}". Use alphanumeric characters, hyphens and underscores.`);
   }
-  const ag = agent.toLowerCase();
+  const ag = agent.toLowerCase().trim();
+  if (!VALID_AGENTS.has(ag)) {
+    throw new Error(`Invalid agent "${agent}". Expected one of: ${[...VALID_AGENTS].join(', ')}`);
+  }
   const manifest = loadAccountsManifest(options.baseDir);
   const existingList = manifest.accounts[ag] || [];
   if (existingList.some((a) => a.name.toLowerCase() === name.toLowerCase())) {
     throw new Error(`Account "${name}" already exists for agent "${ag}".`);
   }
 
-  const profileDir = getManagedProfileDir(ag, name, options.baseDir);
+  const baseProfiles = path.resolve(getBaseDir(options.baseDir), 'profiles');
+  const profileDir = path.resolve(getManagedProfileDir(ag, name, options.baseDir));
+  const rel = path.relative(baseProfiles, profileDir);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(`Profile directory "${profileDir}" escapes managed profiles base directory`);
+  }
+
   mkdirSync(profileDir, { recursive: true });
 
   if (options.copyCurrent) {
@@ -189,7 +211,10 @@ export function removeAccount(
   name: string,
   options: { deleteProfileDir?: boolean; baseDir?: string } = {}
 ): boolean {
-  const ag = agent.toLowerCase();
+  const ag = agent.toLowerCase().trim();
+  if (!VALID_AGENTS.has(ag)) {
+    throw new Error(`Invalid agent "${agent}". Expected one of: ${[...VALID_AGENTS].join(', ')}`);
+  }
   const manifest = loadAccountsManifest(options.baseDir);
   const existingList = manifest.accounts[ag] || [];
   const idx = existingList.findIndex((a) => a.name.toLowerCase() === name.toLowerCase());
@@ -209,6 +234,13 @@ export function removeAccount(
   saveAccountsManifest(manifest, options.baseDir);
 
   if (options.deleteProfileDir && removed.profileDir) {
+    const baseProfiles = path.resolve(getBaseDir(options.baseDir), 'profiles');
+    const targetDir = path.resolve(removed.profileDir);
+    const rel = path.relative(baseProfiles, targetDir);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new Error(`Refusing to delete profile directory "${targetDir}" outside managed profiles base`);
+    }
+
     // Drop shared-resource links first so the recursive delete can never reach the user's real skills/plugins.
     let safe = true;
     try {

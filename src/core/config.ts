@@ -22,12 +22,28 @@ export interface AgentBridgeConfig {
   [key: string]: any;
 }
 
+export function findProjectRoot(startDir: string = process.cwd()): string {
+  let cur = path.resolve(startDir);
+  while (true) {
+    if (existsSync(path.join(cur, '.agentbridge')) || existsSync(path.join(cur, '.git'))) {
+      return cur;
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) {
+      break;
+    }
+    cur = parent;
+  }
+  return path.resolve(startDir);
+}
+
 export function globalConfigFile(env: NodeJS.ProcessEnv = process.env): string {
   return path.join(home(env), 'config.json');
 }
 
 export function projectConfigFile(cwd: string = process.cwd()): string {
-  return path.join(path.resolve(cwd), '.agentbridge', 'config.json');
+  const root = findProjectRoot(cwd);
+  return path.join(root, '.agentbridge', 'config.json');
 }
 
 function readJsonFile(filePath: string): any {
@@ -49,12 +65,12 @@ function writeJsonFile(filePath: string, data: any): void {
   writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
   try {
     renameSync(tmp, filePath);
-  } catch {
+  } catch (err: any) {
     try {
       writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
       unlinkSync(tmp);
     } catch {
-      /* ignore cleanup fallback */
+      throw new AgentError('BAD_OPTION', `Failed to write configuration file "${filePath}": ${err.message}`);
     }
   }
 }

@@ -281,6 +281,14 @@ function responsesInput(body: any) {
 
 async function responses(req: any, res: any, opts: any) {
   const body = await readJson(req);
+  if (body.previous_response_id) {
+    throw new HttpError(
+      400,
+      '`previous_response_id` is not supported by the agentbridge proxy',
+      'invalid_request_error',
+      'unsupported_parameter'
+    );
+  }
   const choice = choiceFrom(body.tool_choice);
   const tools = choice.mode === 'none' ? [] : toolsFromResponses(body);
   if (choice.mode === 'tool' && !tools.some((t) => t.name === choice.name))

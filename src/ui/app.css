@@ -130,3 +130,12 @@ pre.blk { background: var(--surface-2); border: 1px solid var(--line); border-ra
   main { padding: 16px; } .top { padding: 10px 16px; }
   .bar-row { grid-template-columns: 90px 1fr auto; }
 }
+
+.table-empty { text-align: center; padding: 12px; }
+.diff-panel { margin-top: 16px; }
+.diff-panel[hidden] { display: none; }
+.diff-title { margin: 0; font-size: 13px; }
+.diff-actions { display: flex; gap: 8px; }
+.btn-rollback { background: var(--bad); color: #fff; border-color: var(--bad); }
+.diff-code { max-height: 360px; }
+.btn-compact { padding: 2px 8px; font-size: 12px; }

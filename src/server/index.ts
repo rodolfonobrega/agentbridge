@@ -7,7 +7,7 @@ import { HttpError, sendJson, listModels } from './common.js';
 import * as openai from './openai.js';
 import * as anthropic from './anthropic.js';
 import { createConfig, ConfigHolder, ProxyConfig } from './config.js';
-import { handleAgentRoutes, disposeAgentRuns } from './agent.js';
+import { handleAgentRoutes, disposeAgentRuns, createAgentStore, AgentStore } from './agent.js';
 import { createStats } from './stats.js';
 import { createPool, assertAccepted, TOS_WARNING, AccountPool } from './pool.js';
 
@@ -37,6 +37,8 @@ export interface ProxyOptions {
   adapters?: Record<string, any>;
   fallback?: any;
   timeoutMs?: number;
+  agentStore?: AgentStore;
+  sessionStore?: Map<string, { agent: string; id: string }>;
 }
 
 export interface RunningProxy {
@@ -76,12 +78,16 @@ export async function startProxy(o: ProxyOptions = {}): Promise<RunningProxy> {
     console.error(TOS_WARNING);
   }
   const stats = createStats({ logFile: o.logFile });
+  const agentStore = o.agentStore || createAgentStore();
+  const sessionStore = o.sessionStore || new Map<string, { agent: string; id: string }>();
   const opts = {
     timeoutMs: o.timeoutMs || 300000,
     stats,
     cfg,
     adapters: o.adapters,
     token: o.token,
+    agentStore,
+    sessionStore,
     ...(pool ? { pool } : {}),
     ...(o.fallback ? { fallback: o.fallback } : {}),
   };
@@ -122,7 +128,7 @@ export async function startProxy(o: ProxyOptions = {}): Promise<RunningProxy> {
         if (!o.token && !LOOPBACK.has(host)) throw new HttpError(403, 'admin needs a token', 'permission_error', 'admin_needs_token');
         return sendJson(res, 200, stats.summary());
       }
-      if (await handleAgentRoutes(req, res, url)) return;
+      if (await handleAgentRoutes(req, res, url, opts)) return;
       if (req.method === 'GET' && url === '/') return sendJson(res, 200, { ok: true, service: 'agentbridge-proxy' });
       if (await openai.handle(req, res, url, opts)) return;
       if (await anthropic.handle(req, res, url, opts)) return;
@@ -147,7 +153,7 @@ export async function startProxy(o: ProxyOptions = {}): Promise<RunningProxy> {
     close: () =>
       new Promise<void>((r) => {
         cfg.close();
-        disposeAgentRuns();
+        disposeAgentRuns(agentStore);
         server.close(() => r());
         (server as any).closeAllConnections?.();
       }),

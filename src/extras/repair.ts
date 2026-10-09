@@ -1,17 +1,16 @@
-// TDD Auto-Repair Loop for AgentBridge
 import { createCheckpoint, rollbackCheckpoint } from '../core/checkpoint.js';
 import { spawnProc } from '../core/spawn.js';
-import { agents } from '../index.js';
+import { agents, loadConfig } from '../index.js';
 import { AgentError } from '../core/errors.js';
 import type { AgentAdapter, RunOptions } from '../types/index.js';
 
 export interface RepairOptions {
   testCommand: string | string[];
-  agent: string | AgentAdapter;
+  agent?: string | AgentAdapter;
   prompt?: string;
   maxAttempts?: number; // default 3
   cwd?: string; // default process.cwd()
-  autoRollback?: boolean; // default true
+  autoRollback?: boolean; // default from config or true
   signal?: AbortSignal;
   model?: string;
   timeoutMs?: number;
@@ -190,13 +189,16 @@ export async function autoRepair(opts: RepairOptions): Promise<RepairResult> {
   if (!opts.testCommand) {
     throw new AgentError('BAD_OPTION', 'testCommand is required for autoRepair');
   }
-  if (!opts.agent) {
-    throw new AgentError('BAD_OPTION', 'agent is required for autoRepair');
-  }
 
   const cwd = opts.cwd || process.cwd();
+  const cfg = loadConfig(cwd);
+  const effectiveAgent = opts.agent || cfg.defaultAgent;
+  if (!effectiveAgent) {
+    throw new AgentError('BAD_OPTION', 'agent is required for autoRepair (no agent passed and no defaultAgent configured)');
+  }
+
   const maxAttempts = opts.maxAttempts ?? 3;
-  const autoRollback = opts.autoRollback ?? true;
+  const autoRollback = opts.autoRollback !== undefined ? opts.autoRollback : (cfg.autoRollback ?? true);
   const history: RepairAttempt[] = [];
 
   let initialCheckpoint: string | undefined;
@@ -259,7 +261,7 @@ export async function autoRepair(opts: RepairOptions): Promise<RepairResult> {
     let agentOutput = '';
     const agentT0 = Date.now();
     try {
-      agentOutput = await invokeAgent(opts.agent, {
+      agentOutput = await invokeAgent(effectiveAgent, {
         prompt: repairPrompt,
         cwd,
         permissions: 'edit',

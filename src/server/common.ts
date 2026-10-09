@@ -199,7 +199,17 @@ export interface RequestParams {
 
 export function readParams(body: any): RequestParams {
   const mt = body.max_completion_tokens ?? body.max_tokens ?? body.max_output_tokens;
-  const maxTokens = Number.isInteger(mt) && mt > 0 ? mt : undefined;
+  if (mt !== undefined && mt !== null) {
+    if (typeof mt !== 'number' || !Number.isInteger(mt) || mt <= 0) {
+      throw new HttpError(
+        400,
+        '`max_tokens` must be a positive integer',
+        'invalid_request_error',
+        'invalid_max_tokens'
+      );
+    }
+  }
+  const maxTokens = mt !== undefined && mt !== null ? mt : undefined;
   const st = body.stop ?? body.stop_sequences;
   const stop = (Array.isArray(st) ? st : st == null ? [] : [st])
     .filter((s) => typeof s === 'string' && s.length > 0)

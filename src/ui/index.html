@@ -101,19 +101,19 @@
           </tr>
         </thead>
         <tbody id="checkpoints-body">
-          <tr><td colspan="5" class="muted" style="text-align:center;padding:12px;">No checkpoints recorded yet.</td></tr>
+          <tr><td colspan="5" class="muted table-empty">No checkpoints recorded yet.</td></tr>
         </tbody>
       </table>
     </div>
-    <div id="diff-panel" style="margin-top:16px;display:none;">
+    <div id="diff-panel" class="diff-panel" hidden>
       <div class="card-h">
-        <h3 id="diff-title" style="margin:0;font-size:13px;">Diff with current workspace</h3>
-        <div style="display:flex;gap:8px;">
-          <button id="rollback-btn" class="btn" style="background:var(--bad);color:#fff;border-color:var(--bad);" type="button">Rollback to this state</button>
+        <h3 id="diff-title" class="diff-title">Diff with current workspace</h3>
+        <div class="diff-actions">
+          <button id="rollback-btn" class="btn btn-rollback" type="button">Rollback to this state</button>
           <button id="close-diff-btn" class="btn ghost" type="button">Close</button>
         </div>
       </div>
-      <pre id="diff-code" class="blk" style="max-height:360px;"></pre>
+      <pre id="diff-code" class="blk diff-code"></pre>
     </div>
   </section>
 

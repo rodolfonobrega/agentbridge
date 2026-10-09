@@ -21,22 +21,39 @@ export interface AgentRunRecord {
   busy?: number;
 }
 
-const runs = new Map<string, AgentRunRecord>();
-const bySession = new Map<string, string>();
+export interface AgentStore {
+  runs: Map<string, AgentRunRecord>;
+  bySession: Map<string, string>;
+}
+
+export function createAgentStore(): AgentStore {
+  return {
+    runs: new Map<string, AgentRunRecord>(),
+    bySession: new Map<string, string>(),
+  };
+}
+
+const defaultStore: AgentStore = createAgentStore();
+export const runs = defaultStore.runs;
+export const bySession = defaultStore.bySession;
+
+export function getStore(opts?: any): AgentStore {
+  return opts?.agentStore || defaultStore;
+}
 
 let sweeper: NodeJS.Timeout | undefined;
-function sweep() {
+function sweep(store: AgentStore = defaultStore) {
   const cut = Date.now() - TTL_MS;
-  for (const [id, r] of runs) {
-    if (r.last < cut && !r.busy) drop(id);
+  for (const [id, r] of store.runs) {
+    if (r.last < cut && !r.busy) drop(id, store);
   }
 }
-function drop(id: string) {
-  const r = runs.get(id);
+export function drop(id: string, store: AgentStore = defaultStore) {
+  const r = store.runs.get(id);
   if (!r) return;
-  runs.delete(id);
-  for (const [k, v] of bySession) {
-    if (v === id) bySession.delete(k);
+  store.runs.delete(id);
+  for (const [k, v] of store.bySession) {
+    if (v === id) store.bySession.delete(k);
   }
   try {
     r.sandbox.cleanup();
@@ -44,17 +61,20 @@ function drop(id: string) {
     /* best effort */
   }
 }
-function ensureSweeper() {
+function ensureSweeper(store: AgentStore = defaultStore) {
   if (!sweeper) {
-    sweeper = setInterval(sweep, 60_000);
+    sweeper = setInterval(() => sweep(store), 60_000);
     sweeper.unref();
   }
 }
 /** Remove every sandbox (server shutdown / tests). */
-export function disposeAgentRuns(): void {
-  for (const id of [...runs.keys()]) drop(id);
-  clearInterval(sweeper);
-  sweeper = undefined;
+export function disposeAgentRuns(store?: AgentStore): void {
+  const s = store || defaultStore;
+  for (const id of [...s.runs.keys()]) drop(id, s);
+  if (store === undefined || store === defaultStore) {
+    clearInterval(sweeper);
+    sweeper = undefined;
+  }
 }
 
 const real = (p: string) => {
@@ -133,9 +153,10 @@ export interface PreparedAgentRun {
 
 /** Sandbox for this request: reused for the same x-ab-session, else a fresh one. */
 export function prepareAgentRun(req: any, opts: any, sessionKey?: string): PreparedAgentRun {
-  ensureSweeper();
+  const store = getStore(opts);
+  ensureSweeper(store);
   const { origin, permissions } = agentSettings(req, opts);
-  let r = sessionKey ? runs.get(bySession.get(sessionKey)!) : undefined;
+  let r = sessionKey ? store.runs.get(store.bySession.get(sessionKey)!) : undefined;
   if (r && r.origin !== origin) {
     throw new HttpError(
       400,
@@ -164,8 +185,8 @@ export function prepareAgentRun(req: any, opts: any, sessionKey?: string): Prepa
       applied: false,
       busy: 0,
     };
-    runs.set(r.id, r);
-    if (sessionKey) bySession.set(sessionKey, r.id);
+    store.runs.set(r.id, r);
+    if (sessionKey) store.bySession.set(sessionKey, r.id);
   }
   r.last = Date.now();
   r.busy = (r.busy || 0) + 1;
@@ -222,9 +243,10 @@ const gitApply = (cwd: string, args: string[], input: string) =>
   });
 
 /** Routes: GET /agent/runs, GET /agent/runs/:id, GET .../diff, POST .../apply, DELETE /agent/runs/:id. */
-export async function handleAgentRoutes(req: any, res: any, url: string): Promise<boolean> {
+export async function handleAgentRoutes(req: any, res: any, url: string, opts?: any): Promise<boolean> {
   const m = /^\/agent\/runs(?:\/([A-Za-z0-9_]+)(?:\/(diff|apply))?)?$/.exec(url);
   if (!m) return false;
+  const store = getStore(opts);
   const [, id, action] = m;
   const meta = (r: AgentRunRecord) => ({
     runId: r.id,
@@ -235,10 +257,10 @@ export async function handleAgentRoutes(req: any, res: any, url: string): Promis
   });
   if (!id) {
     if (req.method !== 'GET') throw new HttpError(405, 'Use GET', 'invalid_request_error', 'method_not_allowed');
-    sendJson(res, 200, { runs: [...runs.values()].map(meta) });
+    sendJson(res, 200, { runs: [...store.runs.values()].map(meta) });
     return true;
   }
-  const r = runs.get(id);
+  const r = store.runs.get(id);
   if (!r) throw new HttpError(404, `Unknown or expired run ${id}`, 'invalid_request_error', 'run_not_found');
   r.last = Date.now();
   if (!action && req.method === 'GET') {
@@ -250,7 +272,7 @@ export async function handleAgentRoutes(req: any, res: any, url: string): Promis
     if (r.busy && r.busy > 0) {
       throw new HttpError(409, 'Cannot delete sandbox while agent run is active', 'invalid_request_error', 'sandbox_busy');
     }
-    drop(id);
+    drop(id, store);
     sendJson(res, 200, { deleted: id });
     return true;
   }

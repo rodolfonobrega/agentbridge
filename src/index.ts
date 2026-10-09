@@ -5,6 +5,7 @@ import { AgentAdapter, AgentEvent, FallbackTarget, RunOptions, RunResult } from 
 import { installIde } from './cli/install-ide.js';
 import { SubagentRoster } from './bridge/subagent-roster.js';
 import { resolvePermissionLevel } from './core/config.js';
+import { formatMemoryForPrompt } from './telemetry/memory.js';
 
 export { AgentError, asRateLimited, retryAfterMs, looksRateLimited, rateLimitKind } from './core/errors.js';
 export { ev } from './core/events.js';
@@ -18,6 +19,8 @@ export {
   getDefaultPermissions,
   getPermissionsCeiling,
   resolvePermissionLevel,
+  findProjectRoot,
+  projectConfigFile,
   PERMISSION_RANK,
   PERMISSION_LEVELS,
 } from './core/config.js';
@@ -137,6 +140,17 @@ export function validateOptions(opts: RunOptions): RunOptions {
   }
   const o: RunOptions = { ...opts };
   if (typeof o.prompt !== 'string' || !o.prompt.trim()) throw bad('prompt must be a non-empty string');
+  const memHeader = '[PROJECT CONVENTIONS & MEMORY';
+  if (!o.prompt.includes(memHeader)) {
+    try {
+      const memoryBlock = formatMemoryForPrompt(o.cwd);
+      if (memoryBlock) {
+        o.prompt = `${memoryBlock}\n\n${o.prompt}`;
+      }
+    } catch {
+      /* non-fatal if memory fails to load */
+    }
+  }
   for (const k of ['model', 'cwd', 'systemPrompt'] as const) {
     if (o[k] != null && typeof o[k] !== 'string') throw bad(`${k} must be a string`);
   }
@@ -468,6 +482,9 @@ export {
   type AccountRecord,
   type AccountsManifest,
 } from './core/accounts.js';
+
+// Proxy Server
+export { startProxy, type ProxyOptions, type RunningProxy } from './server/index.js';
 
 // Types
 export * from './types/index.js';

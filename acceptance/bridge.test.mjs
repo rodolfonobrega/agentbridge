@@ -39,8 +39,9 @@ test('large payload (3MB) + unicode + malformed line + batch', { timeout: 30000 
 });
 
 test('server runs from a path with spaces (Windows)', { timeout: 30000 }, async () => {
-  const d = path.join(tmp(), 'dir with spaces'); cpSync(fileURLToPath(new URL('../src', import.meta.url)), path.join(d, 'src'), { recursive: true });
-  const c = rpc({}, { script: path.join(d, 'src', 'bridge', 'mcp.mjs') });
+  const d = path.join(tmp(), 'dir with spaces');
+  cpSync(fileURLToPath(new URL('../dist', import.meta.url)), path.join(d, 'dist'), { recursive: true });
+  const c = rpc({}, { script: path.join(d, 'dist', 'bridge', 'mcp.js') });
   try { await init(c); assert.ok((await c.call('tools/list', {})).result.tools.length >= 10); } finally { c.close(); }
 });
 

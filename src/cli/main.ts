@@ -17,6 +17,7 @@ import {
   fanout,
   race,
   doctor,
+  loadConfig,
 } from '../index.js';
 import { runBudgeted, Budget } from '../extras/budget.js';
 import { runInWorktree, withWorktree } from '../extras/worktree.js';
@@ -108,10 +109,21 @@ function fail(e: any, json?: boolean) {
 // ---------- commands ----------
 
 async function cmdRun(_: string[], flags: Record<string, any>, { askOnly = false }: { askOnly?: boolean } = {}) {
-  const agent = _[0];
-  if (!agent) throw new UsageError('usage: ab run <agent> [prompt|-] [flags]');
+  const cfg = loadConfig(flags.cwd || process.cwd());
+  let agent = _[0];
+  let promptArgs = _;
+  if (!agent) {
+    if (cfg.defaultAgent && AGENT_NAMES.has(cfg.defaultAgent)) {
+      agent = cfg.defaultAgent;
+    } else {
+      throw new UsageError('usage: ab run <agent> [prompt|-] [flags]');
+    }
+  } else if (!AGENT_NAMES.has(agent) && cfg.defaultAgent && AGENT_NAMES.has(cfg.defaultAgent)) {
+    agent = cfg.defaultAgent;
+    promptArgs = [agent, ..._];
+  }
   checkAgent(agent);
-  const prompt = await promptFrom(_, flags);
+  const prompt = await promptFrom(promptArgs, flags);
   let opts = baseOpts(flags, prompt);
   const { getAccountEnv } = await import('../core/accounts.js');
   const accEnv = getAccountEnv(agent, flags.account);

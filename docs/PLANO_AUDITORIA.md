@@ -65,18 +65,18 @@ Snapshot base: `cf50a72`
   - [x] `A62` — Retomada de sessões usando o perfil e ambiente correto
   - [x] `A65` — Continuidade de sessões de fallback no agente efetivo no proxy
 
-- [ ] **Fase 6: Armazenamento, Configuração, Memória & UI Dashboard (P2/P3)**
-  - [ ] `A25` — Gravação atômica com substituição via renameSync em config, contas e memória
-  - [ ] `A26` — Consistência de backend na leitura e escrita de memória em fallback
-  - [ ] `A27` — Resolução de configuração e memória buscando até a raiz do repositório Git
-  - [ ] `A28` — Conexão ou remoção de opções inertes de configuração (defaultAgent, autoRollback)
-  - [ ] `A33` — Validação estrita de caminhos contra path traversal em addAccount e removeAccount
-  - [ ] `A34` — Inclusão do token de autenticação nas chamadas de checkpoint no dashboard
-  - [ ] `A35` — Eliminação de atributos style estáticos no dashboard atendendo à CSP
-  - [ ] `A40` — Isolamento de instâncias de proxy prevenindo compartilhamento de estado global
-  - [ ] `A54` — Injeção automática de regras de memória no prompt dos executores
-  - [ ] `A66` — Rejeição explícita de previous_response_id não suportado no responses
-  - [ ] `A67` — Validação estrita de max_tokens com erro 400 em valores inválidos
+- [x] **Fase 6: Armazenamento, Configuração, Memória & UI Dashboard (P2/P3)**
+  - [x] `A25` — Gravação atômica com substituição via renameSync em config, contas e memória
+  - [x] `A26` — Consistência de backend na leitura e escrita de memória em fallback
+  - [x] `A27` — Resolução de configuração e memória buscando até a raiz do repositório Git
+  - [x] `A28` — Conexão ou remoção de opções inertes de configuração (defaultAgent, autoRollback)
+  - [x] `A33` — Validação estrita de caminhos contra path traversal em addAccount e removeAccount
+  - [x] `A34` — Inclusão do token de autenticação nas chamadas de checkpoint no dashboard
+  - [x] `A35` — Eliminação de atributos style estáticos no dashboard atendendo à CSP
+  - [x] `A40` — Isolamento de instâncias de proxy prevenindo compartilhamento de estado global
+  - [x] `A54` — Injeção automática de regras de memória no prompt dos executores
+  - [x] `A66` — Rejeição explícita de previous_response_id não suportado no responses
+  - [x] `A67` — Validação estrita de max_tokens com erro 400 em valores inválidos
 
 - [ ] **Fase 7: Tooling, Installers, Release & Contratos (P2/P3)**
   - [ ] `A19` — Validação estrita de SemVer e chamada segura com argumentos no release.mjs
@@ -99,9 +99,10 @@ Snapshot base: `cf50a72`
 - 2026-10-09: Auditoria lida, classificada e plano inicial estruturado.
 - 2026-10-09: Fase 1 (Segurança Central & Sandboxes) concluída (A01, A02, A10, A11, A12, A13, A14, A15, A16, A17, A57). Testes de aceitação `security-phase1.test.mjs`, `checkpoint.test.mjs`, `ui-checkpoints.test.mjs` e `config-permissions.test.mjs` 100% passando.
 - 2026-10-09: Fase 2 (Concorrência e Estabilidade do Codex App-Server) concluída (A03, A04, A05, A58, A59, A68). Testes de aceitação `codex-phase2.test.mjs` e `codex-appserver.test.mjs` 100% passando. Commit `8ed3d4b` enviado ao GitHub.
-- 2026-10-09: Fase 3 (Isolamento de Worktrees, Sandboxes e Execuções CLI) concluída (A07, A08, A09, A38, A39, A60). Testes de aceitação `phase3-isolation.test.mjs` 100% passando (6/6). Untracked files sincronizados no baseline de worktree, confinamento estrito de agentRoot em patches e headers, isolamento de índice git em diff concorrente, preservação de tail em circular buffer no autoRepair, suporte completo a worktree e budget no modo `--stream` e propagação de `.return()` nos geradores.
-- 2026-10-09: Fase 4 (Adaptadores, Roster, MCP Bridge & Pipelines) concluída (A06, A31, A36, A37, A43, A44, A61, A63, A64, A69, A70, A72). Testes de aceitação `phase4-adapters-roster.test.mjs` 100% passando (10/10). Validação estrita de opções e rejeição de incompatibilidades em adaptadores (cursor, gemini, devin, grok, acp), checagem explícita de timeout/abort em child processes, integridade total de status e autoRollback em pipelines, consenso sem vencedor arbitrário em empate e prioridade estrita de rejeição, normalização de prefixos MCP completos no SubagentRoster e schema validator imune a prototype pollution e ciclos.
-- 2026-10-09: Fase 5 (Telemetria, Quotas, Contexto & Contas) concluída (A18, A20, A21, A22, A23, A24, A29, A30, A41, A42, A62, A65). Testes de aceitação `phase5-telemetry-quota.test.mjs` 100% passando (10/10). Suspensão de políticas reentrantes em handoff/compact via MAINTENANCE_POLICY, preservação da janela de contexto real sem inflação artificial para 1M, continuidade e atribuição de sessões pós-fallback ao effectiveAgent, resolução de perfis gerenciados via env, caching e limites em inspeção de contexto, paginação e retenção em histórico/sessões, suporte a verificação de quotas primárias e secundárias com flags de erro reais e rotação proativa no pool de contas.
+- 2026-10-09: Fase 3 (Isolamento de Worktrees, Sandboxes e Execuções CLI) concluída (A07, A08, A09, A38, A39, A60). Testes de aceitação `phase3-isolation.test.mjs` 100% passando (6/6). Untracked files sincronizados no baseline de worktree, confinamento estrito de agentRoot em patches e headers, isolamento de índice git em diff concorrente, preservação de tail em circular buffer no autoRepair, suporte completo a worktree e budget no modo `--stream` e propagação de `.return()` nos geradores. Commit `b90c58a` enviado ao GitHub.
+- 2026-10-09: Fase 4 (Adaptadores, Roster, MCP Bridge & Pipelines) concluída (A06, A31, A36, A37, A43, A44, A61, A63, A64, A69, A70, A72). Testes de aceitação `phase4-adapters-roster.test.mjs` 100% passando (10/10). Validação estrita de opções e rejeição de incompatibilidades em adaptadores (cursor, gemini, devin, grok, acp), checagem explícita de timeout/abort em child processes, integridade total de status e autoRollback em pipelines, consenso sem vencedor arbitrário em empate e prioridade estrita de rejeição, normalização de prefixos MCP completos no SubagentRoster e schema validator imune a prototype pollution e ciclos. Commit `e39ccb1` enviado ao GitHub.
+- 2026-10-09: Fase 5 (Telemetria, Quotas, Contexto & Contas) concluída (A18, A20, A21, A22, A23, A24, A29, A30, A41, A42, A62, A65). Testes de aceitação `phase5-telemetry-quota.test.mjs` 100% passando (10/10). Suspensão de políticas reentrantes em handoff/compact via MAINTENANCE_POLICY, preservação da janela de contexto real sem inflação artificial para 1M, continuidade e atribuição de sessões pós-fallback ao effectiveAgent, resolução de perfis gerenciados via env, caching e limites em inspeção de contexto, paginação e retenção em histórico/sessões, suporte a verificação de quotas primárias e secundárias com flags de erro reais e rotação proativa no pool de contas. Commit `accf2df` enviado ao GitHub.
+- 2026-10-09: Fase 6 (Armazenamento, Configuração, Memória & UI Dashboard) concluída (A25, A26, A27, A28, A33, A34, A35, A40, A54, A66, A67). Testes de aceitação `phase6-storage-memory-ui.test.mjs` 100% passando (10/10) e suíte consolidada de 43 testes passando. Descoberta de configuração e memória via findProjectRoot subindo diretórios até .git/.agentbridge, persistência atômica com propagação de erro explícita em config, contas e memória, arbitragem de versão mais recente de memória entre local e fallback via timestamp, injeção automática de regras de memória no prompt de execução, validação canônica de diretórios de contas contra path traversal, eliminação de atributos style inline no dashboard atendendo a CSP, inclusão obrigatória de bearer token nas rotas de checkpoint do Time Machine, isolamento completo de AgentStore e sessões entre instâncias concorrentes de proxy server, e rejeição estrita (400) de previous_response_id e max_tokens inválido.
 
 
 

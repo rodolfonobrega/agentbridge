@@ -2,11 +2,12 @@
 // Persists repository rules, architectural decisions, and variables
 // to <cwd>/.agentbridge/memory.json with fallback to ~/.agentbridge/memory/<repoHash>.json.
 
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, renameSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { home } from '../bridge/runs.js';
 import { UsageError } from '../cli/args.js';
+import { findProjectRoot } from '../core/config.js';
 
 export interface MemoryDecision {
   topic: string;
@@ -28,37 +29,64 @@ export function getRepoHash(repoPath: string): string {
 }
 
 export function getMemoryFilePath(cwd?: string): string {
-  const repoPath = path.resolve(cwd || process.cwd());
+  const repoPath = findProjectRoot(cwd || process.cwd());
   return path.join(repoPath, '.agentbridge', 'memory.json');
 }
 
 export function getFallbackMemoryFilePath(cwd?: string): string {
-  const repoPath = path.resolve(cwd || process.cwd());
+  const repoPath = findProjectRoot(cwd || process.cwd());
   const hash = getRepoHash(repoPath);
   return path.join(home(), 'memory', `${hash}.json`);
 }
 
+function writeAtomicJson(filePath: string, obj: any): void {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+  try {
+    renameSync(tmp, filePath);
+  } catch (err: any) {
+    try {
+      writeFileSync(filePath, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+      unlinkSync(tmp);
+    } catch (fallbackErr: any) {
+      try { unlinkSync(tmp); } catch {}
+      throw new Error(`Failed to write atomic file "${filePath}": ${fallbackErr.message || err.message}`);
+    }
+  }
+}
+
 export function loadMemory(cwd?: string): ProjectMemory {
-  const repoPath = path.resolve(cwd || process.cwd());
+  const repoPath = findProjectRoot(cwd || process.cwd());
   const localFile = getMemoryFilePath(repoPath);
   const fallbackFile = getFallbackMemoryFilePath(repoPath);
 
-  let data: any = null;
+  let localData: any = null;
+  let fallbackData: any = null;
 
   if (existsSync(localFile)) {
     try {
-      data = JSON.parse(readFileSync(localFile, 'utf8'));
+      localData = JSON.parse(readFileSync(localFile, 'utf8'));
     } catch {
       // Local file corrupted or unreadable; attempt fallback
     }
   }
 
-  if (!data && existsSync(fallbackFile)) {
+  if (existsSync(fallbackFile)) {
     try {
-      data = JSON.parse(readFileSync(fallbackFile, 'utf8'));
+      fallbackData = JSON.parse(readFileSync(fallbackFile, 'utf8'));
     } catch {
-      // ignore
+      // Fallback file corrupted or unreadable
     }
+  }
+
+  let data: any = null;
+  if (localData && fallbackData) {
+    const localTime = typeof localData.updatedAt === 'number' ? localData.updatedAt : 0;
+    const fallbackTime = typeof fallbackData.updatedAt === 'number' ? fallbackData.updatedAt : 0;
+    data = fallbackTime > localTime ? fallbackData : localData;
+  } else {
+    data = localData || fallbackData;
   }
 
   if (!data || typeof data !== 'object') {
@@ -81,7 +109,7 @@ export function loadMemory(cwd?: string): ProjectMemory {
 }
 
 export function saveMemory(mem: ProjectMemory, cwd?: string): void {
-  const repoPath = path.resolve(cwd || mem.repoPath || process.cwd());
+  const repoPath = findProjectRoot(cwd || mem.repoPath || process.cwd());
   mem.repoPath = repoPath;
   mem.updatedAt = Date.now();
 
@@ -89,18 +117,19 @@ export function saveMemory(mem: ProjectMemory, cwd?: string): void {
   const fallbackFile = getFallbackMemoryFilePath(repoPath);
 
   if (process.env.AGENTBRIDGE_MEMORY_FALLBACK === '1') {
-    mkdirSync(path.dirname(fallbackFile), { recursive: true });
-    writeFileSync(fallbackFile, JSON.stringify(mem, null, 2), 'utf8');
+    writeAtomicJson(fallbackFile, mem);
     return;
   }
 
   try {
-    mkdirSync(path.dirname(localFile), { recursive: true });
-    writeFileSync(localFile, JSON.stringify(mem, null, 2), 'utf8');
-  } catch {
+    writeAtomicJson(localFile, mem);
+  } catch (localErr: any) {
     // If writing to local repository fails, fallback to ~/.agentbridge/memory/<repoHash>.json
-    mkdirSync(path.dirname(fallbackFile), { recursive: true });
-    writeFileSync(fallbackFile, JSON.stringify(mem, null, 2), 'utf8');
+    try {
+      writeAtomicJson(fallbackFile, mem);
+    } catch (fallbackErr: any) {
+      throw new Error(`Failed to persist memory both locally ("${localFile}") and in fallback ("${fallbackFile}"): ${fallbackErr.message}`);
+    }
   }
 }
 

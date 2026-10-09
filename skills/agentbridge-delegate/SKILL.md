@@ -287,5 +287,24 @@ If you have shell execution access, you can run high-level orchestration workflo
 - **Multi-Window Proactive Quota & Account Health:**
   `ab account quota` inspects both primary windows (5h/session) and secondary windows (7d/weekly for Codex and Claude). Accounts reaching >= 95% on weekly allocations are flagged as throttled (`blockingWindow: 'secondary'`) and placed into cooldown within account pools. Network errors or missing tokens are clearly reported as `error` or `unknown`, never falsified as 0% used.
 
+## Storage, Memory & UI Security Guarantees (Phase 6 Hardening)
+
+- **Root-Walking Discovery (`findProjectRoot`):**
+  A resolução de arquivos de configuração (`.agentbridge/config.json`) e memória de projeto (`.agentbridge/memory.json`) escala recursivamente pela árvore de diretórios até encontrar a raiz do repositório Git ou a pasta `.agentbridge`, permitindo que agentes executando em monorepos ou subpastas compartilhem as mesmas regras e configurações centrais.
+- **Atomic File Writing & Explicit Failure Propagation:**
+  Todas as mutações de arquivos de configuração, manifestos de contas (`accounts.json`) e memórias de projeto utilizam gravações atômicas em arquivos temporários com substituição atômica via `renameSync`. Falhas de I/O em disco cheio ou permissão negada propagam erros claros sem engolir exceções em blocos `catch` vazios.
+- **Cross-Source Memory Consistency:**
+  `loadMemory` avalia `updatedAt` entre o armazenamento local (`.agentbridge/memory.json`) e o armazenamento de fallback global (`~/.agentbridge/memory/<repoHash>.json`), garantindo que o agente sempre opere sobre o estado mais recente mesmo após chaveamento de fallback.
+- **Auto-Injection of Project Memory:**
+  Qualquer execução (`ab run`, `runTracked`, `ask`) injeta automaticamente o bloco `[PROJECT CONVENTIONS & MEMORY - PRESERVE THESE RULES]` no prompt quando o projeto possui regras ou decisões persistidas, sem necessidade de injeção manual.
+- **Account Directory Path Traversal Prevention:**
+  `ab account add` e `ab account remove` validam nomes de agentes contra listas conhecidas e verificam canonicamente que o diretório de perfil reside estritamente dentro da raiz de perfis gerenciados (`.agentbridge/profiles`), prevenindo deleções ou criações arbitrárias fora da sandbox.
+- **Dashboard UI CSP & Authentication Compliance:**
+  O Time Machine do painel visual (`ab ui`) elimina todos os atributos inline `style="..."` em favor de classes CSS estáticas compatíveis com Content Security Policy estrita, e todas as chamadas de API (`/api/checkpoints`, `/api/checkpoints/:id/diff`, `/api/checkpoints/:id/rollback`) transmitem o token de autorização `Bearer <token>`.
+- **Strict Token & Request Validation (Proxy API):**
+  Endpoints compatíveis com OpenAI e Anthropic rejeitam rigorosamente parâmetros inválidos ou incompatíveis com `400 Bad Request`, incluindo `max_tokens <= 0` ou não-inteiro, e a flag não suportada `previous_response_id`.
+- **Isolated Proxy Server Stores:**
+  Múltiplas instâncias de proxy programáticas mantêm seus próprios `AgentStore` e `sessionStore` isolados, eliminando vazamento de sessões ou sandboxes ativas entre instâncias concorrentes.
+
 
 

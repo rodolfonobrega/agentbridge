@@ -2,7 +2,15 @@
 // agentbridge dashboard. All dynamic text goes through textContent (never innerHTML), so prompts/outputs cannot inject markup.
 const $ = (s, r = document) => r.querySelector(s);
 const TOKEN = new URLSearchParams(location.search).get('token');
-const api = (u) => fetch(u, { cache: 'no-store', headers: TOKEN ? { authorization: 'Bearer ' + TOKEN } : {} });
+const api = (u, opts = {}) =>
+  fetch(u, {
+    cache: 'no-store',
+    ...opts,
+    headers: {
+      ...(opts.headers || {}),
+      ...(TOKEN ? { authorization: 'Bearer ' + TOKEN } : {}),
+    },
+  });
 const SVG = 'http://www.w3.org/2000/svg';
 const state = { since: 86400000, agent: '', status: '', metric: 'runs', paused: false, data: null, openRun: null, timer: null, fails: 0 };
 try { const s = JSON.parse(localStorage.getItem('ab-ui') || '{}'); if (s.since) state.since = s.since; if (s.theme) document.documentElement.dataset.theme = s.theme; } catch { /* storage may be unavailable */ }
@@ -267,16 +275,16 @@ let activeCheckpointId = null;
 
 async function loadCheckpoints() {
   try {
-    const res = await fetch('/api/checkpoints');
+    const res = await api('/api/checkpoints');
     if (!res.ok) return;
     const { checkpoints } = await res.json();
     const tbody = clear($('#checkpoints-body'));
     if (!checkpoints || checkpoints.length === 0) {
-      tbody.append(h('tr', null, h('td', { colspan: '5', class: 'muted', style: 'text-align:center;padding:12px;', text: 'No checkpoints recorded yet.' })));
+      tbody.append(h('tr', null, h('td', { colspan: '5', class: 'muted table-empty', text: 'No checkpoints recorded yet.' })));
       return;
     }
     for (const cp of checkpoints) {
-      const btn = h('button', { class: 'btn ghost view-diff-btn', type: 'button', style: 'padding:2px 8px;font-size:12px;', text: 'Diff' });
+      const btn = h('button', { class: 'btn ghost view-diff-btn btn-compact', type: 'button', text: 'Diff' });
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         viewDiff(cp.id);
@@ -301,9 +309,9 @@ async function viewDiff(id) {
   const title = $('#diff-title');
   title.textContent = `Diff with snapshot: ${id}`;
   code.textContent = 'Loading diff...';
-  panel.style.display = 'block';
+  panel.hidden = false;
   try {
-    const res = await fetch(`/api/checkpoints/${encodeURIComponent(id)}/diff`);
+    const res = await api(`/api/checkpoints/${encodeURIComponent(id)}/diff`);
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     code.textContent = data.diff || '(No changes between workspace and this checkpoint)';
@@ -316,10 +324,10 @@ $('#rollback-btn')?.addEventListener('click', async () => {
   if (!activeCheckpointId) return;
   if (!confirm(`Are you sure you want to rollback working directory to snapshot ${activeCheckpointId}? Any uncommitted changes will be replaced.`)) return;
   try {
-    const res = await fetch(`/api/checkpoints/${encodeURIComponent(activeCheckpointId)}/rollback`, { method: 'POST' });
+    const res = await api(`/api/checkpoints/${encodeURIComponent(activeCheckpointId)}/rollback`, { method: 'POST' });
     if (!res.ok) throw new Error(await res.text());
     alert(`Successfully rolled back to snapshot ${activeCheckpointId}`);
-    $('#diff-panel').style.display = 'none';
+    $('#diff-panel').hidden = true;
     loadCheckpoints();
   } catch (e) {
     alert(`Rollback failed: ${e.message}`);
@@ -327,7 +335,8 @@ $('#rollback-btn')?.addEventListener('click', async () => {
 });
 
 $('#close-diff-btn')?.addEventListener('click', () => {
-  $('#diff-panel').style.display = 'none';
+  const panel = $('#diff-panel');
+  if (panel) panel.hidden = true;
   activeCheckpointId = null;
 });
 
