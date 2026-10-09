@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildExecutionWaves, interpolatePrompt, runPipeline } from '../dist/extras/pipeline.js';
+import { parseArgs } from '../dist/cli/args.js';
 import { AgentError } from '../dist/core/errors.js';
 
 test('buildExecutionWaves resolves linear and diamond DAG dependencies', () => {
@@ -52,4 +53,15 @@ test('interpolatePrompt replaces step output tokens', () => {
   const resolved = interpolatePrompt(rawPrompt, stepResults);
 
   assert.equal(resolved, 'Generate tests for spec: UserRESTApi with types: interface User {}');
+});
+
+test('parseArgs treats pipeline boolean flags as booleans (bare true, =false false)', () => {
+  assert.equal(parseArgs(['p.json', '--auto-rollback']).flags['auto-rollback'], true);
+  const neg = parseArgs(['p.json', '--auto-rollback=false']).flags['auto-rollback'];
+  assert.equal(neg, false);
+  assert.equal(typeof neg, 'boolean', 'must be boolean false, not the string "false"');
+  assert.equal(parseArgs(['p.json', '--auto-rollback=true']).flags['auto-rollback'], true);
+  // bare at the end of argv must not throw "needs a value"
+  assert.doesNotThrow(() => parseArgs(['p.json', '--auto-rollback']));
+  assert.equal(parseArgs(['--checkpoint-each']).flags['checkpoint-each'], true);
 });

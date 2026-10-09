@@ -22,6 +22,14 @@ export const BOOL = new Set([
   'wizard',
   'global',
   'project',
+  'auto-rollback',
+  'checkpoint-each',
+  'strict',
+  'purge',
+  'copy-current',
+  'login',
+  'no-share',
+  'accept-tos-risk',
 ]);
 const SHORT: Record<string, string> = {
   m: 'model',
