@@ -13,6 +13,8 @@ export interface AgentRunRecord {
   id: string;
   sandbox: Sandbox;
   origin: string;
+  agentRoot?: string;
+  permissions?: string;
   created: number;
   last: number;
   applied: boolean;
@@ -149,7 +151,19 @@ export function prepareAgentRun(req: any, opts: any, sessionKey?: string): Prepa
     } catch (e: any) {
       throw new HttpError(500, `Cannot create the sandbox: ${e.message}`, 'api_error', 'sandbox_failed');
     }
-    r = { id: rid('run_'), sandbox, origin, created: Date.now(), last: Date.now(), applied: false };
+    const c = opts?.cfg?.get?.() || {};
+    const agentRoot = real(c.agentRoot) || origin;
+    r = {
+      id: rid('run_'),
+      sandbox,
+      origin,
+      agentRoot,
+      permissions,
+      created: Date.now(),
+      last: Date.now(),
+      applied: false,
+      busy: 0,
+    };
     runs.set(r.id, r);
     if (sessionKey) bySession.set(sessionKey, r.id);
   }
@@ -165,7 +179,7 @@ export function finishAgentRun(ctx: PreparedAgentRun): any {
   r.last = Date.now();
   let d = { diff: '', files: [] as string[] };
   try {
-    d = r.sandbox.diff();
+    d = r.sandbox.diff(Boolean(r.busy));
   } catch {
     /* sandbox gone */
   }
@@ -228,27 +242,55 @@ export async function handleAgentRoutes(req: any, res: any, url: string): Promis
   if (!r) throw new HttpError(404, `Unknown or expired run ${id}`, 'invalid_request_error', 'run_not_found');
   r.last = Date.now();
   if (!action && req.method === 'GET') {
-    const d = r.sandbox.diff();
+    const d = r.sandbox.diff(Boolean(r.busy));
     sendJson(res, 200, { ...meta(r), filesChanged: d.files });
     return true;
   }
   if (!action && req.method === 'DELETE') {
+    if (r.busy && r.busy > 0) {
+      throw new HttpError(409, 'Cannot delete sandbox while agent run is active', 'invalid_request_error', 'sandbox_busy');
+    }
     drop(id);
     sendJson(res, 200, { deleted: id });
     return true;
   }
   if (action === 'diff' && req.method === 'GET') {
-    const d = r.sandbox.diff();
+    const d = r.sandbox.diff(Boolean(r.busy));
     res.writeHead(200, { 'content-type': 'text/x-diff; charset=utf-8' });
     res.end(d.diff);
     return true;
   }
   if (action === 'apply' && req.method === 'POST') {
-    if (r.busy) throw new HttpError(409, 'The agent is still running in this sandbox', 'invalid_request_error', 'run_busy');
+    if (r.busy && r.busy > 0) throw new HttpError(409, 'The agent is still running in this sandbox', 'invalid_request_error', 'run_busy');
     const d = r.sandbox.diff();
     if (!d.diff.trim()) {
       sendJson(res, 200, { runId: id, applied: false, filesChanged: [], reason: 'no changes' });
       return true;
+    }
+    const effectiveRoot = r.agentRoot || r.origin;
+    for (const f of d.files) {
+      const full = path.resolve(r.origin, f);
+      if (!inside(effectiveRoot, full) || !inside(r.origin, full)) {
+        throw new HttpError(
+          403,
+          `Refusing to apply patch: modified file "${f}" is outside authorized agent root`,
+          'permission_error',
+          'diff_outside_agent_root'
+        );
+      }
+    }
+    for (const line of d.diff.split('\n')) {
+      if (line.startsWith('--- a/') || line.startsWith('+++ b/')) {
+        const p = line.slice(6).trim();
+        if (p.includes('..') || path.isAbsolute(p)) {
+          throw new HttpError(
+            403,
+            `Refusing to apply patch: path traversal detected in patch header "${p}"`,
+            'permission_error',
+            'diff_path_traversal'
+          );
+        }
+      }
     }
     const cwd = topOf(r.origin) || r.origin;
     try {

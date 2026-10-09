@@ -64,14 +64,18 @@ export async function* runWithTelemetry(
     result: any;
   try {
     const it = run(agent, o);
-    for (;;) {
-      const { value, done } = await it.next();
-      if (done) {
-        result = value;
-        break;
+    try {
+      for (;;) {
+        const { value, done } = await it.next();
+        if (done) {
+          result = value;
+          break;
+        }
+        tr.onEvent(value);
+        yield value;
       }
-      tr.onEvent(value);
-      yield value;
+    } finally {
+      await (it as any).return?.();
     }
     const rec = tr.finish({ result });
     finished = true;
@@ -143,15 +147,19 @@ export async function* runTracked(
   let finished = false;
   try {
     const it = run(agent, opts);
-    for (;;) {
-      const { value, done } = await it.next();
-      if (done) {
-        tr.finish({ result: value });
-        finished = true;
-        return value;
+    try {
+      for (;;) {
+        const { value, done } = await it.next();
+        if (done) {
+          tr.finish({ result: value });
+          finished = true;
+          return value;
+        }
+        tr.onEvent(value);
+        yield value;
       }
-      tr.onEvent(value);
-      yield value;
+    } finally {
+      await (it as any).return?.();
     }
   } catch (e) {
     if (!finished) {

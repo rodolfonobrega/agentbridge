@@ -86,12 +86,27 @@ async function runTestCommand(
 
   try {
     const handle = spawnProc(cmd, args, { cwd, signal, timeoutMs });
-    const outLines: string[] = [];
+    const MAX_LINES = 1000;
+    const MAX_TOTAL_BYTES = 128 * 1024;
+    const ringBuffer: string[] = [];
+    let totalLinesSeen = 0;
+    let bufferedBytes = 0;
+
     for await (const line of handle.lines) {
-      outLines.push(line);
+      totalLinesSeen++;
+      bufferedBytes += line.length + 1;
+      ringBuffer.push(line);
+      while (ringBuffer.length > MAX_LINES || (bufferedBytes > MAX_TOTAL_BYTES && ringBuffer.length > 10)) {
+        const removed = ringBuffer.shift();
+        if (removed) bufferedBytes -= (removed.length + 1);
+      }
     }
     const waitRes = await handle.wait();
-    const stdout = outLines.join('\n');
+    if (totalLinesSeen > ringBuffer.length) {
+      const omitted = totalLinesSeen - ringBuffer.length;
+      ringBuffer.unshift(`[... ${omitted} early lines truncated to preserve memory ...]`);
+    }
+    const stdout = ringBuffer.join('\n');
     const stderr = waitRes.stderr || '';
     const passed = waitRes.exitCode === 0;
     return {

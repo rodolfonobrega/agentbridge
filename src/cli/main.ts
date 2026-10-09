@@ -18,8 +18,8 @@ import {
   race,
   doctor,
 } from '../index.js';
-import { runBudgeted } from '../extras/budget.js';
-import { runInWorktree } from '../extras/worktree.js';
+import { runBudgeted, Budget } from '../extras/budget.js';
+import { runInWorktree, withWorktree } from '../extras/worktree.js';
 import { listRuns, loadRun, summarize, cancelRun, sweep, RunSummary } from '../bridge/runs.js';
 import { listSessions } from '../telemetry/stats.js';
 import { AgentEvent, RunOptions, RunResult, FallbackErrorCode } from '../types/index.js';
@@ -125,11 +125,50 @@ async function cmdRun(_: string[], flags: Record<string, any>, { askOnly = false
 
   if (flags.stream && !askOnly) {
     let sawEvent = false;
-    for await (const e of cliGen(agent, opts)) {
-      sawEvent = true;
-      printEvent(e, flags.json);
+    const ownBudget = !(b instanceof Budget);
+    const budgetObj = ownBudget ? new Budget(b) : b;
+    const effectiveSignal = opts.signal
+      ? (AbortSignal as any).any([opts.signal, budgetObj.signal])
+      : budgetObj.signal;
+    const runOpts = { ...opts, signal: effectiveSignal };
+
+    const runStreamingTarget = async (targetCwd: string) => {
+      const it = cliGen(agent, { ...runOpts, cwd: targetCwd });
+      try {
+        for await (const e of it) {
+          sawEvent = true;
+          budgetObj.track('cli', e);
+          printEvent(e, flags.json);
+          if (budgetObj.exceeded) {
+            break;
+          }
+        }
+      } finally {
+        await (it as any).return?.();
+      }
+    };
+
+    let wtResult: any = null;
+    try {
+      if (useWorktree) {
+        wtResult = await withWorktree(opts.cwd || process.cwd(), async (sbCwd) => {
+          await runStreamingTarget(sbCwd);
+        });
+      } else {
+        await runStreamingTarget(opts.cwd || process.cwd());
+      }
+    } finally {
+      if (ownBudget) budgetObj.dispose();
     }
-    if (!sawEvent) throw new Error('adapter produced no events');
+
+    if (!sawEvent && !budgetObj.exceeded) throw new Error('adapter produced no events');
+    if (budgetObj.exceeded) {
+      err(`[budget exceeded: ${budgetObj.exceeded}]`);
+    }
+    if (wtResult) {
+      err(`[worktree: ${wtResult.mode}, ${wtResult.files.length} file(s) changed]`);
+      if (wtResult.diff) out(wtResult.diff);
+    }
     return;
   }
   const r: any = await exec(agent, opts);

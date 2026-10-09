@@ -35,8 +35,9 @@ export interface Sandbox {
   dir: string;
   root: string;
   cwd: string;
+  sub: string;
   cleanup: () => void;
-  diff: () => { diff: string; files: string[] };
+  diff: (isolatedIndex?: boolean) => { diff: string; files: string[] };
 }
 
 export function createSandbox(cwd = process.cwd()): Sandbox {
@@ -59,8 +60,28 @@ export function createSandbox(cwd = process.cwd()): Sandbox {
       try {
         git(wt, ['apply', '--whitespace=nowarn', '-'], { input: patch });
         dirty = true;
-      } catch {
-        /* baseline stays HEAD */
+      } catch (err: any) {
+        throw new Error(`Failed to apply working tree modifications to sandbox worktree: ${err.stderr || err.message}`);
+      }
+    }
+    // Sync relevant untracked files into the sandbox worktree
+    const untracked = tryGit(top, ['status', '--porcelain=v1', '-uall']);
+    if (untracked) {
+      for (const line of untracked.split('\n')) {
+        if (line.startsWith('?? ')) {
+          const relPath = line.slice(3).trim();
+          if (relPath && !relPath.startsWith('.git') && !relPath.includes('node_modules')) {
+            const src = path.join(top, relPath);
+            const dst = path.join(wt, relPath);
+            try {
+              if (existsSync(src)) {
+                mkdirSync(path.dirname(dst), { recursive: true });
+                cpSync(src, dst, { recursive: true });
+                dirty = true;
+              }
+            } catch {}
+          }
+        }
       }
     }
     if (seedProjectSkills(top, wt).length) dirty = true;
@@ -68,8 +89,8 @@ export function createSandbox(cwd = process.cwd()): Sandbox {
       try {
         git(wt, ['add', '-A']);
         git(wt, ['commit', '-q', '-m', 'ab-baseline']);
-      } catch {
-        /* baseline stays HEAD */
+      } catch (err: any) {
+        throw new Error(`Failed to commit sandbox baseline: ${err.stderr || err.message}`);
       }
     }
     const cleanup = () => {
@@ -100,15 +121,26 @@ function finish(mode: 'git-worktree' | 'copy', dir: string, root: string, sub: s
     mode,
     dir,
     root,
+    sub,
     cwd: sub ? path.join(root, sub) : root,
     cleanup,
-    diff() {
-      git(root, ['add', '-A']);
-      const files = git(root, ['diff', '--cached', '--name-only', 'HEAD'])
+    diff(isolatedIndex = false) {
+      const env = isolatedIndex ? { ...process.env, GIT_INDEX_FILE: path.join(dir, '.git-tmp-index') } : process.env;
+      git(root, ['add', '-A'], { env });
+      const filesArgs = sub ? ['diff', '--cached', '--name-only', 'HEAD', '--', sub] : ['diff', '--cached', '--name-only', 'HEAD'];
+      const diffArgs = sub ? ['diff', '--cached', '--binary', 'HEAD', '--', sub] : ['diff', '--cached', '--binary', 'HEAD'];
+      const rawFiles = git(root, filesArgs, { env })
         .split('\n')
         .map((s) => s.trim())
         .filter(Boolean);
-      return { diff: git(root, ['diff', '--cached', '--binary', 'HEAD']), files };
+      const files = sub
+        ? rawFiles.map((f) => (path.isAbsolute(f) ? f : path.relative(sub, f))).map((f) => f.replace(/\\/g, '/'))
+        : rawFiles;
+      const diff = git(root, diffArgs, { env });
+      if (isolatedIndex) {
+        try { rmSync(path.join(dir, '.git-tmp-index'), { force: true }); } catch {}
+      }
+      return { diff, files };
     },
   };
 }

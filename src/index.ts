@@ -258,22 +258,26 @@ export async function* run(agent: string | AgentAdapter, opts: RunOptions): Asyn
     let sideEffects = false;
     try {
       const it = attempt(cur.agent, cur.opts);
-      for (;;) {
-        const x = await it.next();
-        if (x.done) {
-          return attempts.length
-            ? {
-                ...x.value,
-                fallback: {
-                  used: typeof cur.agent === 'string' ? cur.agent : cur.agent.name || 'agent',
-                  attempts,
-                  contextLost: base.session?.mode === 'continue' || base.session?.mode === 'fork',
-                },
-              }
-            : x.value;
+      try {
+        for (;;) {
+          const x = await it.next();
+          if (x.done) {
+            return attempts.length
+              ? {
+                  ...x.value,
+                  fallback: {
+                    used: typeof cur.agent === 'string' ? cur.agent : cur.agent.name || 'agent',
+                    attempts,
+                    contextLost: base.session?.mode === 'continue' || base.session?.mode === 'fork',
+                  },
+                }
+              : x.value;
+          }
+          if (x.value.type === 'tool') sideEffects = true;
+          yield x.value;
         }
-        if (x.value.type === 'tool') sideEffects = true;
-        yield x.value;
+      } finally {
+        await (it as any).return?.();
       }
     } catch (e: any) {
       const next = fallback[i] as any;

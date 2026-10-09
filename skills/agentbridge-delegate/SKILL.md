@@ -136,6 +136,12 @@ When delegating tasks via `ask_*` or `dispatch_*`, AgentBridge enforces **determ
   - **Time Machine (Checkpoints) Guard:** `checkpoint_rollback` is strictly forbidden under `read-only` or `plan` permissions and omitted from MCP tools under restricted ceilings. Workspaces are strictly confined to `AGENTBRIDGE_ROOT`. Rollback automatically purges both untracked and post-checkpoint staged files.
   - **Image Proxy SSRF & DNS Rebinding Protection:** Image fetching inspects both IPv4 and IPv6 representations (including mapped hex variants) and resolves hostnames to verified public IPs before connecting.
   - **Dashboard CSRF Protection:** The UI dashboard (`ab ui`) blocks cross-origin POST mutations via strict Origin and `Sec-Fetch-Site` verification.
+  - **Worktree Baseline & Untracked Files Sync:** `createSandbox` faithfully replicates local untracked files (such as `.agentbridge/config.json`) into the sandbox baseline and aborts immediately if working tree dirty state application fails, preventing runs on incomplete bases.
+  - **Strict `agentRoot` Patch Confinement:** Applying changes (`POST /agent/runs/:id/apply`) validates every modified file against `agentRoot` and origin, rejecting any file escapes or header path traversal (`..`) with `403 Forbidden`.
+  - **Concurrent-Safe Sandbox Diffs & Cleanup:** Inspecting active sandbox diffs uses an isolated Git index (`GIT_INDEX_FILE`), avoiding clobbering in-flight agent staging. Sandbox deletion during active runs is rejected with `409 Conflict`.
+  - **Streaming Isolation & Budget Enforcement:** `--stream` now fully routes through the worktree sandbox when `--worktree` is specified and enforces real-time aborts via `Budget` limits (`--max-cost`, `--max-tokens`, `--max-time`).
+  - **Clean Generator Cleanup Propagation:** Early breaks in async streams propagate `.return()` to inner agent adapters, ensuring subprocesses terminate cleanly.
+  - **AutoRepair Memory Bounding:** Test output capture in the AutoRepair loop uses a circular buffer with tail preservation and memory limits, avoiding RAM exhaustion on verbose test suites.
 
 - **Codex App-Server Concurrency & Stability:**
   - **Sequential Turn Serialization:** When multiple concurrent requests target the same Codex daemon, turns are strictly serialized with FIFO ordering to prevent `activeTurn` state collisions and ensure approvals and stream deltas correlate accurately.

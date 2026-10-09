@@ -29,13 +29,13 @@ Snapshot base: `cf50a72`
   - [x] `A59` — Paridade e aplicação de permissões/sandbox/modelo em cada turno do app-server
   - [x] `A68` — Propagação explícita de erro e verificação de status terminal no fechamento do daemon
 
-- [ ] **Fase 3: Isolamento de Worktrees, Sandboxes e Execuções CLI (P1/P2)**
-  - [ ] `A07` — Modo --stream na CLI passa pelo executor de worktree e orçamento
-  - [ ] `A08` — Transporte de baseline limpa para worktree e abort se git apply falhar
-  - [ ] `A09` — Confinamento estrito de patches e diffs dentro de agentRoot
-  - [ ] `A38` — Buffer circular com tail preservado em autoRepair
-  - [ ] `A39` — Proteção contra concorrência ao inspecionar ou remover worktrees ativas
-  - [ ] `A60` — Fechamento limpo de iteradores internos com it.return() e sinal de abort
+- [x] **Fase 3: Isolamento de Worktrees, Sandboxes e Execuções CLI (P1/P2)**
+  - [x] `A07` — Modo --stream na CLI passa pelo executor de worktree e orçamento
+  - [x] `A08` — Transporte de baseline limpa para worktree e abort se git apply falhar
+  - [x] `A09` — Confinamento estrito de patches e diffs dentro de agentRoot
+  - [x] `A38` — Buffer circular com tail preservado em autoRepair
+  - [x] `A39` — Proteção contra concorrência ao inspecionar ou remover worktrees ativas
+  - [x] `A60` — Fechamento limpo de iteradores internos com it.return() e sinal de abort
 
 - [ ] **Fase 4: Adaptadores, Roster, MCP Bridge & Pipelines (P2)**
   - [ ] `A06` — Mapeamento uniforme de permissões (read-only, plan, edit, full) em novos adaptadores
@@ -98,3 +98,6 @@ Snapshot base: `cf50a72`
 ## Log de Execução e Commits
 - 2026-10-09: Auditoria lida, classificada e plano inicial estruturado.
 - 2026-10-09: Fase 1 (Segurança Central & Sandboxes) concluída (A01, A02, A10, A11, A12, A13, A14, A15, A16, A17, A57). Testes de aceitação `security-phase1.test.mjs`, `checkpoint.test.mjs`, `ui-checkpoints.test.mjs` e `config-permissions.test.mjs` 100% passando.
+- 2026-10-09: Fase 2 (Concorrência e Estabilidade do Codex App-Server) concluída (A03, A04, A05, A58, A59, A68). Testes de aceitação `codex-phase2.test.mjs` e `codex-appserver.test.mjs` 100% passando. Commit `8ed3d4b` enviado ao GitHub.
+- 2026-10-09: Fase 3 (Isolamento de Worktrees, Sandboxes e Execuções CLI) concluída (A07, A08, A09, A38, A39, A60). Testes de aceitação `phase3-isolation.test.mjs` 100% passando (6/6). Untracked files sincronizados no baseline de worktree, confinamento estrito de agentRoot em patches e headers, isolamento de índice git em diff concorrente, preservação de tail em circular buffer no autoRepair, suporte completo a worktree e budget no modo `--stream` e propagação de `.return()` nos geradores.
+
