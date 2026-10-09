@@ -159,6 +159,16 @@ function askSchema(agent: string) {
           type: 'boolean',
           description: 'Disable web search, web fetch, and external network tools (strict offline / air-gapped mode)',
         },
+        mcpPassthrough: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Names of host MCP servers to pass through to child agent (e.g. ["rea"]). Blocked if offline is true or in read-only/plan mode.',
+        },
+        skills: {
+          type: 'boolean',
+          description: 'Enable discovery of shared skills from ~/.agents/skills/ (default false for strict isolation)',
+        },
       },
       required: ['prompt'],
     },
@@ -461,7 +471,7 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
       toolCalls: [],
     };
   }
-  const { mcpConfigFor } = await import('./attach.js');
+  const { mcpConfigFor, getPassthroughMcpServers } = await import('./attach.js');
   const models = Object.fromEntries(
     agentList(env).filter((a) => env[`AGENTBRIDGE_MODEL_${a.toUpperCase()}`]).map((a) => [a, env[`AGENTBRIDGE_MODEL_${a.toUpperCase()}`]])
   );
@@ -477,6 +487,13 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
   if (env.AGENTBRIDGE_ATTEST_BIND) grandchildEnv.AGENTBRIDGE_ATTEST_BIND = env.AGENTBRIDGE_ATTEST_BIND;
   if (env.AGENTBRIDGE_ROOT) grandchildEnv.AGENTBRIDGE_ROOT = env.AGENTBRIDGE_ROOT;
   if (env.AGENTBRIDGE_DEFAULT_TIMEOUT_S) grandchildEnv.AGENTBRIDGE_DEFAULT_TIMEOUT_S = env.AGENTBRIDGE_DEFAULT_TIMEOUT_S;
+  if (args.skills !== undefined) opts.skills = args.skills;
+  const passthroughServers = getPassthroughMcpServers({
+    passthrough: args.mcpPassthrough || (opts as any).mcpPassthrough,
+    offline: !!opts.offline,
+    permissions: perms,
+    env: { ...env, ...grandchildEnv },
+  });
   let httpBridge: any = null;
   if (agent === 'codex') {
     const serverName = 'agentbridge_http';
@@ -490,17 +507,31 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
       '-c',
       `mcp_servers.${serverName}.default_tools_approval_mode="approve"`,
     ];
+    for (const [name, srv] of Object.entries<any>(passthroughServers)) {
+      opts.extraArgs.push(
+        '-c',
+        `mcp_servers.${name}.command=${JSON.stringify(srv.command)}`,
+        '-c',
+        `mcp_servers.${name}.default_tools_approval_mode="approve"`
+      );
+      if (srv.args?.length) {
+        opts.extraArgs.push('-c', `mcp_servers.${name}.args=[${srv.args.map((x: any) => JSON.stringify(x)).join(',')}]`);
+      }
+    }
   } else {
-    opts.mcpServers = mcpConfigFor(agent, {
-      depth: childDepth,
-      maxDepth: max,
-      permissions: perms,
-      models,
-      home: env.AGENTBRIDGE_HOME,
-      attestBind: env.AGENTBRIDGE_ATTEST_BIND,
-      root: env.AGENTBRIDGE_ROOT,
-      defaultTimeoutS: env.AGENTBRIDGE_DEFAULT_TIMEOUT_S,
-    });
+    opts.mcpServers = {
+      ...mcpConfigFor(agent, {
+        depth: childDepth,
+        maxDepth: max,
+        permissions: perms,
+        models,
+        home: env.AGENTBRIDGE_HOME,
+        attestBind: env.AGENTBRIDGE_ATTEST_BIND,
+        root: env.AGENTBRIDGE_ROOT,
+        defaultTimeoutS: env.AGENTBRIDGE_DEFAULT_TIMEOUT_S,
+      }),
+      ...passthroughServers,
+    };
   }
   try {
     const it = run(agent, opts);

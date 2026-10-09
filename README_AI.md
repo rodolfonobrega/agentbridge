@@ -140,7 +140,25 @@ Once updated, all subagents can freely execute `permissions: "full"`.
 
 ---
 
-## 6. Proactive Quota Routing & The Escalation Ladder ("A Escadinha")
+## 6. Harness Isolation: MCPs, Skills & Tool Readiness Check
+
+### Why Subagents Don't Inherit All Host MCPs By Default
+When delegating to subagents via `ask_*` or `dispatch_*`:
+1. **Isolated Sandboxes:** Harnesses like **Pi (`pi`)**, **Claude Code (`claude`)**, and **Antigravity (`agy`)** are spawned inside isolated ephemeral directories.
+2. **Hidden Third-Party MCPs:** By default, their configuration files are replaced with a minimal config that contains **only** the `agentbridge` connection. Local MCP servers (e.g. `rea`, custom database tools) and user plugins/skills in `~/.pi/agent/mcp.json` or `.mcp.json` are **omitted from child runs**.
+3. **Pi Exposure Mode (`direct` vs `deferred`):** If configuring Pi with custom MCP tools, always ensure `"exposure": "direct"`. The `"deferred"` exposure mode does not advertise tool definitions to the LLM.
+4. **Offline and Permission Gates:**
+   - Passing `offline: true` strictly blocks external MCP passthrough.
+   - Restricting permissions to `read-only` or `plan` suppresses mutating tools and arbitrary command execution.
+
+### Pre-Flight Checklist Before Delegating Tasks Needing Special Tools:
+- [ ] **Check with `ab doctor`:** Run `ab doctor` to see all host MCP servers detected across local agent configurations.
+- [ ] **Probe Subagent Tools:** Run `ask_<agent>({ "prompt": "List your available tools", "permissions": "read-only" })` to verify what tools the child agent can see.
+- [ ] **Direct Execution Rule:** If a critical tool (like `rea` or a proprietary browser MCP) is only registered in your host agent and cannot be passed through, execute that task directly in your current session rather than delegating it to an isolated subagent.
+
+---
+
+## 7. Proactive Quota Routing & The Escalation Ladder ("A Escadinha")
 
 ### How to Check Quota Proactively
 You do not need to wait for an HTTP 429 error or a rate limit exception to occur. When connected via MCP or executing CLI tasks, you can query real-time remaining token quotas:
@@ -197,7 +215,7 @@ AgentBridge automatically executes this cascade if you configure fallback target
 
 ---
 
-## 7. Using Local Endpoints & Models (Ollama, OpenRouter, vLLM)
+## 8. Using Local Endpoints & Models (Ollama, OpenRouter, vLLM)
 
 AgentBridge can run local models (e.g., `qwen2.5-coder`, `glm-5.3-flash:cloud`, `deepseek-r1`) as full coding agents via **harness mode**:
 
@@ -223,7 +241,7 @@ AgentBridge can run local models (e.g., `qwen2.5-coder`, `glm-5.3-flash:cloud`, 
 
 ---
 
-## 8. The Compat Proxy (`ab serve`) for BYOK & Agentic Frameworks (e.g. GEPA)
+## 9. The Compat Proxy (`ab serve`) for BYOK & Agentic Frameworks (e.g. GEPA)
 
 If you are integrating AgentBridge with an external BYOK application (Cursor, LibreChat, Continue.dev) or an autonomous prompt optimization engine like **GEPA**:
 
@@ -297,11 +315,12 @@ ab serve --port 8787
 
 ---
 
-## 9. Summary Checklist for AI Agents
+## 10. Summary Checklist for AI Agents
 
 - [ ] Need to make risky changes? Run `ab checkpoint create "before refactor"`.
 - [ ] Need a second opinion on code? Call `ask_codex` or `ask_claude` with `permissions: "full"`.
 - [ ] Need to run tasks in parallel? Call `dispatch_*` and collect with `wait_run`.
 - [ ] Hit an error `permissions broader than caller`? Run `ab install all --permissions full`.
-- [ ] Need to verify what agents are available? Run `ab doctor`.
+- [ ] Need to verify what agents and host MCPs are available? Run `ab doctor`.
+- [ ] Delegating a task requiring special MCP tools (e.g. `rea`)? Confirm the destination harness has the MCP configured with `"exposure": "direct"` and proper permissions (`permissions: "edit"` / `"full"`), or execute directly on the host agent.
 - [ ] Want to monitor real-time runs and tokens? Check `ab ui` at `http://127.0.0.1:8788`.

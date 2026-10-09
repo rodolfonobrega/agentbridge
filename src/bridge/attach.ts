@@ -2,6 +2,61 @@ import { fileURLToPath } from 'node:url';
 
 const MCP = fileURLToPath(new URL('./mcp.js', import.meta.url));
 
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+
+export interface PassthroughMcpOptions {
+  passthrough?: string | string[];
+  sourceDir?: string;
+  offline?: boolean;
+  permissions?: string;
+  env?: NodeJS.ProcessEnv;
+}
+
+export function getPassthroughMcpServers(opts: PassthroughMcpOptions = {}): Record<string, any> {
+  const env = opts.env || process.env;
+  const isOffline = opts.offline || env.AGENTBRIDGE_OFFLINE === '1' || env.AGENTBRIDGE_OFFLINE === 'true';
+  if (isOffline) return {};
+
+  const perms = opts.permissions || env.AGENTBRIDGE_PERMS || 'read-only';
+  if (perms === 'read-only' || perms === 'plan') return {};
+
+  const raw = opts.passthrough ?? env.AGENTBRIDGE_MCP_PASSTHROUGH;
+  if (!raw) return {};
+
+  const allowed = (Array.isArray(raw) ? raw : String(raw).split(','))
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (!allowed.length) return {};
+
+  const sourceDir = opts.sourceDir || env.AGENTBRIDGE_MCP_SOURCE_DIR || path.join(os.homedir(), '.pi', 'agent');
+  const mcpFile = path.join(sourceDir, 'mcp.json');
+  if (!existsSync(mcpFile)) return {};
+
+  try {
+    const data = JSON.parse(readFileSync(mcpFile, 'utf8'));
+    const sourceServers = data?.mcpServers || {};
+    const result: Record<string, any> = {};
+
+    for (const [name, cfg] of Object.entries<any>(sourceServers)) {
+      if (name.toLowerCase() === 'agentbridge') continue;
+      const match = allowed.includes('*') || allowed.includes(name.toLowerCase());
+      if (match && cfg && typeof cfg === 'object') {
+        result[name] = {
+          command: cfg.command,
+          args: cfg.args || [],
+          env: cfg.env || {},
+          exposure: cfg.exposure || 'direct',
+        };
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
 export interface McpConfigOptions {
   depth?: number;
   maxDepth?: number;

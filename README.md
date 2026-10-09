@@ -98,7 +98,7 @@ The wizard will:
 **4. Check your setup**
 
 ```bash
-ab doctor          # finds each CLI, checks logins, lists models
+ab doctor          # finds each CLI, checks logins, lists models, detects host MCPs
 ab doctor --live   # also makes one tiny real call per agent
 ```
 

@@ -53,6 +53,81 @@ async function version(bin: string): Promise<string | null> {
   }
 }
 
+export function detectMcpServers(name: string, cwd = process.cwd()): string[] {
+  const servers: string[] = [];
+  try {
+    if (name === 'pi') {
+      const piFile = path.join(process.env.PI_CODING_AGENT_DIR || path.join(home, '.pi', 'agent'), 'mcp.json');
+      if (existsSync(piFile)) {
+        const j = JSON.parse(readFileSync(piFile, 'utf8'));
+        if (j?.mcpServers && typeof j.mcpServers === 'object') {
+          servers.push(...Object.keys(j.mcpServers));
+        }
+      }
+    } else if (name === 'claude') {
+      const candidates = [
+        path.join(cwd, '.mcp.json'),
+        path.join(home, '.claude.json'),
+        path.join(home, '.claude', 'mcp.json'),
+      ];
+      for (const f of candidates) {
+        if (existsSync(f)) {
+          try {
+            const j = JSON.parse(readFileSync(f, 'utf8'));
+            if (j?.mcpServers && typeof j.mcpServers === 'object') {
+              servers.push(...Object.keys(j.mcpServers));
+            }
+          } catch {}
+        }
+      }
+    } else if (name === 'codex') {
+      const tomlFile = path.join(process.env.CODEX_HOME || path.join(home, '.codex'), 'config.toml');
+      if (existsSync(tomlFile)) {
+        const content = readFileSync(tomlFile, 'utf8');
+        const matches = content.matchAll(/\[mcp_servers\.([^\]\s]+)\]/g);
+        for (const m of matches) {
+          if (m[1]) {
+            const base = m[1].split('.')[0];
+            if (base) servers.push(base);
+          }
+        }
+      }
+    } else if (name === 'opencode') {
+      const candidates = [
+        path.join(cwd, 'opencode.json'),
+        path.join(home, '.config', 'opencode', 'opencode.json'),
+        path.join(process.env.LOCALAPPDATA || '', 'opencode', 'opencode.json'),
+      ];
+      for (const f of candidates) {
+        if (existsSync(f)) {
+          try {
+            const j = JSON.parse(readFileSync(f, 'utf8'));
+            if (j?.mcp && typeof j.mcp === 'object') {
+              servers.push(...Object.keys(j.mcp));
+            }
+          } catch {}
+        }
+      }
+    } else if (name === 'agy') {
+      const candidates = [
+        path.join(home, '.gemini', 'config', 'mcp_config.json'),
+        path.join(cwd, '.gemini', 'config', 'mcp_config.json'),
+      ];
+      for (const f of candidates) {
+        if (existsSync(f)) {
+          try {
+            const j = JSON.parse(readFileSync(f, 'utf8'));
+            if (j?.mcpServers && typeof j.mcpServers === 'object') {
+              servers.push(...Object.keys(j.mcpServers));
+            }
+          } catch {}
+        }
+      }
+    }
+  } catch {}
+  return [...new Set(servers)];
+}
+
 export interface CheckItem {
   name: string;
   status: 'ok' | 'fail' | 'warn';
@@ -150,6 +225,7 @@ export async function doctor({
           if (e.code === 'NOT_LOGGED_IN') a.loggedIn = false;
         }
       }
+      a.mcpServers = detectMcpServers(name, cwd);
       const st = a.loggedIn === false ? 'warn' : a.live && !a.live.ok ? 'fail' : 'ok';
       add(
         name,
@@ -160,10 +236,21 @@ export async function doctor({
             : a.loggedIn
             ? `logged in (${a.credentials || 'live test'})`
             : 'no login found (run the CLI login)'
-        }${a.models ? `; ${a.models.length} models` : ''}${a.live ? `; live ${a.live.ok ? `ok ${a.live.ms}ms` : 'FAILED: ' + a.live.error}` : ''}`
+        }${a.models ? `; ${a.models.length} models` : ''}${
+          a.mcpServers?.length ? `; host MCPs: [${a.mcpServers.join(', ')}]` : ''
+        }${a.live ? `; live ${a.live.ok ? `ok ${a.live.ms}ms` : 'FAILED: ' + a.live.error}` : ''}`
       );
     })
   );
+  const agentsWithMcp = Object.entries(info).filter(([_, a]) => Array.isArray(a.mcpServers) && a.mcpServers.length > 0);
+  if (agentsWithMcp.length > 0) {
+    const list = agentsWithMcp.map(([n, a]) => `${n}: [${a.mcpServers.join(', ')}]`).join('; ');
+    add(
+      'mcp isolation policy',
+      'ok',
+      `host MCPs configured: ${list} (Note: subagent delegation isolates external MCPs by default)`
+    );
+  }
   checks.sort((x, y) => x.name.localeCompare(y.name));
   return { ok: !checks.some((c) => c.status === 'fail'), checks, agents: info };
 }

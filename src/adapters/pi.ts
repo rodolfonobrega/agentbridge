@@ -184,7 +184,7 @@ export function makeAgentDir({
       for (const [n, s] of Object.entries(mcpServers)) {
         const env = { ...(s.env || {}) };
         for (const k of passEnv) env[k] ??= '${' + k + '}';
-        servers[n] = { command: s.command, args: s.args || [], env, exposure: 'direct' };
+        servers[n] = { ...s, command: s.command, args: s.args || [], env, exposure: s.exposure || 'direct' };
       }
       writeFileSync(path.join(dir, 'mcp.json'), JSON.stringify({ mcpServers: servers, autoEnableCodemode: false }));
     }
@@ -435,7 +435,9 @@ const adapter: AgentAdapter = {
           '--mode',
           'json',
           '--no-approve',
-          '-ns',
+          ...(o.skills !== true && env.AGENTBRIDGE_ENABLE_SKILLS !== '1' && env.AGENTBRIDGE_ENABLE_SKILLS !== 'true'
+            ? ['-ns']
+            : []),
           '-np',
           '-ne',
           ...(mcpNames.length ? ['-e', 'builtin:mcp'] : []),

@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.3] - 2026-10-09
+
+### MCP Passthrough, Skills Discovery & Host Diagnostics
+
+- **Controlled MCP Passthrough for Subagents:**
+  - Implemented `getPassthroughMcpServers()` to allow subagents to inherit specific host MCP servers (e.g. `rea`, `playwright`, database tools) rather than running in total isolation.
+  - Granular control via `mcpPassthrough` parameter on `ask_*` / `dispatch_*` tool calls, or persistently via `AGENTBRIDGE_MCP_PASSTHROUGH` and `AGENTBRIDGE_MCP_SOURCE_DIR`.
+  - Automatic normalization to `"exposure": "direct"` for Pi harness compatibility.
+- **Strict Safety & Offline Gates:**
+  - External MCP passthrough is **strictly blocked** when `offline: true` is passed, preventing network or data exfiltration in air-gapped runs.
+  - Passthrough is locked down under `read-only` and `plan` permission levels to prevent unprivileged subagents from executing mutating tools.
+- **Skills Discovery Support in Pi:**
+  - Added support for `skills: true` (and `AGENTBRIDGE_ENABLE_SKILLS=1`), selectively disabling the `-ns` (`--no-skills`) flag in Pi so it can discover shared skills from `~/.agents/skills/`.
+- **Host MCP Diagnostics in `ab doctor`:**
+  - `ab doctor` now scans and reports host MCP servers configured across all installed harnesses (`pi`, `claude`, `codex`, `opencode`, `agy`).
+  - Added explicit check and warning explaining the default subagent isolation policy.
+- **Updated Delegation Skill & AI Documentation:**
+  - Expanded `skills/agentbridge-delegate/SKILL.md`, `README.md`, `README_AI.md`, and `docs/REFERENCE.md` with harness isolation architecture and pre-delegation readiness checklists.
+
 ## [0.3.2] - 2026-10-09
 
 ### Least Privilege Security Architecture & Standardized Configuration (`ab config`)

@@ -304,13 +304,20 @@ AgentBridge enforces permissions deterministically at the OS and CLI runtime lev
    - `agy` has no built-in read-only flag. When restricted, AgentBridge creates a disposable, private HOME with generated `.gemini/antigravity-cli/settings.json` specifying explicit deny rules: `deny: ['command(*)', 'unsandboxed(*)', 'execute_url(*)', 'write_file(*)']`.
    - In `full` *(default)*, `--dangerously-skip-permissions` is passed.
 5. **Pi (`pi`):**
+   - Runs in an ephemeral sandbox directory (`PI_CODING_AGENT_DIR`), stripping user packages and skills (`-ns -np -ne`).
    - In `read-only` and `plan`, AgentBridge passes `--exclude-tools bash,powershell,edit,write,codemode`. Pi completely unregisters those tools from its active runtime.
    - In `edit`, `bash` and `powershell` are excluded, allowing only file read/write.
    - In `full` *(default)*, no tools are excluded; full shell and file capabilities are active.
+   - **MCP Exposure in Pi:** If third-party MCP servers (e.g. `rea`) are registered in `~/.pi/agent/mcp.json`, their exposure must be `"direct"`. Pi's `"deferred"` mode does not present tool schemas to the model at session start.
 6. **Endpoints (Ollama, OpenRouter, vLLM):**
    - When running with a coding harness (`--harness claude|pi`), the model inherits the exact tool allowlists and sandboxes described above.
    - When running without a harness (`--harness none` or plain question), it makes a direct HTTP API call with no filesystem tools attached.
-7. **MCP Bridge Ceiling (`AGENTBRIDGE_PERMS`) & How to Change It:**
+7. **Subagent MCP Isolation & Passthrough Policy:**
+   - **Isolation by Default:** When delegating to subagents via `ask_*` or `dispatch_*`, AgentBridge isolates external MCP servers to prevent prompt injection or exfiltration loops.
+   - **Host MCP Inspection with `ab doctor`:** Running `ab doctor` automatically detects and lists host MCP servers declared in `~/.pi/agent/mcp.json`, `.mcp.json`, `~/.codex/config.toml`, and `.gemini/config/mcp_config.json`.
+   - **Allowed MCP Passthrough:** When external MCPs are explicitly enabled via `AGENTBRIDGE_MCP_PASSTHROUGH` and `AGENTBRIDGE_MCP_SOURCE_DIR`, allowed servers are passed into the subagent sandbox.
+   - **Offline Gate:** When `offline: true` is passed to a run, external MCP passthrough is **strictly disabled** regardless of configuration.
+8. **MCP Bridge Ceiling (`AGENTBRIDGE_PERMS`) & How to Change It:**
    - When AgentBridge runs as an MCP server, child runs can never exceed the install-time permission ceiling.
    - **Default Ceiling is `full`:** The agent has full power to use terminal commands, shell, and file editing.
    - **Restricted Ceilings:** If you installed with a lower ceiling (`ab install <agent> --permissions edit`), child runs are restricted to at most `edit`.

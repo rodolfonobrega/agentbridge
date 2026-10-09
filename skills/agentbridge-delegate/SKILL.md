@@ -72,6 +72,47 @@ When you instruct an agent (such as `pi` or `claude`) to spawn or coordinate sub
 - Model names specified for subagents (e.g. `glm-5.3-flash:cloud`) are automatically resolved so the child process maps them to the correct local or remote provider seamlessly.
 - You can monitor running subagents and active agent counts in real time via `ab ui`.
 
+## Harness Isolation: MCPs, Skills & Tool Availability
+
+When delegating tasks via `ask_*` or `dispatch_*`, AgentBridge enforces **deterministic process isolation** for safety and stability:
+
+- **The Isolation Mechanism:**
+  - **Pi (`pi`):** Runs inside an ephemeral directory (`PI_CODING_AGENT_DIR`), stripping extensions/skills (`-ns -np -ne`) and replacing `mcp.json` with only the `agentbridge` connection. Any MCP server configured in `~/.pi/agent/mcp.json` (such as `rea`) is **hidden by default**.
+  - **Claude Code (`claude`):** Invocations pass `--strict-mcp-config --mcp-config <temp>/mcp.json` and `--setting-sources ""`. Workspace `.mcp.json` and user `~/.claude.json` MCPs are **omitted by default**.
+  - **Antigravity (`agy`):** Invocations use a disposable profile directory with `.gemini/config/mcp_config.json` restricted strictly to `mcp(agentbridge/*)`.
+  - **OpenCode (`opencode`) & Codex (`codex`):** Configurations injected by bridge take precedence, and sandboxes (`read-only`, `plan`) block unauthorized system commands.
+
+- **How to Control MCP & Skills Passthrough:**
+  1. **Directly in MCP Tool Calls (`ask_*` / `dispatch_*`):**
+     Pass `mcpPassthrough` with the names of host MCP servers to inherit, and set `skills: true`:
+     ```json
+     {
+       "tool": "ask_pi",
+       "arguments": {
+         "prompt": "Reverse engineer target binary and extract endpoints",
+         "permissions": "edit",
+         "mcpPassthrough": ["rea"],
+         "skills": true
+       }
+     }
+     ```
+  2. **Environment & Host Configuration:**
+     You can declare persistent passthrough in your harness environment or launch config:
+     - `AGENTBRIDGE_MCP_PASSTHROUGH=rea` (or comma-separated list `rea,playwright` or `*` for all host servers).
+     - `AGENTBRIDGE_ENABLE_SKILLS=1` (allows child Pi processes to discover skills from `~/.agents/skills/`).
+     - `AGENTBRIDGE_MCP_SOURCE_DIR=/path/to/source` (directory containing the source `mcp.json`; defaults to `~/.pi/agent`).
+  3. **Exposure Mode in Pi:** Any MCP server declared in `~/.pi/agent/mcp.json` must use `"exposure": "direct"` (the `"deferred"` mode does NOT expose tool schemas to the model).
+  4. **Safety & Offline Gates:**
+     - **Offline Gate:** If `offline: true` is passed, external MCP passthrough is **strictly blocked** to prevent network or data exfiltration.
+     - **Permission Gate:** Subagents under `read-only` or `plan` modes will not receive mutating MCP tools. Use `permissions: "edit"` or `permissions: "full"`.
+  5. **Skill Discovery:** Coding agents like Pi and Codex look for skills in the global Agent Skills directory (`~/.agents/skills/`). When `skills: true` is passed, Pi will discover all installed skills (e.g. `reverse-engineer-anything` v33).
+
+- **Pre-Delegation Checklist (Verifying MCP & Tool Readiness):**
+  - **Verify with `ab doctor`:** Run `ab doctor` to inspect which host MCPs are detected for each installed harness (`claude`, `codex`, `pi`, `opencode`, `agy`).
+  - **Probe Tool Readiness:** If unsure whether a subagent can reach a specific tool, send a lightweight diagnostic probe first:
+    `ask_pi({ "prompt": "List all your available tools.", "permissions": "read-only" })`
+  - **Direct Host Execution:** If a task strictly requires an MCP server that is only present in your primary agent session and cannot be passed through, execute that task directly in the host agent rather than delegating to an isolated subagent.
+
 ## Proactive Quota Awareness & The Escalation Ladder ("A Escadinha")
 
 To avoid burning expensive subscription tokens or hitting 429 rate limits midway through a task, you can query remaining token quotas and dynamically step down the escalation ladder:
