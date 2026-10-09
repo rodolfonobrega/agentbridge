@@ -1,6 +1,6 @@
 # Contributing to agentbridge
 
-Thanks for helping! agentbridge is plain Node ESM (`.mjs`), Node ≥ 22, with **zero runtime dependencies** and no build step. Please keep it that way.
+Thanks for helping! agentbridge is TypeScript (ESM, compiled to `dist/`), Node ≥ 22, with **zero runtime dependencies**. Please keep it that way.
 
 ## Setup
 
@@ -46,7 +46,7 @@ docs/           reference and design docs
 
 ## Adding a new agent
 
-Read [docs/EXTENDING.md](docs/EXTENDING.md). In short: run `<cli> --help` and one real headless call, implement `src/adapters/<name>.mjs` (`run()` async generator, normalized events, `AgentError` codes including `RATE_LIMITED`), register it, add `acceptance/<name>.test.mjs` (basic run, permissions, sessions, timeout/abort cleanup, bridge pairs), and document the limits.
+Read [docs/EXTENDING.md](docs/EXTENDING.md). In short: run `<cli> --help` and one real headless call, implement `src/adapters/<name>.ts` (`run()` async generator, normalized events, `AgentError` codes including `RATE_LIMITED`), register it, add `acceptance/<name>.test.mjs` (basic run, permissions, sessions, timeout/abort cleanup, bridge pairs), and document the limits.
 
 ## Pull requests
 

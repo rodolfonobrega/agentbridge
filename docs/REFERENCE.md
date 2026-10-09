@@ -6,14 +6,14 @@ Drive the coding agents you already have installed — **Claude Code**, **Codex*
 
 agentbridge gives you:
 
-1. **A unified library and CLI** (`run`, `ask`, `fanout`, `race`) with the same options and the same event/result shapes for all three agents.
-2. **Agent-to-agent delegation.** Any agent can be a subagent of any other (all 9 caller x callee pairs) through a built-in MCP bridge server, with control over model, effort, permissions, working directory, timeout and session mode.
+1. **A unified library and CLI** (`run`, `ask`, `fanout`, `race`) with the same options and the same event/result shapes for all ten built-in agents.
+2. **Agent-to-agent delegation.** Any agent can be a subagent of any other (all 10 built-in caller x callee pairs, plus HTTP endpoints) through a built-in MCP bridge server, with control over model, effort, permissions, working directory, timeout and session mode.
 3. **Plain HTTP model endpoints as agents**: **Ollama** (built in) or any OpenAI/Anthropic-compatible base URL (vLLM, LM Studio, LiteLLM, a remote gateway), usable from the CLI, the library and from inside Claude Code / Codex / OpenCode as `ask_<name>`.
 4. **One-command Claude Code integration**: `ab install claude` registers the bridge as an MCP server and writes relay subagents, so Claude Code subagents and **dynamic workflows** can call Codex, OpenCode and your Ollama models.
 5. **Telemetry and context management**: per-session context size, warn/compact/hard thresholds, automatic compaction, and cross-agent `handoff()`.
 6. **An OpenAI-compatible and Anthropic-compatible local HTTP proxy** that exposes the models of your logged-in agents to any SDK or app.
 
-Plain Node ESM (`.mjs`), zero build step, no runtime dependencies. Windows, macOS and Linux.
+Plain Node ESM: a TypeScript source tree compiled to plain JavaScript in `dist/` for distribution (`npm run build`); no runtime dependencies. Windows, macOS and Linux.
 
 > **Terms of service.** agentbridge drives the CLIs using your consumer/subscription logins. Providers may restrict automated use of those plans. Use it for personal, local use only, never expose the proxy to other people, and use API keys if you need a supported programmatic path. You are responsible for compliance.
 
@@ -171,7 +171,7 @@ import { ask, run } from '@rodolfonobrega/agentbridge';
 
 // Run to completion
 const result = await ask('claude', {
-  prompt: 'List the exported functions in src/index.mjs',
+  prompt: 'List the exported functions in src/index.ts',
   model: 'haiku',
   cwd: process.cwd(),
   permissions: 'read-only',
@@ -180,7 +180,7 @@ const result = await ask('claude', {
 console.log(result.text, result.usage, result.sessionId);
 
 // Stream normalized events (the generator's return value is the Result)
-const it = run('codex', { prompt: 'Explain src/core/spawn.mjs' });
+const it = run('codex', { prompt: 'Explain src/core/spawn.ts' });
 for (;;) {
   const { value, done } = await it.next();
   if (done) { console.log('final:', value.text); break; }
@@ -205,7 +205,7 @@ ab race   "<prompt>" agent[:model] ...           # first accepted wins, rest can
 ab fix <agent> "<test-cmd>" [--prompt p] [--max-attempts 3]  # TDD auto-repair loop with rollback
 ab review <coder> <reviewer> "<task>" [--max-turns 3]        # Multi-agent review loop with diffs
 ab ensemble "<task>" <a1> <a2> ... [--judge j]               # Multi-agent consensus voting & synthesis
-ab pipeline <pipeline.json> [--checkpoint-each]              # DAG task orchestrator with waves & rollback
+ab pipeline <pipeline.json> [--checkpoint-each][--auto-rollback]    # DAG task orchestrator with waves & rollback
 ab quota [agent] [--threshold %]                             # Proactive quota checking
 ab account list [agent] | add <agent> <name> [--copy-current][--login] | use <agent> <name> | remove <agent> <name> | quota
 ab checkpoint create [message] | list | rollback <id> | diff <id>   # git hidden-ref snapshots
@@ -228,18 +228,18 @@ Notes:
 - `ab install codex|opencode|agy|pi` register the same MCP bridge in those CLIs (Codex: `codex mcp add`, global `~/.codex/config.toml`; Antigravity: `agy mcp add`, global; OpenCode: the `mcp` block of `opencode.json` in the project, or of the global file with `--scope user`; a config that is not plain JSON is refused untouched) and put the skill in `.agents/skills/` (or `~/.agents/skills/` with `--scope user`), the shared folder those CLIs read. `ab install all` does every CLI that is installed. pi: `pi mcp add agentbridge --exposure direct` (global `~/.pi/agent/mcp.json`, so the `ask_*` tools are declared to the model) plus the same `.agents/skills/` folder pi reads; verified that pi connects to the bridge and lists its tools (a model call through pi was not verified: no model is configured in this pi). Verified live: OpenCode and Antigravity saw the skill and called the bridge tools; for Codex only the registration was verified (its usage limit was exhausted during the check).
 - `ab install codex --auto-approve` sets `default_tools_approval_mode = "approve"` on the bridge server in Codex's config. Without it, interactive Codex asks once per tool and `codex exec` fails with "MCP tool call requires approval".
 - `ab install claude` registers the MCP server, writes the relay subagents (`--no-agents` to skip) and installs the `agentbridge-delegate` skill under `.claude/skills/` (project/local scope) or `~/.claude/skills/` (user scope); `--no-skill` skips it. The skill teaches Claude when to delegate, which tool to use (`ask_*` vs `dispatch_*`), permissions, fallback and how to treat results. Source: `skills/agentbridge-delegate/SKILL.md`.
-- `<agent>` is `claude`, `codex`, `opencode`, `agy`, `pi`, `ollama` or any [endpoint](#http-endpoints-ollama-and-any-base-url) you configured. Targets for `fanout`/`race` can include a model: `claude:haiku`, `opencode:provider/model`.
+- `<agent>` is a built-in (`claude`, `codex`, `opencode`, `agy`, `pi`, `cursor`, `grok`, `gemini`, `devin`, `acp`), `ollama` or any [endpoint](#http-endpoints-ollama-and-any-base-url) you configured. Targets for `fanout`/`race` can include a model: `claude:haiku`, `opencode:provider/model`.
 - Pass `-` as the prompt to read it from stdin.
 - `--json` prints the full Result as JSON; `--stream` prints text as it arrives.
 - `ab top` is a live view of active runs and sessions; `ab stats` prints persisted aggregates.
 
 ## Library API
 
-Everything is exported from the package root (`src/index.mjs`):
+Everything is exported from the package root (`src/index.ts`, compiled to `dist/index.js`):
 
 | Export | Purpose |
 |---|---|
-| `agents` | Lazy adapter registry: `agents.claude`, `agents.codex`, `agents.opencode`, `agents.agy`, `agents.pi`, `agents.get(name)`, `agents.models(name)` |
+| `agents` | Lazy adapter registry: `agents.builtin` (list), one getter per built-in agent (`agents.claude`, `agents.codex`, `agents.opencode`, `agents.agy`, `agents.pi`, `agents.cursor`, `agents.grok`, `agents.gemini`, `agents.devin`, `agents.acp`), plus `agents.names`, `agents.get(name)`, `agents.models(name)` |
 | `run(agent, opts)` | Async generator of normalized events; returns the Result |
 | `ask(agent, opts)` | Runs to completion and returns the Result |
 | `validateOptions(opts)` | Validates and normalizes run options (throws `BAD_OPTION`) |
@@ -252,7 +252,7 @@ Everything is exported from the package root (`src/index.mjs`):
 | `doctor` | Environment checks |
 | `runWithTelemetry`, `askWithTelemetry`, `stats`, `contextOf`, `setContextWindow`, `setPolicy`, `getPolicy`, `handoff`, `compact`, `wait`, `waitAll` | Telemetry, context policy, handoff |
 
-`agent` can be a name (`'claude' | 'codex' | 'opencode' | 'agy' | 'pi'`, or an endpoint name) or a custom adapter object exposing `run(opts)`.
+`agent` can be a name (`'claude' | 'codex' | 'opencode' | 'agy' | 'pi' | 'cursor' | 'grok' | 'gemini' | 'devin' | 'acp'`, or an endpoint name) or a custom adapter object exposing `run(opts)`.
 
 ### Run options
 
@@ -301,7 +301,7 @@ AgentBridge enforces permissions deterministically at the OS and CLI runtime lev
    - In `read-only` / `plan`, AgentBridge generates an inline runtime policy: `permission: { edit: 'deny', bash: 'deny', webfetch: 'allow' }`. Any tool invocation attempting filesystem modification is denied by OpenCode's policy engine.
    - In `full` *(default)*, all tools including `bash` and file writes are allowed.
 4. **Antigravity (`agy`):**
-   - `agy` has no built-in read-only flag. When restricted, AgentBridge creates a disposable, private HOME with generated `.gemini/antigravity-cli/settings.json` specifying explicit deny rules: `deny: ['command(*)', 'unsandboxed(*)', 'execute_url(*)', 'write_file(*)']`.
+   - `agy` has no built-in read-only flag. When restricted, AgentBridge creates a disposable, private HOME with generated `.gemini/antigravity-cli/settings.json` specifying explicit deny rules: `deny: ['command(*)', 'unsandboxed(*)', 'write_file(*)']` (`execute_url(*)` is added only when the run also passes `offline: true`).
    - In `full` *(default)*, `--dangerously-skip-permissions` is passed.
 5. **Pi (`pi`):**
    - Runs in an ephemeral sandbox directory (`PI_CODING_AGENT_DIR`), stripping user packages and skills (`-ns -np -ne`).
@@ -323,8 +323,8 @@ AgentBridge enforces permissions deterministically at the OS and CLI runtime lev
    - When AgentBridge runs as an MCP server, child runs can never exceed the install-time permission ceiling.
    - **Default Ceiling is `full`:** The agent has full power to use terminal commands, shell, and file editing.
    - **Restricted Ceilings:** If you installed with a lower ceiling (`ab install <agent> --permissions edit`), child runs are restricted to at most `edit`.
-   - **"Level Máximo" / "Broader than caller" Error:** If a subagent asks for `full` while the session ceiling is set to `edit` or `read-only`, AgentBridge throws:
-     `permissions "full" is broader than the caller's "<ceiling>"`
+   - **Permission Exceeded Error:** If a subagent asks for `full` while the configured ceiling is `edit` or `read-only`, AgentBridge throws:
+     `permissions "full" exceeds the configured permission ceiling "<ceiling>" (increase ceiling or configure permission)`
    - **Altering / Updating Permissions with `ab`:** You can change the ceiling at any time simply by re-running:
      ```bash
      ab install all --permissions full    # unlock full access for all installed agents
@@ -360,10 +360,10 @@ Result:
 |---|---|
 | `new` | Fresh persisted session |
 | `ephemeral` | Nothing persisted |
-| `continue` | Append to a session (`id`, or the most recent one in `cwd` if omitted) |
+| `continue` | Append to a session (`id`, or the most recent one in `cwd` if omitted; for claude the id-less form only sees sessions started by this process unless `session.adoptForeign: true` adopts the newest on-disk session for the folder) |
 | `fork` | New session branching from the given session's history; the original is untouched |
 
-`id` is not allowed with `new` or `ephemeral`. All three adapters expose the same semantics. OpenCode additionally rejects concurrent `continue` calls on the same session with `BAD_OPTION 'session busy'`.
+`id` is not allowed with `new` or `ephemeral`. All adapters expose the same semantics, with one nuance: claude's id-less `continue`/`fork` only considers sessions started by the current process; set `session.adoptForeign: true` to adopt the newest on-disk session for that cwd. OpenCode additionally rejects concurrent `continue` calls on the same session with `BAD_OPTION 'session busy'`.
 
 ```js
 const a = await ask('claude', { prompt: 'Remember the number 42', session: { mode: 'new' } });
@@ -373,7 +373,7 @@ const c = await ask('claude', { prompt: 'Try a different approach', session: { m
 
 ### Permissions and effort mapping
 
-`permissions` and `effort` are mapped to each CLI's native concepts (sandbox modes, permission modes, reasoning effort). `full` is the default everywhere. In the bridge, a child agent can never receive broader permissions than its caller ceiling.
+`permissions` and `effort` are mapped to each CLI's native concepts (sandbox modes, permission modes, reasoning effort). `full` is the default everywhere. In the bridge, a child agent can never receive permissions above its caller ceiling.
 
 ### Web Search, Tools, and Network Permissions Across Agents & Modes
 
@@ -458,10 +458,9 @@ ab run codex "Run unit tests" --permissions edit --transport app-server
 
 Via the programmatic library:
 ```js
-import { run } from '@rodolfonobrega/agentbridge';
+import { ask } from '@rodolfonobrega/agentbridge';
 
-const res = await run({
-  agent: 'codex',
+const res = await ask('codex', {
   prompt: 'Analyze codebase',
   transport: 'app-server', // or 'cli' (default)
   permissions: 'read-only',
@@ -480,9 +479,9 @@ const res = await run({
      - `item/permissions/requestApproval`
    - AgentBridge programmatically responds to these requests based on the session's active permissions (`read-only` and `plan` reject with `{ denied: { rejection: ... } }`; `edit` and `full` approve), enforcing safety with zero interactive delays.
 3. **Structured Streaming & Event Delivery:**
-   - Text deltas (`item/agentMessage/delta`) and tool lifecycle notifications (`item/commandExecution/started`, `completed`) are delivered through standardized JSON-RPC 2.0 frames instead of fragile ANSI log parsing or stdout scraping.
+   - Text deltas (`item/agentMessage/delta`), reasoning (`item/reasoning/delta`), tool items (`item/completed`, surfaced as `shell`/`file_change` tool events) and usage updates (`thread/tokenUsage/updated`, `turn/completed`) arrive as normalized events from standardized JSON-RPC 2.0 frames instead of fragile ANSI log parsing or stdout scraping.
 4. **Clean Protocol Cancellation:**
-   - Instead of abruptly sending `SIGKILL` / `taskkill` to an active process (which can leave incomplete file edits or lock contention), AgentBridge sends a `turn/cancel` notification. The model halts immediately while preserving daemon state.
+   - Instead of abruptly sending `SIGKILL` / `taskkill` to an active process (which can leave incomplete file edits or lock contention), AgentBridge sends a `turn/interrupt` notification. The model halts immediately while preserving daemon state.
 5. **Stateful Multi-Turn Sessions:**
    - Native thread continuity (`threadId`, `turnId`) without having to persist and reload entire conversational context trees from disk.
 
@@ -521,7 +520,7 @@ import { fanout, race } from '@rodolfonobrega/agentbridge';
 // Same prompt to many agents/models; never rejects because one agent failed
 const { results, budget } = await fanout(
   ['claude:haiku', 'codex', { agent: 'opencode', model: 'opencode-go/glm-5.3-flash' }],
-  { prompt: 'Review src/core/spawn.mjs' },
+  { prompt: 'Review src/core/spawn.ts' },
   { concurrency: 2, budget: { maxCost: 0.5, maxTokens: 200_000, maxTimeMs: 300_000 } },
 );
 for (const r of results) console.log(r.agent, r.ok, r.durationMs, r.text.slice(0, 100));
@@ -590,9 +589,10 @@ rollbackCheckpoint(process.cwd(), cp.id);
 
 ### MCP Tools
 Agents calling the bridge have native access to:
-- `checkpoint_create`: `{ message?: string }`
-- `checkpoint_rollback`: `{ checkpointId: string }`
-- `checkpoint_list`: `{}`
+- `checkpoint_create`: `{ message?, sessionId?, cwd? }`
+- `checkpoint_rollback`: `{ id: string, cwd? }`
+- `checkpoint_diff`: `{ id: string, cwd? }` — unified diff between the working tree and a checkpoint
+- `checkpoint_list`: `{ sessionId?, cwd? }`
 
 ---
 
@@ -600,8 +600,8 @@ Agents calling the bridge have native access to:
 
 - **Bounded Stderr Tail Buffer:** Standard OS pipe buffers range from 4 to 64 KiB. If a child agent outputs massive debug logs to `stderr`, standard streaming pipes can deadlock. AgentBridge streams stdout while retaining a circular 8 KiB ring buffer (`STDERR_TAIL_MAX_CHARS = 8192`) on stderr, guaranteeing deadlock-free execution while retaining full tail diagnostics on failure.
 - **Cross-Platform Tree Escalation:** When an agent times out or is aborted:
-  - On POSIX, escalates through process groups (`-pid` SIGTERM, followed by SIGKILL).
-  - On Windows, uses `taskkill.exe /PID <pid> /T /F` or Win32 Job Object semantics to terminate child sub-processes.
+  - On POSIX, escalates through process groups (`-pid` SIGTERM, followed by SIGKILL after a short grace; a plain SIGKILL of the leader if there is no process group).
+  - On Windows, uses `taskkill.exe /pid <pid> /T /F`, degrading to a SIGKILL of the leader alone if taskkill is missing or fails.
   - Exposes `handle.pid` on spawn handles for real process supervision.
 
 ---
@@ -670,17 +670,11 @@ When you install the `agentbridge-delegate` skill, it is placed in `.agents/skil
 - OpenCode and Antigravity discover it automatically.
 - There is **no need** to install separate copies into `.claude/skills` or repeat the installation per harness.
 
-### 2. Zero Collision Guarantee (`[Skill conflicts] collision`)
-Pi scans both your workspace root (`./.agents/skills/`) and your global home (`~/.agents/skills/`). Previously, duplicate installations across scopes resulted in:
-```
-[Skill conflicts]
-  "agentbridge-delegate" collision:
-    ✓ auto (project) ~/projects/.agents/skills/agentbridge-delegate/SKILL.md
-    ✗ ~/.agents/skills/agentbridge-delegate/SKILL.md (skipped)
-```
-**How AgentBridge prevents this:**
-- When installing with `--scope project`, the installer checks if `~/.agents/skills/agentbridge-delegate` is already present globally with identical content. If so, it safely skips creating a redundant local copy, keeping your project clean and avoiding Pi collision warnings.
-- Passing `--force` allows overriding this behavior when project-specific customization is needed.
+### 2. Duplicate-install behavior (no global skip, no `--force`)
+Pi scans both your workspace root (`./.agents/skills/`) and your global home (`~/.agents/skills/`). If the skill exists in both scopes, Pi auto-prefers one and marks the other skipped — that is Pi's own collision handling, and it is harmless here because both copies are written from the same source file and stay byte-identical.
+**What `ab install` actually does:**
+- It writes `.agents/skills/agentbridge-delegate` into the chosen scope unconditionally (project scope → `<cwd>/.agents/skills`, user scope → `~/.agents/skills`); there is no check of the other scope (`src/cli/install.ts`).
+- There is **no** `--force` flag and **no** global-content dedup; repeated runs simply overwrite with the same content.
 - `ab install all` deduplicates writes in-memory, writing the skill only once per run.
 
 ---
@@ -783,8 +777,8 @@ ab config set permissions-ceiling edit
 # Run tests and let Claude automatically fix any failures
 ab fix claude "npm test" --prompt "Fix token renewal expiration bug" --max-attempts 3
 
-# Fix without rolling back on failure (leaves current edits in workspace)
-ab fix claude "pytest" --no-rollback
+# Machine-readable execution history and checkpoints
+ab fix claude "pytest" --json
 ```
 
 ### Options:
@@ -792,8 +786,8 @@ ab fix claude "pytest" --no-rollback
 - `"<test-command>"`: Shell command that executes tests and exits with code 0 on success.
 - `--prompt`: Optional high-level guidance or bug description for the agent.
 - `--max-attempts N`: Maximum repair attempts before giving up (default: 3).
-- `--no-rollback`: Disable automatic git checkpoint rollback when max attempts are reached.
 - `--json`: Output machine-readable JSON execution history and checkpoints.
+- Rollback policy: if every attempt fails, `ab fix` automatically restores the initial git checkpoint (reported as `rolledBack`). There is no CLI flag to disable it; when calling the library `autoRepair()` directly you can pass `autoRollback: false` to keep the edits.
 
 ### Library API
 ```js
@@ -835,12 +829,12 @@ Runs multiple agents in parallel on the same prompt and computes consensus via p
 # Plurality voting across 3 models
 ab ensemble "Analyze database deadlock in query X" claude codex agy
 
-# Judge synthesis mode (judge synthesizes the best unified answer)
-ab ensemble "Propose migration architecture" claude codex agy --judge claude --judge-mode synthesize
-
-# Judge selection mode (judge picks the single best agent response)
-ab ensemble "Optimize SQL query" claude codex pi --judge codex --judge-mode select
+# With a judge (the judge synthesizes a unified answer or picks the best reply,
+# according to its mode, selected by default heuristics)
+ab ensemble "Propose migration architecture" claude codex agy --judge claude
 ```
+
+`judgeMode` (`'auto'` default | `'select'` | `'synthesize'`) is a `runEnsemble` library option, not a CLI flag.
 
 ### Library API
 ```js
@@ -849,7 +843,7 @@ import { runReviewLoop, runEnsemble } from '@rodolfonobrega/agentbridge';
 const review = await runReviewLoop({
   implementer: 'codex',
   reviewer: 'claude',
-  task: 'Add exponential backoff to retry logic',
+  task: 'Add retry-with-backoff to the fetch logic',
   maxTurns: 3,
 });
 
@@ -871,8 +865,6 @@ Executes complex multi-agent workflows defined as Directed Acyclic Graphs (DAGs)
 ```json
 {
   "name": "Feature Implementation Pipeline",
-  "concurrency": 2,
-  "checkpointPerWave": true,
   "steps": [
     {
       "id": "spec",
@@ -883,14 +875,14 @@ Executes complex multi-agent workflows defined as Directed Acyclic Graphs (DAGs)
     {
       "id": "impl",
       "agent": "codex",
-      "prompt": "Implement cache based on spec: {{spec.output}}",
+      "prompt": "Implement cache based on spec: {{steps.spec.output}}",
       "permissions": "edit",
       "dependsOn": ["spec"]
     },
     {
       "id": "tests",
       "agent": "claude",
-      "prompt": "Write tests for implementation: {{impl.output}}",
+      "prompt": "Write tests for implementation: {{steps.impl.output}}",
       "permissions": "edit",
       "dependsOn": ["impl"]
     }
@@ -898,20 +890,24 @@ Executes complex multi-agent workflows defined as Directed Acyclic Graphs (DAGs)
 }
 ```
 
+Only `name` and `steps` are recognized; other JSON keys (e.g. `concurrency`) are silently ignored. `{{steps.<id>.output}}` is the only templating form, and a reference to an unknown or failed step interpolates as an empty string.
+
 ### CLI Usage
 ```bash
-ab pipeline pipeline.json [--checkpoint-each] [--cwd path] [--json]
+ab pipeline pipeline.json [--checkpoint-each] [--auto-rollback] [--cwd path] [--json]
 ```
 
 ### Library API
 ```js
-import { runPipeline } from '@rodolfonobrega/agentbridge';
+// runPipeline is not part of the package root export; use the deep dist path:
+import { runPipeline } from 'agentbridge/dist/extras/pipeline.js';
 
 const result = await runPipeline(pipelineDefinition, {
   cwd: process.cwd(),
-  checkpointPerWave: true,
+  checkpointEach: true, // create a git checkpoint after each wave
+  // autoRollback: true, // restore the initial checkpoint when a step fails
 });
-console.log(result.success, result.wavesExecuted);
+console.log(result.success, result.durationMs, result.stepResults, result.failedStepId, result.rolledBack);
 ```
 
 ---
@@ -1036,9 +1032,9 @@ AgentBridge supports an extended roster of modern AI agents and protocols:
 
 ## Agents calling agents (the MCP bridge)
 
-The bridge is a dependency-free stdio MCP server (`ab bridge`, or `src/bridge/mcp.mjs`) that exposes your agents as tools to any other agent:
+The bridge is a dependency-free stdio MCP server (`ab bridge`, or `src/bridge/mcp.ts`) that exposes your agents as tools to any other agent:
 
-- `ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi` (plus `ask_ollama` and `ask_<endpoint>` for each [HTTP endpoint](#http-endpoints-ollama-and-any-base-url)) — synchronous delegation
+- `ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_cursor`, `ask_grok`, `ask_gemini`, `ask_devin`, `ask_acp` (plus `ask_ollama` and `ask_<endpoint>` for each [HTTP endpoint](#http-endpoints-ollama-and-any-base-url)) — synchronous delegation
 - `dispatch_<agent>` for each of those — start asynchronously, get a run id
 - `wait_run`, `check_run`, `cancel_run`, `list_runs`, `retain_run`, `release_run` — manage async runs
 - `send_message`, `check_messages` — simple inbox between runs/agents
@@ -1048,7 +1044,7 @@ Each `ask_*` tool accepts `prompt`, `model`, `effort`, `permissions`, `cwd`, `ti
 ### Programmatic subagent
 
 ```js
-import { runAsSubagent } from 'agentbridge/src/bridge/subagent.mjs';
+import { runAsSubagent } from 'agentbridge/dist/bridge/subagent.js';
 
 // Codex is the caller; it delegates to Claude through the bridge.
 const r = await runAsSubagent({
@@ -1070,7 +1066,7 @@ console.log(r.delegated, r.meta, r.text);   // r.meta is the server-attested pro
 
 ```js
 import { ask } from '@rodolfonobrega/agentbridge';
-import { mcpConfigFor } from 'agentbridge/src/bridge/attach.mjs';
+import { mcpConfigFor } from 'agentbridge/dist/bridge/attach.js';
 
 await ask('claude', {
   prompt: 'Use ask_codex to ask codex for a haiku about Node.js, then show me its answer.',
@@ -1083,7 +1079,7 @@ await ask('claude', {
 ### Safety rules enforced by the bridge
 
 - **Recursion guard:** `AGENTBRIDGE_MAX_DEPTH` (default 2) limits delegation chains.
-- **No permission escalation:** a child may never get broader permissions than its parent (`read-only < plan < edit < full`).
+- **No permission escalation:** a child may never receive permissions above its parent's (`read-only < plan < edit < full`).
 - **Server-side model/cwd pinning** so a delegating LLM cannot widen scope.
 - **Attestation:** results carry an HMAC the callee cannot forge; the key is delivered through process environment only, never written to disk or argv.
 - **Process-tree cleanup** on abort/timeout.
@@ -1097,7 +1093,7 @@ Run records live in `~/.agentbridge/runs` (override with `AGENTBRIDGE_HOME`).
 [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) (`npm i -g @earendil-works/pi-coding-agent`) is driven in `--mode json`, with any provider/model it has configured (Ollama, cloud models, API providers):
 
 ```bash
-ab ask pi "Explain src/core/spawn.mjs" --model ollama/glm-5.3-flash:cloud
+ab ask pi "Explain src/core/spawn.ts" --model ollama/glm-5.3-flash:cloud
 ab ask pi "Review this" --model anthropic/claude-sonnet-4 --effort high   # effort maps to pi's --thinking level
 ```
 
@@ -1131,7 +1127,7 @@ r.fallback // { used: 'codex', attempts: [{ agent: 'claude', code: 'RATE_LIMITED
 `agy` is driven in headless mode (`--input-format stream-json --output-format stream-json`) with the same options as the other agents:
 
 ```bash
-ab ask agy "Explain src/core/spawn.mjs" --model gemini-3.8-flash-low
+ab ask agy "Explain src/core/spawn.ts" --model gemini-3.8-flash-low
 ab ask agy "Review this" --model gemini-3.8-flash --effort high    # base model + effort
 agy models                                                         # lists the available models (Gemini, Claude, GPT-OSS)
 ```
@@ -1154,13 +1150,13 @@ Claude Code subagents and workflow-spawned agents inherit the MCP tools of the m
 cd /path/to/your/project
 ab install claude                          # project scope: writes .mcp.json and .claude/agents/*.md
 ab install claude --scope user             # all projects: registers in your user config, agents in ~/.claude/agents
-ab install claude --permissions edit      # let delegated agents edit files (default ceiling is read-only)
+ab install claude --permissions edit      # let delegated agents edit files (the ceiling itself defaults to full)
 ab install claude --max-depth 1            # limit how deep delegation chains can go
 ```
 
 What it does:
 
-1. Registers an MCP server named `agentbridge` (`claude mcp add-json`) that runs `ab bridge`, with a **permission ceiling** (`AGENTBRIDGE_PERMS`, default `read-only`): delegated agents can never exceed it.
+1. Registers an MCP server named `agentbridge` (`claude mcp add-json`) that runs `ab bridge`, with a **permission ceiling** (`AGENTBRIDGE_PERMS`, default `full`) and a **default execution permission** (`AGENTBRIDGE_DEFAULT_PERMS`, default `read-only`): delegated runs get `read-only` unless they explicitly ask for more, and can never exceed the ceiling.
 2. Writes relay subagents `codex-agent`, `opencode-agent`, `agy-agent`, `ollama-agent` (and one per extra endpoint you configured). Each one is a thin Haiku-powered relay whose only job is to forward the task to the matching `ask_*` tool and return the answer verbatim.
 
 Project-scope MCP servers need a one-time approval the first time you open Claude Code in that folder. Restart Claude Code afterwards.
@@ -1168,7 +1164,7 @@ Project-scope MCP servers need a one-time approval the first time you open Claud
 Using it:
 
 ```text
-> Use the codex-agent subagent to review src/auth.mjs, and the ollama-agent (model qwen3:14b) to summarize it.
+> Use the codex-agent subagent to review src/auth.ts, and the ollama-agent (model qwen3:14b) to summarize it.
 ```
 
 In a dynamic workflow (`.claude/workflows/*.js`), spawned agents can call the same tools, for example by telling an agent to use `mcp__agentbridge__ask_codex` in its prompt, or by running the relay subagents. Because delegation goes through the bridge, you keep the safety rules below (depth limit, no permission escalation, attested results).
@@ -1179,7 +1175,7 @@ Verified live: a Claude Code session delegating through the installed `codex-age
 
 ## HTTP endpoints: Ollama and any base URL
 
-Besides the three coding-agent CLIs, agentbridge can talk to any **chat-model HTTP endpoint** that speaks the OpenAI (`/chat/completions`) or Anthropic (`/v1/messages`) protocol: Ollama, vLLM, LM Studio, LiteLLM, OpenRouter, or a model server on another machine. Each endpoint becomes a named agent that works everywhere an agent name works.
+Besides the built-in coding-agent CLIs, agentbridge can talk to any **chat-model HTTP endpoint** that speaks the OpenAI (`/chat/completions`) or Anthropic (`/v1/messages`) protocol: Ollama, vLLM, LM Studio, LiteLLM, OpenRouter, or a model server on another machine. Each endpoint becomes a named agent that works everywhere an agent name works.
 
 `ollama` exists out of the box (`http://127.0.0.1:11434/v1`, or `OLLAMA_HOST` if set). Add others:
 
@@ -1201,7 +1197,7 @@ Or edit `~/.agentbridge/endpoints.json` directly:
 }
 ```
 
-Fields: `baseUrl` (required, http/https), `type` (`openai` default, or `anthropic`), `defaultModel`, `apiKeyEnv` (name of an env var; preferred) or `apiKey` (stored in plain text), `headers`. Names are lowercase letters, digits and `_`, and cannot be `claude`, `codex` or `opencode`.
+Fields: `baseUrl` (required, http/https), `type` (`openai` default, or `anthropic`), `defaultModel`, `apiKeyEnv` (name of an env var; preferred) or `apiKey` (stored in plain text), `headers`. Names start with a lowercase letter and contain at most 32 lowercase letters, digits and `_` (`^[a-z][a-z0-9_]{0,31}$`), and cannot be any of the ten built-in agent names (`claude`, `codex`, `opencode`, `agy`, `pi`, `cursor`, `grok`, `gemini`, `devin`, `acp`).
 
 Use them like any agent:
 
@@ -1222,7 +1218,7 @@ What endpoints support:
 - Streaming text (and `thinking` for reasoning models), usage from the server, `model` (omitted = `defaultModel`, else the first model the server lists), `systemPrompt`, `timeoutMs`, `signal`, `jsonSchema` (openai type), `effort`.
 - **Sessions are emulated locally**: the history is stored in `~/.agentbridge/endpoint-sessions/` and replayed each call. `new`, `ephemeral`, `continue` (with or without id) and `fork` behave like the other agents.
 - **Execution Harnesses for Tools and File Edits:** When `--permissions edit`, `--permissions full`, or `--harness <auto|claude|pi>` is passed, AgentBridge automatically drives the endpoint through an installed coding agent harness:
-  - `--harness auto` (default when permissions require editing or tools are configured): automatically picks `claude` (if installed) or `pi` (if installed).
+  - `--harness auto`: picks `claude` for Anthropic-compatible endpoints (`type: anthropic`, ollama, openrouter, or a base URL containing ollama/openrouter) when Claude Code is installed; anything else (OpenAI-type: vLLM, LM Studio, custom gateways) falls back to `pi`, and with neither harness CLI installed the run fails with `NOT_INSTALLED`.
   - `--harness claude`: runs via Claude Code CLI (`claude -p`), passing the endpoint as `ANTHROPIC_BASE_URL`, enabling all of Claude Code's file editing and execution tools for the model.
   - `--harness pi`: runs via the Pi CLI configured for the model.
   - `--harness none`: enforces direct HTTP API calls (plain chat without filesystem tools, maximum speed).
@@ -1365,7 +1361,7 @@ const summary = await wait(runIdOrSessionId, { timeoutMs: 60_000 });   // works 
 Serve your logged-in agents' models as a local API.
 
 ```bash
-ab serve --port 8787                       # or: node src/server/index.mjs --port 8787
+ab serve --port 8787                       # or: node dist/server/index.js --port 8787
 ab serve --port 8787 --token SECRET        # require a bearer token
 ```
 
@@ -1381,7 +1377,7 @@ const anthropic = new Anthropic({ baseURL: 'http://127.0.0.1:8787', apiKey: 'SEC
 const msg = await anthropic.messages.create({ model: 'codex/gpt-5.6-luna', max_tokens: 256, messages: [{ role: 'user', content: 'Hello' }] });
 ```
 
-Programmatic start: `import { startProxy } from 'agentbridge/src/server/index.mjs'; const p = await startProxy({ port: 0 });`
+Programmatic start: `import { startProxy } from 'agentbridge'; const p = await startProxy({ port: 0 });`
 
 | Route | Notes |
 |---|---|
@@ -1391,7 +1387,7 @@ Programmatic start: `import { startProxy } from 'agentbridge/src/server/index.mj
 | `POST /v1/messages/count_tokens` | Estimate only (~chars/4) |
 | `GET /v1/models` | OpenAI list, or Anthropic list when Anthropic headers are present |
 
-**Model routing:** `claude/<model>`, `codex/<model>`, `agy/<model>`, `pi/<provider>/<model>`, `opencode/<provider>/<model>`, and `<endpoint>/<model>` for any configured HTTP endpoint (e.g. `ollama/qwen3:14b`). Bare names are routed by heuristic (`sonnet|haiku|opus|claude-*` to claude, `gpt-*|o1|o3|o4|codex*` to codex, anything with `/` to opencode); otherwise 404.
+**Model routing:** `claude/<model>`, `codex/<model>`, `agy/<model>`, `pi/<provider>/<model>`, `opencode/<provider>/<model>`, `cursor|grok|gemini|devin|acp/<model>` when that CLI is installed, and `<endpoint>/<model>` for any configured HTTP endpoint (e.g. `ollama/qwen3:14b`). Bare names are routed by heuristic: the claude aliases `sonnet`, `haiku`, `opus`, `opusplan`, `best` and `claude-*` go to claude; `gpt-*`, `o1`/`o3`/`o4`, `codex*` and `chatgpt*` go to codex; anything containing `/` goes to opencode; when Ollama is configured, `glm-*`, `qwen*`, `llama*`, `deepseek*` and names with a `:cloud`/`:latest`/`:Nb` suffix go to the `ollama` endpoint; otherwise 404.
 
 **Also in the proxy:** client tool calling (claude via an MCP bridge, other agents via validated prompt emulation), an isolated-worktree **agent mode** (`agent/` prefix or `/agent/v1`, needs `--agent-root` and a token, returns a diff, `apply` is explicit), `max_tokens`/`stop` enforcement with real `finish_reason`, `x-ab-session` resume, a hot-reloaded `--config` (aliases, payload rules), an opt-in account pool (`--accounts` + `--accept-tos-risk`) and `/admin/status`, `/admin/usage`, `--log`.
 
@@ -1429,7 +1425,6 @@ Acceptance tests run **real** agents (never mocked) and therefore need the CLIs 
 ```bash
 npm run accept                       # runs the acceptance suite (acceptance/run.mjs)
 node --test acceptance/core.test.mjs # a single file
-npm run progress                     # live progress board for the build/verification process
 ```
 
 Test files: `core`, `claude`, `codex`, `opencode`, `pi`, `fallback`, `agy` (adapter, permissions, sessions, bridge, proxy, telemetry, handoff and 7 caller x callee pairs), `bridge`, `pairs` (all 9 caller x callee combinations), `registry`, `keydelivery`, `proxy`, `cli`, `extras`, `telemetry`, `context`, `hooks`, `endpoint` (real Ollama; skipped with a message if it is not running). Honest notes about residual limitations are in `acceptance/ADAPTER_NOTES.md`.
@@ -1437,15 +1432,18 @@ Test files: `core`, `claude`, `codex`, `opencode`, `pi`, `fallback`, `agy` (adap
 ## Project layout
 
 ```
-src/
-  index.mjs          public API
-  core/              errors, normalized events, hardened process spawning
-  adapters/          claude.mjs, codex.mjs, opencode.mjs, agy.mjs, pi.mjs, endpoint.mjs (Ollama / any HTTP base URL)
-  bridge/            MCP bridge server, attach helper, subagent runner, run registry
-  extras/            parallel (fanout/race), schema, worktree, budget, doctor
-  telemetry/         stats, context policy/compact/handoff, hooks, tracking
-  server/            OpenAI + Anthropic compatible proxy
-  cli/               `agentbridge` / `ab` command (+ install.mjs: `ab install claude`, `ab endpoint`)
+src/                TypeScript source; compiled to dist/ for publishing on npm
+  index.ts          public API
+  core/             errors, normalized events, hardened process spawning, checkpointing, config
+  adapters/         claude.ts, codex.ts, opencode.ts, agy.ts, pi.ts, endpoint.ts (Ollama / any HTTP base URL), cursor.ts, grok.ts, gemini.ts, devin.ts, acp.ts
+  bridge/           MCP bridge server, attach helper, subagent runner, run registry
+  extras/           parallel (fanout/race), schema, worktree, budget, doctor, pipeline, consensus (review/ensemble), repair
+  telemetry/        stats, context policy/compact/handoff, hooks, tracking, project memory
+  quota/            proactive quota probing (Anthropic OAuth usage, Codex usage backend)
+  server/           OpenAI + Anthropic compatible proxy
+  ui/               `ab ui` local dashboard server
+  types/            shared option/event/result types
+  cli/              `agentbridge` / `ab` command (+ install.ts, install-ide.ts, setup.ts, accounts.ts)
 docs/                PROXY.md, TELEMETRY.md, EXTENDING.md
 acceptance/          real-agent acceptance tests and notes
 CONTRACT.md          the binding spec for adapters, options, events and errors
@@ -1455,14 +1453,14 @@ CONTRACT.md          the binding spec for adapters, options, events and errors
 
 - **Codex has no incremental streaming** in its `--json` mode, so `text` arrives in large chunks rather than token by token. This is a CLI limitation, documented rather than faked.
 - **OpenCode latency varies** with the backend model/provider; use generous timeouts for slow models. A stall detector aborts a run that makes no progress.
-- **No quota/rate-limit tracking:** none of the three CLIs exposes it cheaply in headless mode.
+- **Quota probing is provider-specific:** `ab quota` reads Anthropic's OAuth usage API and Codex's usage backend only; other agents rely on in-flight `RATE_LIMITED` detection (see the "Proactive quota probing" section above).
 - **Compaction for codex/opencode is summarize-and-continue** (a new session), not in-place compaction.
-- **Proxy:** no client tool calling, stateless requests, ignored sampling parameters (see above).
+- **Proxy:** tool-mode replies are buffered; stateless requests without `x-ab-session`; ignored sampling parameters (see above).
 - Codex fork/`exec resume` behavior depends on the installed CLI version.
 - **pi**: no sandbox (`edit` is not confined to cwd, `plan` = `read-only`); tests were run against a cloud model through Ollama.
-- **Rate limits**: `RATE_LIMITED` is detected from error text/HTTP status; a vendor changing its wording would fall back to `AGENT_FAILED` (add the pattern to `src/core/errors.mjs`).
+- **Rate limits**: `RATE_LIMITED` is detected from error text/HTTP status; a vendor changing its wording would fall back to `AGENT_FAILED` (add the pattern to `src/core/errors.ts`).
 - **agy**: no `fork`, `edit` is not strictly confined to cwd, `systemPrompt` goes through the rules file rather than a true system role, and quota/rate-limit errors surface as `AGENT_FAILED` with agy's own message. Its login could only be checked on a logged-in Windows machine.
-- **HTTP endpoints are plain chat**: no tools/MCP/file access, locally emulated sessions, and they are not exposed through the OpenAI/Anthropic proxy routing (point your SDK at the endpoint directly instead). Context telemetry for their sessions falls back to run-usage aggregates.
+- **HTTP endpoints are plain chat by default**: no tools/MCP/file access unless a harness (`--harness claude|pi`) drives them, and locally emulated sessions (they are exposed through the proxy as `<endpoint>/<model>` when configured). Context telemetry for their sessions falls back to run-usage aggregates.
 - **Claude Code relay subagents** depend on a small model following the "just forward it" instruction; the installed prompt makes it strict (and it reports `AGENTBRIDGE TOOL UNAVAILABLE` rather than answering itself), but you can always call `mcp__agentbridge__ask_*` directly.
 
 ## Troubleshooting
@@ -1474,7 +1472,7 @@ CONTRACT.md          the binding spec for adapters, options, events and errors
 | `TIMEOUT` on OpenCode | Raise `timeoutMs`; the backend model may be slow. |
 | `BAD_OPTION 'session busy'` | Another call is using that OpenCode session; wait or use a different/forked session. |
 | `Recursion guard` error in the bridge | Delegation exceeded `AGENTBRIDGE_MAX_DEPTH`; raise it deliberately if needed. |
-| Child requests broader permissions | Permissions cannot exceed the caller's; raise the top-level `permissions`. |
+| Child requests higher permissions | Permissions cannot exceed the caller's; raise the top-level `permissions`. |
 | `Cannot reach ollama at ...` | Start the server (`ollama serve` or the Ollama app), or fix `OLLAMA_HOST` / the endpoint `baseUrl`. |
 | Endpoint says model not found (`BAD_OPTION`) | Check `ollama list` (or the server's `/v1/models`) and pass the exact name with `--model`. |
 | Claude Code does not show the agentbridge tools | Restart Claude Code; for project scope approve the server on first open (`claude mcp get agentbridge`). |

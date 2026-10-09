@@ -1,6 +1,6 @@
 # agentbridge compat proxy
 
-Serves the models of your locally installed and logged-in agent CLIs (`claude`, `codex`, `opencode`) as an
+Serves the models of your locally installed and logged-in agent CLIs (`claude`, `codex`, `opencode`, `agy`, `pi`, plus `cursor`/`grok`/`gemini`/`devin`/`acp` when that CLI is present) and any configured HTTP endpoints (Ollama built in, or any OpenAI/Anthropic-compatible base URL) as an
 OpenAI-compatible and Anthropic-compatible HTTP API. Point an app's base URL at it; no API keys needed.
 
 ```bash
@@ -8,7 +8,7 @@ ab serve --port 8787 [--token SECRET]
 # OpenAI SDK:    baseURL = http://127.0.0.1:8787/v1
 # Anthropic SDK: baseURL = http://127.0.0.1:8787
 ```
-Programmatic: `import { startProxy } from 'agentbridge/server'; const p = await startProxy({ port: 0 });`
+Programmatic: `import { startProxy } from 'agentbridge'; const p = await startProxy({ port: 0 });`
 
 ## WARNING: terms of service
 This routes requests made with your **subscription logins** (Claude, ChatGPT/Codex, etc.) through a local proxy.
@@ -111,7 +111,7 @@ const client = new Anthropic({
 async function main() {
   const message = await client.messages.create({
     model: 'claude-3-7-sonnet',
-    max_tokens=1000,
+    max_tokens: 1000,
     messages: [{ role: 'user', content: 'List 3 security best practices for JWT.' }],
   });
 
@@ -188,8 +188,8 @@ res = client.chat.completions.create(
 ---
 
 ## Model routing
-`claude/<model>`, `codex/<model>`, `agy/<model>`, `pi/<provider>/<model>`, `opencode/<provider>/<model>`, and `<endpoint>/<model>` for configured HTTP endpoints (e.g. `ollama/qwen3:14b`). Bare names by heuristics: `sonnet|haiku|opus|claude-*`
--> claude; `gpt-*|o1/o3/o4|codex*` -> codex; anything with a `/` -> opencode. Otherwise 404
+`claude/<model>`, `codex/<model>`, `agy/<model>`, `pi/<provider>/<model>`, `opencode/<provider>/<model>`, `cursor|grok|gemini|devin|acp/<model>` when that CLI is installed, and `<endpoint>/<model>` for configured HTTP endpoints (e.g. `ollama/qwen3:14b`). Bare names by heuristics: `sonnet|haiku|opus|opusplan|best|claude-*`
+-> claude; `gpt-*|o1/o3/o4|codex*|chatgpt*` -> codex; anything containing a `/` -> opencode; when Ollama is configured, `glm-*|qwen*|llama*|deepseek*` or names with a `:cloud`/`:latest`/`:Nb` suffix -> the `ollama` endpoint. Otherwise 404
 (`model_not_found` / Anthropic `not_found_error`).
 
 ## Parameter mapping
@@ -206,16 +206,15 @@ res = client.chat.completions.create(
   `historyBudgetTokens` of the config).
 - Client disconnect -> `AbortSignal` -> the CLI process is killed.
 - Errors: OpenAI `{error:{message,type,param,code}}`; Anthropic `{type:"error",error:{type,message}}`. Status:
-  400 bad request/option, 401 bad token or agent not logged in, 403 agent mode refused, 404 unknown model, 429 rate limited,
-  502 agent failure, 503 CLI not installed, 504 timeout. Mid-stream failures are sent as an SSE error event.
+  400 bad request/option, 401 bad token or agent not logged in, 403 agent mode refused / cwd outside the agent root / permissions above the ceiling / bad host, 404 unknown model, 405 method not allowed, 409 run or sandbox busy / patch conflict on apply, 413 request body too large (20 MB cap), 429 rate limited, 499 request aborted, 500 sandbox failure, 502 agent failure, 503 CLI not installed, 504 timeout. Mid-stream failures are sent as an SSE error event.
 
 ## Config file (`--config file.json`, hot reloaded)
 ```json
 { "aliases": { "fast": "claude/haiku" },
-  "payload": [{ "match": "codex/*", "defaults": { "effort": "medium" } }],
+  "payload": [{ "match": "codex/*", "defaults": { "effort": "medium" }, "override": { "temperature": 0.2 } }],
   "agentRoot": "C:/work", "maxPermission": "edit", "historyBudgetTokens": 0 }
 ```
-A bad reload keeps the previous config. Requests in flight keep the config they started with.
+Payload-rule keys: `defaults` fills a key only when the request leaves it unset; `override` forces it. The config file can also carry a top-level `accounts` object (same shape as the `--accounts` file) to set up the pool inline; like the pool file, it is read at startup and never hot-reloaded (and still needs `--accept-tos-risk`). A bad reload keeps the previous config. Requests in flight keep the config they started with.
 
 ## Two modes
 **API mode** (default): plain chat. Read-only, throw-away temp dir, the agent's own tools are off.
@@ -224,7 +223,7 @@ A bad reload keeps the previous config. Requests in flight keep the config they 
 `/agent/v1`. It works in an **isolated copy** (git worktree, or a temp copy of a non-git folder), never in your folder:
 - Off unless the server was started with `--agent-root <dir>` **and** a token. Always loopback.
 - `x-ab-cwd`: folder to work on, inside the agent root; anything resolving outside it is a 403.
-- `x-ab-permissions`: `read-only|edit|full`, never above `--agent-max-permission` (default `full`).
+- `x-ab-permissions`: `read-only|plan|edit|full`, never above `--agent-max-permission` (default `full`).
 - `x-ab-session`: reuse the same sandbox and CLI session across requests.
 - The reply carries `agentbridge: { runId, filesChanged, diff }` (and the header `x-agentbridge-run`). Routes: `GET /agent/runs`,
   `GET /agent/runs/:id`, `GET /agent/runs/:id/diff`, `POST /agent/runs/:id/apply` (git apply into the real folder; 409 on conflict),

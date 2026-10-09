@@ -7,8 +7,8 @@
 ## 1. Core Philosophy: "O Agent Pode Tudo" (Full Freedom by Default)
 
 AgentBridge is built on the philosophy that autonomous coding agents should not be artificially handcuffed:
-- **`permissions: "full"` by default:** You have unrestricted execution permissions — shell/PowerShell/bash commands, reading and editing workspace files, running builds and tests, and live web research.
-- **No arbitrary roadblocks:** Unless the user explicitly launches in a sandboxed mode (`edit`, `plan`, `read-only`), you are expected and empowered to perform actions directly, execute commands, and solve tasks end-to-end.
+- **`permissions` defaults to `read-only`:** The safety lock is engaged on every run unless you (or the operator) elevate it (`src/core/config.ts`). You can read files and search the web, but you cannot edit files or run shell commands until the task is granted more.
+- **Elevate deliberately, not arbitrarily:** Request `permissions: "edit"` or `"full"` explicitly when a task needs it, or configure a persistent default via `AGENTBRIDGE_DEFAULT_PERMS` (the installer's `--default-permissions`). The ceiling (`AGENTBRIDGE_PERMS` / `AGENTBRIDGE_PERMS_CEILING`, default `full`) is the hard circuit-breaker no request can exceed.
 - **Fail-safe isolation available on demand:** When safety is needed for risky refactors, AgentBridge provides **Git Checkpoints** (`ab checkpoint`) and **Git Worktrees** (`--worktree`) so you can experiment freely with instant rollback.
 
 ---
@@ -120,12 +120,12 @@ ab config get default-permissions       # Prints active default
 ab config set permissions-ceiling edit  # Hard ceiling circuit-breaker
 ```
 
-### The "Broader than caller" / "Teto Máximo" Error
+### The "Exceeds the permission ceiling" Error
 If you or a subagent request `permissions: "full"` and receive an error like:
 ```
-permissions "full" is broader than the caller's "edit"
+permissions "full" exceeds the configured permission ceiling "edit" (increase ceiling or configure permission)
 ```
-(or `...is broader than the caller's "read-only"`), this means the MCP server in the host agent configuration was previously registered with a restricted ceiling (`AGENTBRIDGE_PERMS="edit"` or `"read-only"`).
+(the same applies against a `"read-only"` ceiling), this means the MCP server in the host agent configuration was previously registered with a restricted ceiling (`AGENTBRIDGE_PERMS` / `AGENTBRIDGE_PERMS_CEILING="edit"` or `"read-only"`).
 
 ### How to Fix It:
 Run this command in the terminal to elevate the ceiling to `full`:
@@ -292,7 +292,7 @@ ab serve --port 8787
 
 2. **Agent Mode (`/agent/v1` or model `agent/<agent>/<model>`):**
    - Executes in an isolated **git worktree** pointing to the workspace folder (`x-ab-cwd`).
-   - The agent receives native file-editing tools under `permissions: "full"`.
+   - The agent receives native file-editing tools; permissions default to `edit` and can be raised with the `x-ab-permissions` header (e.g. `full`).
    - Returns structured diffs and run metadata:
      ```json
      {
@@ -328,7 +328,7 @@ ab serve --port 8787
 - [ ] Need to make risky changes? Run `ab checkpoint create "before refactor"`.
 - [ ] Need a second opinion on code? Call `ask_codex` or `ask_claude` with `permissions: "full"`.
 - [ ] Need to run tasks in parallel? Call `dispatch_*` and collect with `wait_run`.
-- [ ] Hit an error `permissions broader than caller`? Run `ab install all --permissions full`.
+- [ ] Hit an error `permissions exceeds the configured permission ceiling`? Run `ab install all --permissions full`.
 - [ ] Need to verify what agents and host MCPs are available? Run `ab doctor`.
 - [ ] Delegating a task requiring special MCP tools (e.g. `rea`)? Confirm the destination harness has the MCP configured with `"exposure": "direct"` and proper permissions (`permissions: "edit"` / `"full"`), or execute directly on the host agent.
 - [ ] Want low-latency, warm multi-turn execution with Codex? Use `transport: "app-server"`.

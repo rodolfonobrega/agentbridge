@@ -14,7 +14,7 @@ This document provides a comprehensive technical comparison of **AgentBridge**, 
 | **Orchestration Modality** | CLI (`ab`), Stdio MCP Server (`ab bridge`), Drop-in OpenAI/Anthropic HTTP Proxy (`ab serve`), and JS/TS API | GUI only (Electron Desktop) | GUI & Web workspace |
 | **Agent-to-Agent Delegation** | Native MCP Tools (`ask_*`, `dispatch_*`, `wait_run`, `send_message`) | None (human-to-agent only) | Internal Effect runtime |
 | **Workspace Safety** | Git Hidden-Ref Checkpoints (`refs/agentbridge/checkpoints/...`) + Isolated Git Worktrees | Ephemeral worktrees | Git Checkpoints (`refs/checkpoints/...`) |
-| **Process Supervision** | OS process-tree escalation (Win32/POSIX) + 8 KiB bounded stderr tail buffer | Child process monitoring & hang watchdog | Effect-TS fiber process supervision |
+| **Process Supervision** | OS process-tree escalation (Windows/POSIX) + 8 KiB bounded stderr tail buffer | Child process monitoring & hang watchdog | Effect-TS fiber process supervision |
 | **Rate Limit / Quota** | In-flight detection + proactive Anthropic/Codex usage probing & auto-rotation pool | Anthropic OAuth usage API probing + Codex usage headers | Token quota tracking & budget limits |
 | **Security / Attestation** | HMAC-SHA256 delegation attestation, loopback-bound server, strict permission tiers | OS credential manager | Client token storage |
 
@@ -27,7 +27,7 @@ This document provides a comprehensive technical comparison of **AgentBridge**, 
 #### AgentBridge
 - **Zero-Dependency Native Architecture:** Relies solely on Node.js `child_process.spawn` without native compilation bindings (`node-pty` or C++ addons). Runs universally on Windows (PowerShell/cmd), macOS, and Linux without build toolchains.
 - **Bounded Tail Ring Buffer:** Standard process pipes deadlock when subagent stderr overflows the OS pipe buffer (typically 4–64 KiB). AgentBridge implements a circular 8 KiB tail buffer (`STDERR_TAIL_MAX_CHARS`), guaranteeing that high-volume debug logs never stall agent execution while preserving the critical tail for error diagnostics.
-- **Cross-Platform Process Tree Termination:** On POSIX, escalates through process groups (`-pid` SIGTERM $\to$ SIGKILL); on Windows, invokes `taskkill.exe /PID <pid> /T /F` or Win32 Job Object semantics, ensuring child CLI worker processes never leak as zombie background tasks.
+- **Cross-Platform Process Tree Termination:** On POSIX, escalates through process groups (`-pid` SIGTERM $\to$ SIGKILL); on Windows, invokes `taskkill.exe /pid <pid> /T /F` (degrading to a SIGKILL of the leader alone if taskkill is missing or fails), ensuring child CLI worker processes never leak as zombie background tasks.
 - **Dual-Mode Codex Execution:** Supports both standard batch CLI execution (`codex exec`) and persistent JSON-RPC 2.0 stdio server mode (`codex app-server`), minimizing cold-start overhead and maintaining stateful turn execution.
 
 #### Orca (Stably AI)
@@ -63,8 +63,8 @@ This document provides a comprehensive technical comparison of **AgentBridge**, 
 #### AgentBridge
 - **Proactive & Reactive Hybrid Rate Limiting:**
   1. *In-Flight Fallback:* When a CLI hits a rate limit or token exhaustion during a run, AgentBridge automatically fails over to the next configured fallback provider/model (e.g., `claude -> codex -> opencode -> ollama`) without crashing the calling workflow.
-  2. *Proactive Quota Probing:* Directly queries Anthropic's OAuth usage endpoint (`GET https://api.anthropic.com/api/organizations/{org_id}/usage_limits`) and Codex's usage headers.
-  3. *Pool Auto-Cooldown:* Accounts reaching $\ge 95\%$ quota utilization or receiving 429 responses are automatically placed in a cooling-down queue with smart exponential backoff.
+  2. *Proactive Quota Probing:* Directly queries Anthropic's OAuth usage endpoint (`GET https://api.anthropic.com/api/oauth/usage`) and Codex's usage backend (`GET https://chatgpt.com/backend-api/wham/usage`).
+  3. *Pool Auto-Cooldown:* Accounts reaching $\ge 95\%$ quota utilization or receiving 429 responses are automatically placed in a cooling-down queue with fixed cooldowns (30 min for quota, 30 s for overloaded, 60 s for rate; a provider-provided `retry-after` wins), and a throttled account is held until its quota reset time.
 - **Drop-In HTTP Proxy:** The `ab serve` command turns the account pool into a local OpenAI/Anthropic compatible HTTP proxy. Any tool (Cursor, VS Code extensions, Continue, Cline) can transparently leverage CLI logins and pooled multi-account rotation without manual token management.
 
 #### Orca
@@ -80,7 +80,7 @@ This document provides a comprehensive technical comparison of **AgentBridge**, 
 
 #### AgentBridge Superpower: Native Recursive MCP & Delegation Roster
 - **MCP Bridge (`ab bridge`):** Any AI coding agent (Claude Code, Codex, Antigravity, OpenCode, Cursor, Devin) can discover and call other agents through standard Model Context Protocol tools (`ask_claude`, `ask_codex`, `dispatch_opencode`, etc.).
-- **Subagent Roster & Lineage:** Every subagent dispatched records its lineage hierarchy (`parentRunId`, `rootRunId`, `depth`, and `subagents[]`).
+- **Subagent Roster & Lineage:** Every subagent dispatched is recorded as a `subagents[]` entry (`id`, `name`, `parentId`, `parentToolId`, `task`, `state`, start/end timestamps, token usage) on the **parent's** run record, which also carries the delegation `root` (`src/bridge/runs.ts`). Delegation depth is tracked with the `AGENTBRIDGE_DEPTH` environment variable (the bridge's recursion guard), and inbox messages carry a `{root, depth, pid}` sender identity.
   - Child runs automatically stream events and token usage into the parent run record.
   - Atomic persistence in `~/.agentbridge/runs/<runId>.json`.
   - Visualized as an interactive hierarchy tree in the AgentBridge Web UI (`ab ui`).

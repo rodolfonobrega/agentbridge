@@ -2,7 +2,7 @@
 
 > [!IMPORTANT]
 > **100% LOCAL PRIVACY GUARANTEE (Zero Remote Telemetry):**  
-> AgentBridge does NOT send any telemetry, usage statistics, logs, prompt content, or operational metrics over the internet. There are zero third-party telemetry integrations (no PostHog, Segment, Google Analytics, Sentry, or cloud trackers). All recorded run summaries, token metrics, context windows, and tool counts are persisted exclusively on your local machine (`~/.agentbridge/telemetry/`). The optional dashboard (`ab ui`) runs strictly on loopback (`http://127.0.0.1`) and never transmits data outside your computer.
+> AgentBridge does NOT send any telemetry, usage statistics, logs, prompt content, or operational metrics over the internet. There are zero third-party telemetry integrations (no PostHog, Segment, Google Analytics, Sentry, or cloud trackers). All recorded run summaries, token metrics, context windows, and tool counts are persisted exclusively on your local machine (`~/.agentbridge/telemetry/`). The optional dashboard (`ab ui`) runs on loopback by default (`http://127.0.0.1`); binding it to another host requires the explicit `--allow-non-loopback` flag (see Dashboard below).
 
 Code: `src/telemetry/{stats,context,hooks,track,index}.ts`. Everything is exported from `src/index.ts`; `run()`/`ask()` are untouched.
 State lives in `~/.agentbridge/` (override with `AGENTBRIDGE_HOME`): `telemetry/{runs,sessions}/*.json`, `telemetry/stats.json`,
@@ -65,7 +65,7 @@ Safety: per-hook timeout (default 10s; commands are killed, http destroyed, call
 - Window: codex reads `model_context_window` from the file; claude/opencode use the table (override with `setContextWindow`), widened when observed tokens exceed it.
 
 ## Known gaps
-No quota/rate-limit tracking: none of the three CLIs exposes it cheaply in headless mode (Orca reads it from Claude's statusline hook, an interactive-only channel).
+Quota tracking used to be a gap; it exists now: `src/quota/proactive.ts` polls Anthropic's OAuth usage API and Codex's usage backend, exposed through `ab quota`, the `check_quota` MCP tool and the `>= 95%` account-pool cooldown in `src/server/pool.ts` (details in [COMPARISON.md](COMPARISON.md)). Coverage is provider-specific — only Anthropic (OAuth login) and Codex (ChatGPT login) have usage endpoints; the other agents are covered by in-flight `RATE_LIMITED` detection only.
 
 ## Known limits
 Tool counts need the wrapper. opencode context has no session-file reader. Codex fork/`exec resume` behavior depends on the installed CLI version.

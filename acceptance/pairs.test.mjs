@@ -46,10 +46,10 @@ test('recursion guard (direct)', async () => {
 test('permission clamp: every parent x requested level', () => {
   const R = { 'read-only': 0, plan: 1, edit: 2, full: 3 };
   for (const parent of Object.keys(R)) {
-    assert.equal(resolvePerms(undefined, { AGENTBRIDGE_PERMS: parent }), parent, 'default = parent');
+    assert.equal(resolvePerms(undefined, { AGENTBRIDGE_PERMS: parent }), 'read-only', 'default = read-only regardless of ceiling');
     for (const req of Object.keys(R)) {
       if (R[req] <= R[parent]) assert.equal(resolvePerms(req, { AGENTBRIDGE_PERMS: parent }), req);
-      else assert.throws(() => resolvePerms(req, { AGENTBRIDGE_PERMS: parent }), /broader/, `${parent} -> ${req}`);
+      else assert.throws(() => resolvePerms(req, { AGENTBRIDGE_PERMS: parent }), /exceeds the configured permission ceiling/, `${parent} -> ${req}`);
     }
   }
   assert.equal(resolvePerms(undefined, {}), 'read-only');
@@ -61,7 +61,7 @@ test('errors: bad args / escalation / unknown run', async () => {
   try {
     await init(c);
     let r = await c.tool('ask_claude', { prompt: 'hi', permissions: 'full' });
-    assert.equal(r.result.isError, true); assert.match(r.result.content[0].text, /broader/);
+    assert.equal(r.result.isError, true); assert.match(r.result.content[0].text, /exceeds the configured permission ceiling/);
     r = await c.tool('ask_claude', { prompt: 'hi', permissions: 'plan' });
     assert.equal(r.result.isError, true);
     r = await c.tool('ask_claude', { prompt: '' });

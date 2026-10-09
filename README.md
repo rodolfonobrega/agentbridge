@@ -6,7 +6,7 @@
 Drive **Claude Code**, **Codex**, **OpenCode**, **Antigravity CLI (`agy`)**, **pi**, **Cursor**, **Grok**, **Gemini**, **Devin**, **Agent Client Protocol (`acp`)** and local/remote **HTTP models (Ollama, vLLM, LM Studio...)** from the same CLI, library, MCP server and OpenAI/Anthropic-compatible proxy — using the logins you already have. **No API keys. No dependencies. No build step.**
 
 ```bash
-ab ask claude   "Review src/auth.mjs for security bugs"
+ab ask claude   "Review src/auth.ts for security bugs"
 ab ask codex    "Write tests for it"                      --permissions edit
 ab ask agy      "Explain the failing build"               --model gemini-3.8-flash
 ab race "Fix the flaky test" claude:haiku codex opencode  # first answer wins, the rest are cancelled
@@ -123,7 +123,7 @@ const { winner } = await race(['claude:haiku', 'codex', 'opencode'], { prompt: '
 console.log(winner.agent, winner.text);
 
 // ask several agents and keep every answer
-const { results } = await fanout(['claude:haiku', 'codex'], { prompt: 'Review src/auth.mjs' });
+const { results } = await fanout(['claude:haiku', 'codex'], { prompt: 'Review src/auth.ts' });
 ```
 
 **7. Watch what is happening (optional)**
@@ -135,12 +135,14 @@ ab ui --open        # live dashboard on http://127.0.0.1:8788
 **8. Let your agents delegate to each other**
 
 ```bash
-ab install claude          # registers the MCP bridge with default permissions: full
+ab install claude          # registers the MCP bridge (default permission ceiling: full)
 ab install codex           # same for Codex
 ab install opencode        # same for OpenCode (opencode.json)
 ab install agy             # same for Antigravity
 ab install all             # every one of the above that is installed
 ```
+
+Install scope defaults to the current project (`--scope project`: writes `.mcp.json` and `.claude/agents` into the repo); pass `--scope user` to register globally instead.
 
 Now, from inside any of them, you can say "ask claude to review this" or "have pi write the tests": the agent calls the `ask_<agent>` tools (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...).
 
@@ -154,7 +156,7 @@ Now, from inside any of them, you can say "ask claude to review this" or "have p
 >
 > 🌐 **Universal Skills (`.agents/skills`) & Conflict Prevention:**
 > - Pi, Codex, OpenCode, and Antigravity all share the open **`.agents/skills/`** directory. Installing once covers all of them!
-> - The installer detects existing global skills (`~/.agents/skills`) and avoids redundant project duplicates, eliminating Pi's `[Skill conflicts] collision` warnings.
+> - Within a single install run each skill destination is written at most once (per-process dedup in `writeSkill`, `src/cli/install.ts`), so `ab install all` produces exactly one copy per target.
 
 ---
 
@@ -162,7 +164,7 @@ Now, from inside any of them, you can say "ask claude to review this" or "have p
 
 ### 1. Unified run API (library + CLI)
 - `run()` (streaming async generator), `ask()` (final result), `fanout()`, `race()`.
-- Identical options for every agent: `model`, `effort` (`low|medium|high|max`, mapped per agent), `permissions` (`read-only|plan|edit|full`), `cwd`, `timeoutMs`, `signal`, `systemPrompt`, `jsonSchema`, `session`, `mcpServers`, `env`, `extraArgs`, `fallback`.
+- Identical options for every agent: `model`, `effort` (`low|medium|high|xhigh|max`, mapped per agent), `permissions` (`read-only|plan|edit|full`), `cwd`, `timeoutMs`, `signal`, `systemPrompt`, `jsonSchema`, `session`, `mcpServers`, `env`, `extraArgs`, `fallback`.
 - Normalized events (`text`, `tool`, `usage`, `fallback`, ...) and a normalized result (`text`, `sessionId`, `usage`, `model`, `structured`, `fallback`).
 - Typed errors: `NOT_INSTALLED`, `NOT_LOGGED_IN`, `TIMEOUT`, `ABORTED`, `BAD_OPTION`, `RATE_LIMITED`, `AGENT_FAILED`.
 - Structured output: `jsonSchema` validates (and repairs, with a retry) the model's JSON.
@@ -171,10 +173,11 @@ Now, from inside any of them, you can say "ask claude to review this" or "have p
 `new`, `ephemeral`, `continue` (by id or "latest for this cwd") and `fork` (where the agent supports it) — the same vocabulary for all agents.
 
 ### 3. Agents calling agents (MCP bridge)
-- `ab bridge` is a stdio MCP server exposing `ask_<agent>`, `dispatch_<agent>` (async job), `wait_run`, `check_run`, `cancel_run`, `send_message`, and `checkpoint_create`/`checkpoint_rollback`/`checkpoint_list` tools.
-- **Subagent Roster & Lineage:** Tracks full parent-child hierarchy (`parentRunId`, `rootRunId`, `depth`, `subagents[]`), aggregates tokens, and visualizes call trees in `ab ui`.
-- **All caller × callee pairs** are tested live (claude, codex, opencode, agy, pi, in both directions).
+- `ab bridge` is a stdio MCP server exposing `ask_<agent>`, `dispatch_<agent>` (async job), `wait_run`, `check_run`, `cancel_run`, `send_message`, and `checkpoint_create`/`checkpoint_rollback`/`checkpoint_list`/`checkpoint_diff` tools.
+- **Subagent Roster & Lineage:** Tracks the full parent-child tree (`RunRecord.root`, per-subagent `parentId`/`parentToolId`/`tokens` in `subagents[]`, delegation depth via `AGENTBRIDGE_DEPTH`), aggregates tokens, and visualizes call trees in `ab ui`.
+- **Caller × callee pairs are tested live:** every cross-direction among claude, codex, opencode and agy (including `agy → agy`), plus `claude ↔ pi` (`acceptance/pairs.test.mjs`, `agy.test.mjs`, `pi.test.mjs`).
 - **Safety rules:** recursion depth guard, permission ceiling (a subagent can never exceed the caller), HMAC attestation of results, the attestation key is delivered only through the process environment (never on disk or argv).
+- **Recursion guard:** `AGENTBRIDGE_MAX_DEPTH` caps delegation depth (default 2); at the cap the bridge refuses to spawn another agent with "Recursion guard: AGENTBRIDGE_DEPTH=N has reached max M" (`src/bridge/mcp.ts`).
 - Forced child working directory (`AGENTBRIDGE_CHILD_CWD`) so a caller cannot redirect where a subagent works.
 
 ### 4. The Escalation Ladder ("A Escadinha") & Proactive Quota Intelligence
@@ -243,7 +246,7 @@ Ollama is built in. Any OpenAI- or Anthropic-compatible base URL works, and is e
 ```bash
 ab serve --port 8787        # loopback only by default
 ```
-Point any OpenAI or Anthropic SDK directly at `http://127.0.0.1:8787`. Route with the model name: `claude/haiku`, `codex/gpt-5`, `agy/gemini-2.0-flash`, `pi/ollama/glm-5.3-flash:cloud`, `opencode/<provider>/<model>`, `ollama/<model>`. Full streaming support; limits answer HTTP 429 with `retry-after`.
+Point any OpenAI or Anthropic SDK directly at `http://127.0.0.1:8787`. Route with the model name: `claude/haiku`, `codex/gpt-5`, `agy/gemini-2.0-flash`, `pi/ollama/glm-5.3-flash:cloud`, `opencode/<provider>/<model>`, `ollama/<model>`. Full streaming support; limits answer HTTP 429 with `retry-after`. Pass `--token` (or env `AGENTBRIDGE_TOKEN`) to protect the server and dashboard with a bearer token; Agent mode (`/agent/v1`), which lets the model edit files, refuses to start without one (`src/server/agent.ts`).
 
 **Python Example:**
 ```python
@@ -294,7 +297,7 @@ Instant, non-destructive snapshots saved under `refs/agentbridge/checkpoints/...
 
 ### 12. Process supervision & anti-deadlock safeguards
 - **Bounded Tail Ring Buffer:** Agent standard error is collected in a circular 8 KiB ring buffer (`STDERR_TAIL_MAX_CHARS`), preventing OS pipe buffer overflows and pipe deadlocks while preserving critical error tails.
-- **Cross-Platform Tree Kills:** Escalates through Win32 Job Objects / `taskkill.exe /T /F` on Windows and process groups (`-pid` SIGTERM to SIGKILL) on POSIX to guarantee zero zombie child processes.
+- **Cross-Platform Tree Kills:** `taskkill.exe /pid <pid> /T /F` on Windows (degrading to a SIGKILL of the leader alone if taskkill is unavailable) and process groups (`-pid` SIGTERM to SIGKILL) on POSIX to guarantee zero zombie child processes.
 
 ### 13. Dual-mode Codex execution
 Supports standard batch CLI runs (`codex exec`) as well as persistent JSON-RPC 2.0 stdio server mode (`codex app-server`), minimizing cold-start overhead and maintaining stateful turn execution.
@@ -323,7 +326,7 @@ ab ensemble "Analyze performance bottleneck" claude codex agy --judge claude
 Cross-model verification. Implementers write code, reviewers inspect generated git diffs under `read-only` permissions with structured JSON/Markdown verdicts, and ensemble runs allow parallel multi-agent plurality voting and synthesis.
 
 ### 17. DAG pipeline task orchestrator (`ab pipeline`)
-Executes multi-step agent pipelines organized as Directed Acyclic Graphs (DAGs) with topological wave parallelization, optional checkpoints per wave, and immediate rollback on failure.
+Executes multi-step agent pipelines organized as Directed Acyclic Graphs (DAGs) with topological wave parallelization, optional checkpoints per wave, and automatic rollback on failure (opt-in with `--auto-rollback`).
 
 ### 18. Shared project memory (`ab memory`)
 ```bash
@@ -355,9 +358,9 @@ Installs the AgentBridge MCP server directly into your favorite editor or CLI wi
 | Agent | Permissions enforced by | Sessions | Web Search / Network Access | How to Unlock Full Tools & Web |
 |---|---|---|---|---|
 | Claude Code | the CLI's own permission modes | new / continue / fork / ephemeral | `WebSearch`, `WebFetch` active across all modes | Works out of the box; use `--permissions full` for unrestricted shell/plugins |
-| Codex | the CLI's sandbox modes | new / continue / fork | Sandboxed by default; network blocked in `read-only`/`edit` | Set `--permissions full` (unrestricted sandbox) |
-| OpenCode | agentbridge + CLI | new / continue / fork | `webfetch`, `websearch` active across all modes | Set `--permissions full` for shell (`bash`) execution |
-| Antigravity (`agy`) | agentbridge (private HOME, deny rules) | new / continue (no fork) | `execute_url` (web fetch & search) active across all modes | Set `--permissions full` for arbitrary shell execution |
+| Codex | the CLI's sandbox modes | new / continue / fork / ephemeral | Sandboxed by default; network blocked in `read-only`/`edit` | Set `--permissions full` (unrestricted sandbox) |
+| OpenCode | agentbridge + CLI | new / continue / fork / ephemeral | `webfetch`, `websearch` active across all modes | Set `--permissions full` for shell (`bash`) execution |
+| Antigravity (`agy`) | agentbridge (private HOME, deny rules) | new / continue / ephemeral (no fork) | `execute_url` (web fetch & search) active across all modes | Set `--permissions full` for arbitrary shell execution |
 | pi | agentbridge (tool denylist) | new / continue / fork / ephemeral | Connected by default (`tool_search` enabled) | Set `--permissions full` for full tool & extension suite |
 | HTTP endpoints (Ollama, OpenRouter) | Direct API or harness (`claude`/`pi`) | emulated | Plain chat (no tools) by default; full tools with harness | Pass `--harness claude` or `--harness pi` to enable tools & web |
 | Proxy (`ab serve`) | Client function calling | per request / session | Client functions supported; hosted server tools not available | Register a client-side search function tool |

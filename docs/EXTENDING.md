@@ -23,7 +23,7 @@ or edit `~/.agentbridge/endpoints.json` (see the README section "HTTP endpoints"
 
 Endpoints are plain chat: no tools, no MCP, no file access, sessions replayed from a local history file. If you need the provider to act on files, it must be an agent CLI (section 2) or sit behind one.
 
-If a provider speaks a protocol other than OpenAI chat-completions or Anthropic messages (for example Gemini's native API), add a third `type` in `src/adapters/endpoint.mjs`: build the request body, parse the stream into `text` / `thinking` / usage, and add the type to the allowed list in `normalize()`. The request, SSE reading, error mapping, timeout/abort and session handling are already shared.
+If a provider speaks a protocol other than OpenAI chat-completions or Anthropic messages (for example Gemini's native API), add a third `type` in `src/adapters/endpoint.ts`: build the request body, parse the stream into `text` / `thinking` / usage, and add the type to the allowed list in `normalize()`. The request, SSE reading, error mapping, timeout/abort and session handling are already shared.
 
 ---
 
@@ -41,7 +41,7 @@ A CLI is a good candidate only if it has all of these:
 
 Run `<cli> --help` and one real headless call before writing code. The output format and session handling decide most of the work. Existing adapters serve as reference implementations: Claude, Codex (CLI and app-server), agy, OpenCode, Cursor, Grok, Gemini, Devin, and generic ACP (`src/adapters/acp.ts`).
 
-`src/adapters/agy.mjs` is the best worked example of a CLI that is **not** well-behaved: no flag restricts file writes, its config is global, and an unknown session id silently starts a new conversation. It shows how to enforce permissions with a throw-away HOME and per-run rules, how to share state across those homes, and how to verify claims about the CLI before trusting them (every workaround is justified in `acceptance/ADAPTER_NOTES.md`). Probe the CLI with real calls before designing around its documentation.
+`src/adapters/agy.ts` is the best worked example of a CLI that is **not** well-behaved: no flag restricts file writes, its config is global, and an unknown session id silently starts a new conversation. It shows how to enforce permissions with a throw-away HOME and per-run rules, how to share state across those homes, and how to verify claims about the CLI before trusting them (every workaround is justified in `acceptance/ADAPTER_NOTES.md`). Probe the CLI with real calls before designing around its documentation.
 
 ### 2.2 The contract
 
@@ -55,10 +55,10 @@ export default {
 };
 ```
 
-- `opts` are validated RunOptions (`prompt`, `model`, `effort`, `permissions`, `cwd`, `timeoutMs`, `signal`, `session`, `systemPrompt`, `mcpServers`, `env`, `jsonSchema`, `extraArgs`, `isolated`). Call `validateOptions(opts)` from `src/index.mjs` first.
-- Yield events built with `ev` from `src/core/events.mjs`: `ev.session(id)`, `ev.text(delta)`, `ev.thinking(delta)`, `ev.tool(name, input, output?)`, `ev.usage(input, output, cost?)`, `ev.error(msg)`, `ev.raw(obj)`.
+- `opts` are validated RunOptions (`prompt`, `model`, `effort`, `permissions`, `cwd`, `timeoutMs`, `signal`, `session`, `systemPrompt`, `mcpServers`, `env`, `jsonSchema`, `extraArgs`, `isolated`, plus `fallback`/`fallbackOn`, `images`, `harness`, `offline`, `transport`/`appServer`, `skills`, `mcpPassthrough`, `defaultPermissions`, `writableRoots` — all defined in `src/types/index.ts`). Call `validateOptions(opts)` from `src/index.ts` first.
+- Yield events built with `ev` from `src/core/events.ts`: `ev.session(id)`, `ev.text(delta)`, `ev.thinking(delta)`, `ev.tool(name, input, output?)`, `ev.usage(input, output, cost?)`, `ev.error(msg)`, `ev.raw(obj)`.
 - Return `{ text, sessionId, usage:{input,output,cost?}, exitCode, model, durationMs, timedOut:false }`.
-- Throw `AgentError` (`src/core/errors.mjs`) with one of `NOT_INSTALLED`, `NOT_LOGGED_IN`, `TIMEOUT`, `ABORTED`, `BAD_OPTION`, `AGENT_FAILED`.
+- Throw `AgentError` (`src/core/errors.ts`) with one of `NOT_INSTALLED`, `NOT_LOGGED_IN`, `TIMEOUT`, `ABORTED`, `BAD_OPTION`, `AGENT_FAILED`.
 - **Anything the CLI cannot do must throw `BAD_OPTION`, never be silently ignored.** For example, if it has no read-only sandbox, `permissions: 'read-only'` must not quietly run with write access.
 - Session semantics are the same for every agent: `new` (persisted), `ephemeral` (nothing persisted), `continue` (append, by id or the most recent for this cwd), `fork` (new id branching from the old history; original untouched). Concurrent `continue` on one session should be rejected with `BAD_OPTION 'session busy'`.
 
@@ -67,11 +67,11 @@ export default {
 Use the shared process helper. It resolves `.cmd` shims on Windows, never uses a shell with user input, and kills the whole process tree on abort or timeout, even if a tool leaves a detached background process holding the pipes.
 
 ```js
-// src/adapters/myagent.mjs
-import { spawnProc, runCollect } from '../core/spawn.mjs';
-import { AgentError } from '../core/errors.mjs';
-import { ev, parseJsonLine } from '../core/events.mjs';
-import { validateOptions } from '../index.mjs';
+// src/adapters/myagent.ts
+import { spawnProc, runCollect } from '../core/spawn.js';
+import { AgentError } from '../core/errors.js';
+import { ev, parseJsonLine } from '../core/events.js';
+import { validateOptions } from '../index.js';
 
 const bad = (m) => new AgentError('BAD_OPTION', m, { agent: 'myagent' });
 
@@ -111,34 +111,35 @@ export default {
 };
 ```
 
-Also detect a missing binary (`resolveBinary('myagent')` from `src/core/spawn.mjs`) and throw `NOT_INSTALLED` with a useful hint.
+Also detect a missing binary (`resolveBinary('myagent')` from `src/core/spawn.ts`) and throw `NOT_INSTALLED` with a useful hint.
 
 ### 2.4 Register it
 
-Agent names are currently listed in several places. Update each one:
+The canonical name list is `BUILTIN_AGENTS` in `src/core/catalog.ts`; `src/index.ts` derives its `NAMES` from that catalog and exposes one lazy getter per agent. If a name is not in the catalog, `agents.get(name)` treats it as an HTTP endpoint and every call fails with `BAD_OPTION "Unknown agent ..."`. Update each of:
 
 | File | What to change |
 |---|---|
-| `src/index.mjs` | add the name to `NAMES` and a lazy getter (`get myagent()`) |
-| `src/adapters/endpoint.mjs` | add the name to `BUILTIN` so an endpoint cannot reuse it |
-| `src/bridge/mcp.mjs` | add to `BUILTIN_AGENTS` and give it an entry in `DEFAULT_MODEL` (the cheap default model for delegation) |
-| `src/bridge/attach.mjs` | add to the allowed caller list if it can act as a caller (needs MCP support, see 2.5) |
-| `src/extras/doctor.mjs` | add a login/auth check and include it in the default `agents` list |
-| `src/server/common.mjs` | add a model-routing rule (`myagent/<model>`) if you want it in the OpenAI/Anthropic proxy |
-| `src/telemetry/stats.mjs` | add context-window defaults and, if the CLI stores sessions on disk, a reader so `contextOf()` is exact; otherwise it falls back to run-usage aggregates |
-| `src/cli/install.mjs` | add a description in `BLURB` so `ab install claude` writes a good relay subagent |
+| `src/core/catalog.ts` | add the name to `BUILTIN_AGENTS` (the source of truth for registration) |
+| `src/index.ts` | add a lazy getter (`get myagent()`) that imports `./adapters/myagent.js` |
+| `src/adapters/endpoint.ts` | add the name to `BUILTIN` so an endpoint cannot reuse it |
+| `src/bridge/mcp.ts` | add to `BUILTIN_AGENTS` and give it an entry in `DEFAULT_MODEL` (the cheap default model for delegation) |
+| `src/bridge/attach.ts` | add to the allowed caller list if it can act as a caller (needs MCP support, see 2.5) |
+| `src/extras/doctor.ts` | add a login/auth check and include it in the default `agents` list |
+| `src/server/common.ts` | add a model-routing rule (`myagent/<model>`) if you want it in the OpenAI/Anthropic proxy |
+| `src/telemetry/stats.ts` | add context-window defaults and, if the CLI stores sessions on disk, a reader so `contextOf()` is exact; otherwise it falls back to run-usage aggregates |
+| `src/cli/install.ts` | add a description in `BLURB` so `ab install claude` writes a good relay subagent |
 
-(This list is long because the three built-in agents were wired in directly. A good first step before adding a fourth CLI is a small refactor to a single registry that these files read from.)
+(The registry itself is centralized in the catalog; the remaining rows are per-file wiring.)
 
 ### 2.5 Using it as a caller (optional)
 
-For `myagent` to delegate to other agents, it must be able to load an MCP server. `mcpConfigFor()` in `src/bridge/attach.mjs` produces the server entry; your adapter must pass it to the CLI in whatever way the CLI wants. Check how the CLI exposes environment variables to its MCP subprocesses: the bridge's anti-forgery key is delivered through the environment, and Codex needed a special HTTP transport because it does not pass parent environment variables to its MCP servers (see `acceptance/keydelivery.test.mjs`). If your CLI behaves like Codex, follow the same pattern in `src/bridge/mcp.mjs` and `src/bridge/subagent.mjs`.
+For `myagent` to delegate to other agents, it must be able to load an MCP server. `mcpConfigFor()` in `src/bridge/attach.mjs` produces the server entry; your adapter must pass it to the CLI in whatever way the CLI wants. Check how the CLI exposes environment variables to its MCP subprocesses: the bridge's anti-forgery key is delivered through the environment, and Codex needed a special HTTP transport because it does not pass parent environment variables to its MCP servers (see `acceptance/keydelivery.test.mjs`). If your CLI behaves like Codex, follow the same pattern in `src/bridge/mcp.ts` and `src/bridge/subagent.ts`.
 
 If the CLI cannot load MCP servers, it can still be a **callee**: other agents can call it, it just cannot call back.
 
 ### 2.6 Test it for real
 
-Acceptance tests in this project run the real CLI (never mocks). Copy the closest existing file in `acceptance/` (`claude.test.mjs` is the shortest) and cover at least:
+Acceptance tests in this project run the real CLI (never mocks). Copy the closest existing file in `acceptance/` (`new-providers.test.mjs` is the smallest; `claude.test.mjs`, `codex.test.mjs` and `opencode.test.mjs` are full worked examples) and cover at least:
 
 - a basic run: text, usage, model, exit code, session id
 - invalid model and not-installed/not-logged-in errors
@@ -156,4 +157,4 @@ Acceptance tests in this project run the real CLI (never mocks). Copy the closes
 If the CLI has a gap (no streaming, no fork, no read-only sandbox), say so in `acceptance/ADAPTER_NOTES.md` and in the README's "Known limitations", and make the unsupported option throw `BAD_OPTION`. Honest gaps are fine; faking support is not.
 
 ## 2.8 Rate limits
-Map provider limits to `new AgentError('RATE_LIMITED', msg, { retryAfterMs })` (HTTP 429/529, or run the error text through `asRateLimited` from `src/core/errors.mjs`). That is all an adapter needs for `fallback` chains, the proxy 429 and the MCP `fallback` argument to work. `src/adapters/pi.mjs` is a worked example of a CLI that reports provider errors inside its JSON stream with exit code 0.
+Map provider limits to `new AgentError('RATE_LIMITED', msg, { retryAfterMs })` (HTTP 429/529, or run the error text through `asRateLimited` from `src/core/errors.ts`). That is all an adapter needs for `fallback` chains, the proxy 429 and the MCP `fallback` argument to work. `src/adapters/pi.ts` is a worked example of a CLI that reports provider errors inside its JSON stream with exit code 0.

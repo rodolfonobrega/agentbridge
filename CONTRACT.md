@@ -1,7 +1,7 @@
 # AgentBridge Architectural Contract (all builders MUST follow)
 
 TypeScript native (ESM, strict typecheck, compiled to `dist/`), Node >= 22. Zero external runtime dependencies for core workflows.
-No API keys required for local agents: orchestrate *installed* coding CLIs (`claude`, `codex`, `opencode`, `agy`, `pi`) using their existing local authentications.
+No API keys required for local agents: orchestrate built-in coding agents (`claude`, `codex`, `opencode`, `agy`, `pi`, `cursor`, `grok`, `gemini`, `devin`, `acp`) — *installed* coding CLIs or protocol-level sessions — using their existing local authentications.
 Windows + POSIX safe (resolve `.cmd` shims, UTF-8 code page enforcement, explicit quoting without vulnerable `shell: true`).
 
 ---
@@ -10,9 +10,10 @@ Windows + POSIX safe (resolve `.cmd` shims, UTF-8 code page enforcement, explici
 All agent adapters must satisfy the unified interface:
 ```typescript
 export interface AgentAdapter {
-  name: 'claude' | 'codex' | 'opencode' | 'agy' | 'pi' | string;
-  models(): Promise<string[]>;                    // Best-effort discoverable models
-  run(opts: RunOptions): AsyncGenerator<AgentEvent, AgentResult>; // Streaming generator yielding events and returning result
+  name?: string;                                       // Optional adapter name
+  models?(env?: NodeJS.ProcessEnv): Promise<string[]>; // Optional: best-effort discoverable models
+  run(opts: RunOptions): AsyncGenerator<AgentEvent, RunResult, void>; // Required: streaming generator yielding events and returning RunResult
+  isInstalled?(): Promise<boolean>;                    // Optional runtime presence check
 }
 ```
 
@@ -21,7 +22,7 @@ export interface AgentAdapter {
 - `model`?: string
 - `effort`?: `'low'` | `'medium'` | `'high'` | `'xhigh'` | `'max'` (mapped per agent backend)
 - `permissions`?: `'read-only'` | `'plan'` | `'edit'` | `'full'` (default `'read-only'`)
-- `transport`?: `'cli'` | `'app-server'` (Codex dual transport)
+- `transport`?: `'cli'` | `'app-server'` | `'stdio'` | `'auto'` (Codex dual transport: `'app-server'` picks the warm daemon, otherwise the one-shot CLI)
 - `cwd`?: string
 - `timeoutMs`?: number
 - `signal`?: AbortSignal
@@ -40,8 +41,9 @@ export interface AgentAdapter {
 - `{ type: 'usage', input: number, output: number, cost?: number }`
 - `{ type: 'error', message: string }`
 - `{ type: 'raw', data: any }`
+- `{ type: 'fallback', from: string, to: string, code: string, message: string }`
 
-### Normalized AgentResult
+### Normalized RunResult
 - `{ text: string, sessionId?: string, usage: { input: number, output: number, cost?: number }, exitCode: number, model?: string, durationMs: number, timedOut: boolean }`
 
 ---
@@ -54,14 +56,14 @@ export interface AgentAdapter {
 
 ### B. Shared Resource Mirroring & Worktree Isolation
 - Worktree execution (`--worktree`) isolates workspace changes into temporary Git branches.
-- To prevent loss of skills and MCP tools during directory isolation, AgentBridge utilizes NTFS Junctions (Windows) or Symlinks (POSIX) combined with config merging (`~/.codex/config.toml`, `~/.claude/settings.json`, `~/.pi/agent/mcp.json`).
+- To prevent loss of skills and MCP tools during directory isolation, AgentBridge utilizes NTFS Junctions (Windows) or Symlinks (POSIX) combined with config merging (`~/.codex/config.toml`, `~/.pi/agent/mcp.json`) and shared-resource linking for Claude (skills, commands, agents, plugins, `CLAUDE.md` — `src/core/shared-resources.ts`).
 
 ### C. Zero-Accident Git Checkpoints
 - Automated snapshots via Git dangling commits / trees (`checkpoint_create`, `checkpoint_rollback`, `checkpoint_list`).
 - Invisible to branch history, enabling risk-free autonomous edits and instant rollbacks on test failures.
 
 ### D. Centralized Agent Roster & Catalog
-- Centralized registry in `src/core/catalog.ts`: `BUILTIN_AGENTS` (`claude`, `codex`, `opencode`, `agy`, `pi`) and `VALID_ACCOUNT_AGENTS`.
+- Centralized registry in `src/core/catalog.ts`: `BUILTIN_AGENTS` (`claude`, `codex`, `opencode`, `agy`, `pi`, `cursor`, `grok`, `gemini`, `devin`, `acp`) and `VALID_ACCOUNT_AGENTS`.
 - Prevents desynchronization between CLI commands, account management, proxy router, and MCP tools.
 
 ### E. Proactive Quotas & Rate-Limit Tracking
@@ -79,21 +81,21 @@ export interface AgentAdapter {
 ### H. Universal Open Agent Skills & Collision Guard
 - Universal canonical skill path is `.agents/skills/agentbridge-delegate/SKILL.md`.
 - Shared simultaneously across Pi, Codex, OpenCode, and Antigravity without redundant per-harness installations.
-- Installer detects existing global installations (`~/.agents/skills`) and avoids redundant project-level duplicates that trigger Pi collision alerts (`[Skill conflicts] collision`).
+- Skill writes are deduplicated per install process (`writeSkill` writes each destination copy once per run, `src/cli/install.ts`); there is no scan of pre-existing global installations for collision detection.
 
 ---
 
 ## 3. Directory Structure
 ```
 src/
-├── adapters/       # Agent-specific drivers (claude, codex, opencode, agy, pi, endpoint)
+├── adapters/       # Agent-specific drivers (claude, codex, opencode, agy, pi, cursor, grok, gemini, devin, acp, endpoint)
 ├── bridge/         # Stdio MCP server exposing tools (ask_*, dispatch_*, checkpoints, quota)
 ├── cli/            # Command line commands (run, ask, fanout, install, setup, quota, ui)
 ├── core/           # Catalog, spawn, errors, events, sandboxing, shared resources
 ├── extras/         # Environment diagnostics (ab doctor)
 ├── quota/          # Rate limits, token counters, quota trackers
 ├── server/         # OpenAI / Anthropic proxy compatibility server
-├── storage/        # Storage, memory retention, workspace state
+├── telemetry/      # Usage tracking, context policy, compaction, memory retention, hooks
 ├── types/          # Strict TypeScript interfaces and schemas
 └── ui/             # Web dashboard server and assets
 ```
@@ -108,3 +110,4 @@ All runtime errors must instantiate `AgentError` with normalized codes:
 - `ABORTED`: Execution aborted via `AbortSignal`.
 - `BAD_OPTION`: Option unsupported by target agent or invalid argument passed.
 - `AGENT_FAILED`: Process crashed or exited with non-zero status.
+- `RATE_LIMITED`: Provider quota exhausted or rate-limited (HTTP 429/529, "usage limit", "quota exceeded"), carrying optional `retryAfterMs`; the default trigger of the fallback chain (`src/index.ts`).
