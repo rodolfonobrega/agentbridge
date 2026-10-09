@@ -30,14 +30,16 @@ The MCP server `agentbridge` exposes other coding agents as tools. Each runs as 
 
 The other agent has none of your context. Give it: the goal, the exact files/paths, constraints, and the form the answer should take. Set `cwd` to the project folder. Ask it to be concise.
 
-## Permissions and Sandboxing: How Edits are Blocked vs Allowed
+## The Safety Lock (Trava de Segurança): How Edits are Blocked vs Allowed
 
-AgentBridge separates the **Permission Ceiling** (maximum capability allowed) from the **Default Permission** (applied when omitted):
-- **Permission Ceiling:** Defaults to `full`. Any agent can request permissions up to `full`.
-- **Default Permission:** Defaults to **`read-only`** for safety. If an agent or user does not pass `permissions`, the delegated agent will safely run without file-editing or destructive shell capabilities.
-- **Configurability:** You can configure preferences globally or per project with `ab config set default-permissions <level>`.
+AgentBridge is engineered with a **Zero-Accident Safety Lock**:
+- **Why it exists:** Unrestricted subagent execution is dangerous. An autonomous agent asked to "audit this function" or "check tests" could hallucinate and overwrite source code or execute destructive bash commands.
+- **The Safety Lock (Default: `read-only`):** By default, every delegation has its safety lock engaged. Subagents operate with read-only tools and cannot modify your files, branch state, or run shell mutations.
+- **Intentional Unlocking:** When you *want* the agent to write code, refactor, or run tests, you must explicitly unlock it by passing `permissions: "edit"` or `permissions: "full"`.
+- **The Inviolable Ceiling:** The Permission Ceiling defaults to `full` (so you can request whatever powers you need), but if you or the user configure a stricter ceiling (e.g. `ab config set permissions-ceiling edit`), AgentBridge acts as an unbypassable circuit-breaker: subagents cannot escalate privileges beyond that ceiling under any circumstances.
+- **Configurability:** You can customize persistent defaults per project or globally via `ab config set default-permissions <level>`.
 
-> ⚠️ **CRITICAL INSTRUCTION FOR DELEGATION:** Whenever you delegate a task that requires creating or modifying files, refactoring code, or running build/test commands, you **MUST explicitly pass `permissions: "edit"` or `permissions: "full"`**. If you omit it, the subagent will safely run in `read-only` mode and will refuse to modify files.
+> ⚠️ **CRITICAL INSTRUCTION FOR DELEGATION:** Whenever you delegate a task that requires creating or modifying files, refactoring code, or running build/test commands, you **MUST explicitly unlock the safety lock by passing `permissions: "edit"` or `permissions: "full"`**. If you omit it, the subagent will safely run with the safety lock engaged in `read-only` mode and will refuse to modify files.
 
 | Permission | Filesystem & Tools Allowed | When to Use | Under the Hood Enforcement |
 |---|---|---|---|

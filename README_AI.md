@@ -95,22 +95,28 @@ When the user or another agent asks you to delegate work, use the `agentbridge` 
 
 ---
 
-## 5. Permission Ceilings & Safe Defaults
+## 5. The Safety Lock (Trava de Segurança) & Permission Ceilings
 
-### Understanding Ceilings vs Defaults
-AgentBridge separates the **Permission Ceiling** (maximum allowed, defaults to `full`) from the **Default Permission** (applied when omitted, defaults to `read-only`):
+### Why Safe-by-Default Matters
+Most autonomous agent frameworks run in unrestricted or "yolo" mode by default. This creates catastrophic risk: a routine prompt asking "Audit auth.ts" or an unmonitored subagent hallucination can overwrite working code or run destructive shell scripts.
+
+AgentBridge implements an active **Zero-Accident Safety Lock**:
+1. **Engaged by Default (`read-only`):** All delegations and CLI calls run with the safety lock engaged. Write tools and shell execution are physically omitted or sandboxed.
+2. **Intentional Unlocking:** When a subagent needs to modify files or execute build/test commands, you must explicitly pass `permissions: "edit"` or `permissions: "full"`.
+3. **Inviolable Ceiling Circuit-Breaker:** The ceiling defaults to `full`, but if configured to `edit` or `read-only`, no subagent can ever break out of or elevate past that ceiling.
 
 | Permission Level | Rank | Capabilities | Default Role |
 |---|---|---|---|
-| `read-only` | 0 | Can read files and search web. **Cannot edit files. Cannot run shell.** | **Default Execution** |
+| `read-only` | 0 | Can read files and search web. **Cannot edit files. Cannot run shell.** | **Safety Lock Engaged (Default)** |
 | `plan` | 1 | Can read files and plan solutions. **Cannot edit files. Cannot run shell.** | Explicit opt-in |
-| `edit` | 2 | Can read and **edit/write workspace files**. **Cannot run arbitrary shell.** | Explicit opt-in |
-| `full` | 3 | **Unrestricted.** Can run bash/PowerShell, edit files, install packages, run tests. | **Default Ceiling** |
+| `edit` | 2 | Can read and **edit/write workspace files**. **Cannot run arbitrary shell.** | Intentional Unlock (File Edits) |
+| `full` | 3 | **Unrestricted.** Can run bash/PowerShell, edit files, install packages, run tests. | **Default Ceiling** (Full Unlock) |
 
-You can configure persistent defaults per project or globally:
+You can customize the persistent default per project or globally:
 ```bash
 ab config set default-permissions edit   # Sets default to edit
 ab config get default-permissions       # Prints active default
+ab config set permissions-ceiling edit  # Hard ceiling circuit-breaker
 ```
 
 ### The "Broader than caller" / "Teto Máximo" Error

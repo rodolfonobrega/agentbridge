@@ -134,13 +134,12 @@ ab install all             # every one of the above that is installed
 
 Now, from inside any of them, you can say "ask claude to review this" or "have pi write the tests": the agent calls the `ask_<agent>` tools (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...).
 
-> **Permission Ceilings & Safe Defaults:**
-> - **Ceiling is `full` by default:** AgentBridge grants up to full capabilities (`full`) when explicitly requested, with no artificial blockage.
-> - **Default execution is `read-only` (safe):** If an agent or human runs a command without specifying `--permissions`, the agent is run safely in read-only mode to prevent accidental file modifications or unintended shell commands.
-> - **To allow file modifications:** Pass `--permissions edit` (or `--permissions full`), or set your persistent default preference:
->   `ab config set default-permissions edit` (for your project or globally with `--global`).
-> - **Custom Ceilings (Sandboxing):** To restrict the maximum ceiling permitted for all subagents, configure `ab config set permissions-ceiling edit` or re-run `ab install <agent> --permissions edit`.
-> - **"Broader than caller" Guard:** A delegated subagent can never escalate privileges above its caller's session ceiling.
+> 🛡️ **The Safety Lock (Trava de Segurança):**
+> - **Zero-Accident Default (`read-only`):** When you run `ab ask` or when an agent calls `ask_*`, the safety lock is active by default. The agent can inspect code and answer questions, but **cannot modify files or run destructive shell scripts**.
+> - **Intentional Unlocking:** When you want the agent to write code, implement features, or run tests, simply unlock it with `--permissions edit` (or `--permissions full`).
+> - **Full Capability Ceiling:** The permission ceiling defaults to `full` so the bridge never gets in your way when you intend to edit.
+> - **Customizable by Developer:** Prefer agents to always edit files without passing flags? Run `ab config set default-permissions edit` (for your project or globally with `--global`).
+> - **Hardware-Like Circuit Breaker:** Working in high-risk codebases? Lock down the ceiling with `ab config set permissions-ceiling edit` or `read-only`, and no subagent can ever escalate privileges beyond it.
 
 ---
 
