@@ -258,9 +258,9 @@ if (mode === 'happy') {
   try {
     // behavior parity: argv order, prompt prefix, event mapping, result fields
     const dumpFile = path.join(dir, 'args.json');
-    const { events, result } = await drain({ model: 'gpt-4o', extraArgs: ['--fake-mode', 'happy', '--fake-args-file', dumpFile] });
+    const { events, result } = await drain({ model: 'gpt-5.3-codex', extraArgs: ['--fake-mode', 'happy', '--fake-args-file', dumpFile] });
     assert.deepEqual(JSON.parse(readFileSync(dumpFile, 'utf8')), [
-      'agent', '--output-format', 'json', '--model', 'gpt-4o', '--fake-mode', 'happy', '--fake-args-file', dumpFile,
+      'agent', '--output-format', 'json', '--model', 'gpt-5.3-codex', '--fake-mode', 'happy', '--fake-args-file', dumpFile,
       '--prompt', '[READ-ONLY MODE: Do NOT edit files or run modifying commands]\n\ntest prompt',
     ]);
     assert.equal(events.filter((e) => e.type === 'raw').length, 5);
@@ -270,14 +270,14 @@ if (mode === 'happy') {
     assert.deepEqual(events.find((e) => e.type === 'usage'), { type: 'usage', input: 3, output: 4 });
     assert.deepEqual(result.usage, { input: 3, output: 4, cost: 0.02 });
     assert.equal(result.sessionId, 's1');
-    assert.equal(result.model, 'gpt-4o');
+    assert.equal(result.model, 'gpt-5.3-codex');
     assert.equal(result.exitCode, 0);
     assert.equal(result.timedOut, false);
     assert.equal(result.text, 'Hello World plain trailing line');
 
     // default result model when o.model is unset
     const { result: r2 } = await drain({ extraArgs: ['--fake-mode', 'happy'] });
-    assert.equal(r2.model, 'claude-3.7-sonnet');
+    assert.equal(r2.model, 'auto');
 
     // auth regex -> NOT_LOGGED_IN (exit 1, no stdout, stderr matches /auth|login|unauthorized/i)
     await assert.rejects(

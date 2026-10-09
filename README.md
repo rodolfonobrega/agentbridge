@@ -247,7 +247,7 @@ Ollama is built in. Any OpenAI- or Anthropic-compatible base URL works, and is e
 ```bash
 ab serve --port 8787        # loopback only by default
 ```
-Point any OpenAI or Anthropic SDK directly at `http://127.0.0.1:8787`. Route with the model name: `claude/haiku`, `codex/gpt-5`, `agy/gemini-2.0-flash`, `pi/ollama/glm-5.3-flash:cloud`, `opencode/<provider>/<model>`, `ollama/<model>`. Full streaming support; limits answer HTTP 429 with `retry-after`. Pass `--token` (or env `AGENTBRIDGE_TOKEN`) to protect the server and dashboard with a bearer token; Agent mode (`/agent/v1`), which lets the model edit files, refuses to start without one (`src/server/agent.ts`).
+Point any OpenAI or Anthropic SDK directly at `http://127.0.0.1:8787`. Route with the model name: `claude/haiku`, `codex/gpt-5`, `agy/gemini-3.8-flash-low`, `pi/ollama/glm-5.3-flash:cloud`, `opencode/<provider>/<model>`, `ollama/<model>`. Full streaming support; limits answer HTTP 429 with `retry-after`. Pass `--token` (or env `AGENTBRIDGE_TOKEN`) to protect the server and dashboard with a bearer token; Agent mode (`/agent/v1`), which lets the model edit files, refuses to start without one (`src/server/agent.ts`).
 
 **Python Example:**
 ```python

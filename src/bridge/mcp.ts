@@ -35,10 +35,10 @@ export const DEFAULT_MODEL: Record<string, string> = {
   codex: 'gpt-5.6-luna',
   opencode: 'opencode-go/glm-5.3-flash',
   agy: 'gemini-3.8-flash-low',
-  cursor: 'claude-3-5-sonnet',
-  grok: 'grok-2',
-  gemini: 'gemini-2.0-flash',
-  devin: 'default',
+  cursor: 'auto',
+  grok: 'grok-4.7',
+  gemini: 'gemini-3.5-flash',
+  devin: 'devin-default',
   acp: 'default',
 };
 const DEFAULT_TIMEOUT_S = 300;

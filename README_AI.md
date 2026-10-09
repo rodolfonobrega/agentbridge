@@ -261,7 +261,7 @@ ab serve --port 8787
 ### Modes & Code Examples:
 1. **API Mode (Default - `/v1/chat/completions`):**
    - Base URL: `http://127.0.0.1:8787/v1`
-   - Model name: `claude/claude-3-7-sonnet`, `codex/gpt-5`, `agy/gemini-2.0-flash`, `pi/ollama/qwen3:14b`, etc.
+   - Model name: `claude/haiku`, `codex/gpt-5`, `agy/gemini-3.8-flash-low`, `pi/ollama/qwen3:14b`, etc.
    - Operates as a standard OpenAI/Anthropic LLM API, using the user's subscription behind the scenes.
 
    **Python (Official `openai` SDK):**

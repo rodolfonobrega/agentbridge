@@ -43,7 +43,7 @@ from openai import OpenAI
 client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="local-proxy")
 
 response = client.chat.completions.create(
-    model="claude/claude-3-7-sonnet",  # Or codex/gpt-4o, agy/gemini-2.0-flash, ollama/qwen3
+    model="claude/haiku",  # Or codex/gpt-5.6-luna, agy/gemini-3.8-flash-low, ollama/qwen3
     messages=[
         {"role": "system", "content": "You are an expert software engineer."},
         {"role": "user", "content": "Explain how epoll works in Linux kernel."},
@@ -85,7 +85,7 @@ const client = new OpenAI({
 
 async function main() {
   const stream = await client.chat.completions.create({
-    model: 'codex/gpt-4o',
+    model: 'codex/gpt-5.6-luna',
     messages: [{ role: 'user', content: 'Generate a binary search implementation with tests.' }],
     stream: true,
   });
@@ -110,7 +110,7 @@ const client = new Anthropic({
 
 async function main() {
   const message = await client.messages.create({
-    model: 'claude-3-7-sonnet',
+    model: 'haiku',
     max_tokens: 1000,
     messages: [{ role: 'user', content: 'List 3 security best practices for JWT.' }],
   });
@@ -137,7 +137,7 @@ curl http://127.0.0.1:8787/v1/messages \
   -H "Content-Type: application/json" \
   -H "anthropic-version: 2023-06-01" \
   -d '{
-    "model": "claude-3-5-sonnet",
+    "model": "haiku",
     "max_tokens": 512,
     "messages": [{"role": "user", "content": "What is WebAssembly?"}]
   }'

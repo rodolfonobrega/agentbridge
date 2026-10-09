@@ -3,13 +3,13 @@
 
 import { cliJsonLinesAdapter } from './cli-json-lines.js'
 
-const MODELS = ['claude-3.7-sonnet', 'claude-3.5-sonnet', 'claude-3-5-sonnet', 'gpt-4o', 'cursor-small']
+const MODELS = ['auto', 'gpt-5.3-codex', 'claude-opus-4-8-thinking-high-fast', 'grok-4.7']
 
 const adapter = cliJsonLinesAdapter({
   name: 'cursor',
   cmd: 'cursor',
   models: MODELS,
-  defaultModel: 'claude-3.7-sonnet',
+  defaultModel: 'auto',
   buildArgs(o, prompt) {
     const args: string[] = ['agent', '--output-format', 'json']
     if (o.model) args.push('--model', o.model)

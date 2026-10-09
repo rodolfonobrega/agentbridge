@@ -3,13 +3,13 @@
 
 import { cliJsonLinesAdapter } from './cli-json-lines.js'
 
-const MODELS = ['grok-3', 'grok-3-mini', 'grok-2', 'grok-2-mini']
+const MODELS = ['grok-4.7', 'grok-4', 'grok-3']
 
 const adapter = cliJsonLinesAdapter({
   name: 'grok',
   cmd: 'grok',
   models: MODELS,
-  defaultModel: 'grok-3',
+  defaultModel: 'grok-4.7',
   buildArgs(o, prompt) {
     // Grok takes the prompt positionally, before every other flag.
     const args: string[] = ['-p', prompt, '--json']

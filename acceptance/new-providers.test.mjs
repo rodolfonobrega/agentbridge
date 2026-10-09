@@ -29,16 +29,16 @@ test('new providers can be lazy-loaded via agents.get and properties', T, async 
 
 test('new providers expose supported models', T, async () => {
   const cursorModels = await agents.models('cursor');
-  assert.ok(cursorModels.includes('claude-3-5-sonnet'));
-  assert.ok(cursorModels.includes('gpt-4o'));
+  assert.ok(cursorModels.includes('auto'));
+  assert.ok(cursorModels.includes('gpt-5.3-codex'));
 
   const grokModels = await agents.models('grok');
-  assert.ok(grokModels.includes('grok-2'));
-  assert.ok(grokModels.includes('grok-2-mini'));
+  assert.ok(grokModels.includes('grok-4.7'));
+  assert.ok(grokModels.includes('grok-4'));
 
   const geminiModels = await agents.models('gemini');
-  assert.ok(geminiModels.includes('gemini-2.0-flash'));
-  assert.ok(geminiModels.includes('gemini-1.5-pro'));
+  assert.ok(geminiModels.includes('gemini-3.5-flash'));
+  assert.ok(geminiModels.includes('gemini-3-pro-preview'));
 
   const devinModels = await agents.models('devin');
   assert.ok(devinModels.includes('default'));

@@ -1024,9 +1024,9 @@ AgentBridge supports an extended roster of modern AI agents and protocols:
 
 | Provider | Identifier | Command | Supported Models |
 |---|---|---|---|
-| **Cursor CLI** | `cursor` | `cursor agent ...` | `claude-3.7-sonnet`, `claude-3.5-sonnet`, `gpt-4o`, `cursor-small` |
-| **xAI Grok** | `grok` | `grok ...` | `grok-3`, `grok-3-mini`, `grok-2`, `grok-2-mini` |
-| **Google Gemini CLI** | `gemini` | `gemini ...` | `gemini-2.0-flash`, `gemini-2.0-pro`, `gemini-1.5-pro` |
+| **Cursor CLI** | `cursor` | `cursor agent ...` | `auto`, `gpt-5.3-codex`, `claude-opus-4-8-thinking-high-fast`, `grok-4.7` |
+| **xAI Grok** | `grok` | `grok ...` | `grok-4.7`, `grok-4`, `grok-3` |
+| **Google Gemini CLI** | `gemini` | `gemini ...` | `gemini-3.5-flash`, `gemini-3-pro-preview`, `gemini-3.1-flash-lite`, `gemini-2.5-flash`, `gemini-2.5-pro` |
 | **Devin CLI** | `devin` | `devin run ...` | `default`, `devin-default` |
 | **Generic ACP** | `acp` | Configurable ACP stdio | Agent Client Protocol JSON-RPC 2.0 |
 

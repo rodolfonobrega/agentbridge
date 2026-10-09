@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -121,7 +121,7 @@ test('formatMemoryForPrompt formats structured conventions block or returns null
 });
 
 test('storage fallback persists to ~/.agentbridge/memory/<repoHash>.json', () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'ab-mem-fallback-'));
+  const dir = realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-mem-fallback-')));
   const prevFallback = process.env.AGENTBRIDGE_MEMORY_FALLBACK;
   process.env.AGENTBRIDGE_MEMORY_FALLBACK = '1';
 
