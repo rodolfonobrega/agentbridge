@@ -252,26 +252,96 @@ function classify(msg: string) {
   return 'AGENT_FAILED';
 }
 
+/**
+ * Resolves model name for Pi. If model doesn't contain a provider prefix (e.g. "glm-5.3-flash:cloud"),
+ * inspects ~/.pi/agent/models.json (and PI_CODING_AGENT_DIR/models.json) to see if it belongs to
+ * a custom provider like "ollama". If found, prefixes as "ollama/glm-5.3-flash:cloud".
+ * Also supports heuristic fallback for known Ollama/local model naming conventions.
+ */
+export function resolvePiModel(model?: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  if (!model) return undefined;
+  if (model.includes('/')) return model;
+
+  const agentDir = agentDirOf(env);
+  const candidateDirs = [agentDir, path.join(homedir(), '.pi', 'agent')];
+
+  for (const dir of candidateDirs) {
+    const mf = path.join(dir, 'models.json');
+    if (existsSync(mf)) {
+      try {
+        const data = JSON.parse(readFileSync(mf, 'utf8'));
+        if (data?.providers && typeof data.providers === 'object') {
+          for (const [providerKey, providerCfg] of Object.entries<any>(data.providers)) {
+            const models = providerCfg?.models;
+            if (Array.isArray(models)) {
+              if (models.some((m: any) => m?.id === model || m?.name === model)) {
+                return `${providerKey}/${model}`;
+              }
+            }
+          }
+        }
+      } catch {
+        /* ignore parse errors */
+      }
+    }
+  }
+
+  // Heuristic fallback: if it looks like an Ollama model (e.g. contains ':cloud', ':latest',
+  // or starts with common Ollama model names like glm, qwen, llama, deepseek, mistral, phi, gemma)
+  const isOllamaLike =
+    /:cloud\b|:latest\b|:\d+b\b/i.test(model) ||
+    /^(glm|qwen|llama|deepseek|mistral|phi|gemma|codellama|vicuna|starcoder)[-_:]/i.test(model);
+
+  if (isOllamaLike) {
+    return `ollama/${model}`;
+  }
+
+  return model;
+}
+
 const adapter: AgentAdapter = {
   name: NAME,
   efforts: [...EFFORTS],
   canFork: true,
   async models(env: NodeJS.ProcessEnv = process.env): Promise<string[]> {
-    const bin = findBinary(env);
-    if (!bin) return [];
-    try {
-      const r = await runCollect(bin, ['--list-models'], {
-        timeoutMs: 30000,
-        env: { ...env, PI_OFFLINE: '1', PI_SKIP_VERSION_CHECK: '1' },
-      });
-      return (r.stdout + '\n' + r.stderr)
-        .split('\n')
-        .map((l) => l.trim().split(/\s+/))
-        .filter((c) => c.length >= 2 && c[0] !== 'provider' && /^[\w.-]+$/.test(c[0]) && /\S/.test(c[1]))
-        .map((c) => `${c[0]}/${c[1]}`);
-    } catch {
-      return [];
+    const list: string[] = [];
+    const agentDir = agentDirOf(env);
+    const candidateDirs = [agentDir, path.join(homedir(), '.pi', 'agent')];
+    for (const dir of candidateDirs) {
+      const mf = path.join(dir, 'models.json');
+      if (existsSync(mf)) {
+        try {
+          const data = JSON.parse(readFileSync(mf, 'utf8'));
+          if (data?.providers && typeof data.providers === 'object') {
+            for (const [providerKey, providerCfg] of Object.entries<any>(data.providers)) {
+              if (Array.isArray(providerCfg?.models)) {
+                for (const m of providerCfg.models) {
+                  const id = m?.id || m?.name;
+                  if (id) list.push(`${providerKey}/${id}`);
+                }
+              }
+            }
+          }
+        } catch {}
+      }
     }
+
+    const bin = findBinary(env);
+    if (bin) {
+      try {
+        const r = await runCollect(bin, ['--list-models'], {
+          timeoutMs: 30000,
+          env: { ...env, PI_OFFLINE: '1', PI_SKIP_VERSION_CHECK: '1' },
+        });
+        const cliModels = (r.stdout + '\n' + r.stderr)
+          .split('\n')
+          .map((l) => l.trim().split(/\s+/))
+          .filter((c) => c.length >= 2 && c[0] !== 'provider' && /^[\w.-]+$/.test(c[0]) && /\S/.test(c[1]))
+          .map((c) => `${c[0]}/${c[1]}`);
+        list.push(...cliModels);
+      } catch {}
+    }
+    return [...new Set(list)];
   },
   async *run(opts: RunOptions): AsyncGenerator<AgentEvent, RunResult, void> {
     const o = validateOptions(opts);
@@ -283,7 +353,7 @@ const adapter: AgentAdapter = {
     if (o.effort != null && !EFFORTS.includes(o.effort as any)) {
       throw bad(`effort must be one of ${EFFORTS.join('|')}`);
     }
-    const perms = o.permissions || 'read-only';
+    const perms = (o as any).defaultPermissions ? 'read-only' : o.permissions || 'read-only';
     const sess = o.session || { mode: 'new' };
     for (const a of o.extraArgs || []) {
       if (OWNED_FLAGS.test(a)) {
@@ -370,7 +440,10 @@ const adapter: AgentAdapter = {
           '-ne',
           ...(mcpNames.length ? ['-e', 'builtin:mcp'] : []),
         ];
-        if (o.model) args.push('--model', o.model);
+        if (o.model) {
+          const resolved = resolvePiModel(o.model, env);
+          if (resolved) args.push('--model', resolved);
+        }
         if (o.effort) args.push('--thinking', o.effort);
         if (DENY[perms]?.length) args.push('--exclude-tools', DENY[perms].join(','));
         args.push(...sessionArgs);

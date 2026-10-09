@@ -87,12 +87,19 @@ export function summarize(
       avgMs: d.length ? Math.round(d.reduce((s: number, x: number) => s + x, 0) / d.length) : null,
     };
   };
+  const activeRuns = inWin.filter((r) => r.status === 'active' || r.status === 'idle');
+  const activeByAgent: Record<string, number> = {};
+  for (const r of activeRuns) activeByAgent[r.agent] = (activeByAgent[r.agent] || 0) + 1;
+  const activeAgents = Object.keys(activeByAgent);
   return {
     since,
     now,
     total: fin(total),
     byAgent: Object.fromEntries(Object.entries(byAgent).map(([k, v]) => [k, fin(v)])),
     byOrigin,
+    activeRuns: activeRuns.length,
+    activeAgents,
+    activeByAgent,
     topTools: Object.entries(tools)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
@@ -219,6 +226,7 @@ export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
           textTail,
           origin,
           fallback,
+          subagents: (r as any).subagents,
           events: Array.isArray(events) ? events.slice(-40) : undefined,
         });
       }

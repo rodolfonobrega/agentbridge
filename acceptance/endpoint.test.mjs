@@ -133,7 +133,7 @@ live('errors: invalid model -> BAD_OPTION, timeout -> TIMEOUT, abort -> ABORTED'
   const ac = new AbortController(); const t0 = Date.now();
   const it = run('ollama', { prompt: 'Write a 2000 word essay about the history of Rome.', model: MODEL, signal: ac.signal, session: { mode: 'ephemeral' }, timeoutMs: 200000 });
   let e;
-  try { for (;;) { const x = await it.next(); if (x.done) break; if (x.value.type === 'text') ac.abort(); } } catch (x) { e = x; }
+  try { for (;;) { const x = await it.next(); if (x.done) break; if (x.value.type === 'text' || x.value.type === 'thinking') ac.abort(); } } catch (x) { e = x; }
   assert.equal(e?.code, 'ABORTED'); assert.ok(Date.now() - t0 < 120000);
 });
 

@@ -101,6 +101,7 @@ const KNOWN = new Set([
   'images',
   'harness',
   'offline',
+  'defaultPermissions',
 ]);
 const HARNESS_MODES = ['auto', 'claude', 'pi', 'none'];
 const FALLBACK_ON = ['RATE_LIMITED', 'NOT_LOGGED_IN', 'NOT_INSTALLED', 'TIMEOUT', 'AGENT_FAILED'];
@@ -119,8 +120,12 @@ export function validateOptions(opts: RunOptions): RunOptions {
     if (o[k] != null && typeof o[k] !== 'string') throw bad(`${k} must be a string`);
   }
   if (o.effort != null && !EFFORT.includes(o.effort)) throw bad(`effort must be one of ${EFFORT.join('|')}`);
-  if (o.permissions == null) o.permissions = 'full';
-  else if (!PERMS.includes(o.permissions)) throw bad(`permissions must be one of ${PERMS.join('|')}`);
+  if (o.permissions == null) {
+    o.permissions = 'full';
+    (o as any).defaultPermissions = true;
+  } else if (!PERMS.includes(o.permissions)) {
+    throw bad(`permissions must be one of ${PERMS.join('|')}`);
+  }
   if (o.harness != null && !HARNESS_MODES.includes(o.harness)) {
     throw bad(`harness must be one of ${HARNESS_MODES.join('|')}`);
   }

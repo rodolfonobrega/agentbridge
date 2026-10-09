@@ -80,6 +80,8 @@ h2 { margin: 0; font-size: 13px; font-weight: 650; letter-spacing: .02em; text-t
 .agent-tag::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: var(--ac, var(--idle)); }
 .chip { font-size: 11px; padding: 0 6px; border-radius: 6px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
 .chip.rescue { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+.chip.harness { background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); font-size: 10px; margin-left: 4px; }
+.sub-err { display: block; font-size: 11px; color: var(--bad); font-weight: 500; margin-top: 2px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .est { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; }
 
 .table-wrap { overflow-x: auto; }

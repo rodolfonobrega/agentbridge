@@ -192,7 +192,10 @@ async function* runWithHarness(
     const claudeAdapter = (await import('./claude.js')).default;
     const anthropicBase = cfg.baseUrl.replace(/\/v1\/?$/, '');
     const authToken = cfg.apiKey || (cfg.apiKeyEnv ? env[cfg.apiKeyEnv] : undefined) || 'ollama';
-    const targetModel = model || cfg.defaultModel;
+    let targetModel = model || cfg.defaultModel;
+    if (cfg.name === 'ollama' && targetModel?.startsWith('ollama/')) {
+      targetModel = targetModel.slice('ollama/'.length);
+    }
     const harnessEnv: NodeJS.ProcessEnv = {
       ...env,
       ...(o.env || {}),
@@ -265,11 +268,11 @@ export function makeEndpointAdapter(cfg: EndpointConfig): AgentAdapter {
       const model = o.model || cfg.defaultModel || (await adapter.models!(env))[0];
 
       const selectedHarness = o.harness ?? 'auto';
-      const wantsHarness = o.harness !== 'none' && (
-        Boolean(o.harness) ||
-        (o.permissions && o.permissions !== 'read-only') ||
-        Boolean(o.mcpServers && Object.keys(o.mcpServers).length)
-      );
+      const wantsHarness =
+        o.harness !== 'none' &&
+        (Boolean(o.harness) ||
+          (!(o as any).defaultPermissions && Boolean(o.permissions) && o.permissions !== 'read-only') ||
+          Boolean(o.mcpServers && Object.keys(o.mcpServers).length));
 
       if (wantsHarness) {
         return yield* runWithHarness(cfg, o, model, env, selectedHarness);
@@ -324,17 +327,18 @@ export function makeEndpointAdapter(cfg: EndpointConfig): AgentAdapter {
         if (sid) yield ev.session(sid) as any;
         const userMsg = { role: 'user', content: o.prompt };
         const msgs = [...prior, userMsg];
+        const chatModel = cfg.name === 'ollama' && model?.startsWith('ollama/') ? model.slice('ollama/'.length) : model;
         const body =
           cfg.type === 'openai'
             ? {
-                model,
+                model: chatModel,
                 stream: true,
                 stream_options: { include_usage: true },
                 messages: [...(o.systemPrompt ? [{ role: 'system', content: o.systemPrompt }] : []), ...msgs],
                 ...(o.effort ? { reasoning_effort: OPENAI_EFFORT[o.effort] } : {}),
                 ...(o.jsonSchema ? { response_format: { type: 'json_schema', json_schema: { name: 'output', schema: o.jsonSchema } } } : {}),
               }
-            : { model, stream: true, max_tokens: 8192, messages: msgs, ...(o.systemPrompt ? { system: o.systemPrompt } : {}) };
+            : { model: chatModel, stream: true, max_tokens: 8192, messages: msgs, ...(o.systemPrompt ? { system: o.systemPrompt } : {}) };
         const url =
           cfg.type === 'openai'
             ? `${cfg.baseUrl}/chat/completions`

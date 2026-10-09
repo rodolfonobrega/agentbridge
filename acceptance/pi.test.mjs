@@ -41,6 +41,15 @@ test('makeAgentDir/destroyAgentDir: copies provider config, writes MCP + setting
   destroyAgentDir(ad); assert.ok(!existsSync(ad.dir));
 });
 
+test('resolvePiModel: auto-normalizes bare model names to provider/model for custom providers like ollama', () => {
+  const { resolvePiModel } = piMod;
+  assert.equal(resolvePiModel('ollama/glm-5.3-flash:cloud'), 'ollama/glm-5.3-flash:cloud', 'already prefixed remains intact');
+  assert.equal(resolvePiModel('openrouter/meta-llama/llama-3'), 'openrouter/meta-llama/llama-3', 'other providers intact');
+  assert.equal(resolvePiModel('glm-5.3-flash:cloud'), 'ollama/glm-5.3-flash:cloud', 'resolves bare model from models.json or pattern');
+  assert.equal(resolvePiModel('qwen2.5-coder:7b'), 'ollama/qwen2.5-coder:7b', 'heuristic resolves qwen ollama model');
+  assert.equal(resolvePiModel(undefined), undefined);
+});
+
 t('NOT_INSTALLED when the binary cannot be found', async () => {
   assert.equal(await code(ask('pi', { prompt: 'x', env: { PI_BIN: path.join(HOME, 'nope', 'pi.cmd'), PATH: '', Path: '', APPDATA: HOME, USERPROFILE: HOME, HOME } })), 'NOT_INSTALLED');
 }, { timeout: 60000 });

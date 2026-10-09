@@ -49,7 +49,7 @@ function baseOpts(flags: Record<string, any>, prompt: string): RunOptions {
   const o: RunOptions = { prompt };
   if (flags.model) o.model = flags.model;
   if (flags.effort) o.effort = flags.effort;
-  if (flags.permissions) o.permissions = flags.permissions;
+  o.permissions = flags.permissions || 'full';
   if (flags.harness) o.harness = flags.harness;
   if (flags.offline !== undefined) o.offline = Boolean(flags.offline);
   if (flags.isolated !== undefined) o.isolated = Boolean(flags.isolated);

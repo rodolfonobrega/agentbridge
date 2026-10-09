@@ -33,6 +33,18 @@ const agentTag = (a) => h('span', { class: 'agent-tag', style: `--ac:${color(a)}
 const statusLabel = { finished: 'succeeded', error: 'failed', timeout: 'timed out', lost: 'lost', active: 'running', idle: 'quiet', cancelled: 'cancelled' };
 const badge = (s) => h('span', { class: `badge s-${s}`, text: statusLabel[s] || s });
 const isFailed = (r) => r.status === 'error' || r.status === 'timeout' || r.status === 'lost';
+const shortErr = (r) => {
+  if (r.timedOut || r.status === 'timeout' || (r.elapsedMs >= 295000 && isFailed(r))) return `timeout (${fmtMs(r.elapsedMs)})`;
+  if (r.status === 'lost') return 'lost (process exited)';
+  if (!r.error) return '';
+  const e = String(r.error);
+  if (/model.{0,30}not found|unknown model|no such model/i.test(e)) return 'model not found';
+  if (/rate[- ]limit|usage limit/i.test(e)) return 'rate limited';
+  if (/not (logged|signed) in|unauthori/i.test(e)) return 'not logged in';
+  if (/connection refused|cannot reach/i.test(e)) return 'cannot connect';
+  const clean = e.replace(/^[A-Z_]+:\s*/, '').replace(/\s+/g, ' ').trim();
+  return clean.length > 28 ? clean.slice(0, 26) + '…' : clean;
+};
 const runTokens = (r) => (r.usage ? (r.usage.input || 0) + (r.usage.output || 0) : null);
 
 function kpi(label, value, sub, cls) { return h('div', { class: `kpi ${cls || ''}` }, h('div', { class: 'l', text: label }), h('div', { class: 'v', text: value }), h('div', { class: 's', text: sub || '' })); }
@@ -46,6 +58,15 @@ function render() {
   const A = state.agent, T = A ? sum.byAgent[A] || null : tot;
   const runs = d.runs.filter((r) => (!A || r.agent === A) && r.startedAt >= sum.since);
 
+  // live runs and active agents breakdown
+  const live = runs.filter((r) => r.status === 'active' || r.status === 'idle');
+  const liveAgents = [...new Set(live.map((r) => r.agent))];
+  const liveByAgent = {};
+  for (const r of live) liveByAgent[r.agent] = (liveByAgent[r.agent] || 0) + 1;
+  const activeBreakdown = liveAgents.length
+    ? Object.entries(liveByAgent).map(([a, n]) => `${a} (${n})`).join(' · ')
+    : 'all agents idle';
+
   // banner: context advice
   const b = $('#banner'); if (d.global.advice?.length) { b.hidden = false; b.textContent = d.global.advice.join(' · '); } else b.hidden = true;
 
@@ -54,7 +75,8 @@ function render() {
   if (!T) { k.append(kpi('Runs', '0', 'no runs for this agent in the window')); } else {
     const tokens = T.tokensIn + T.tokensOut;
     k.append(
-      kpi('Running now', String(T.running), T.running ? 'in flight' : 'idle', T.running ? 'accent' : ''),
+      kpi('Active agents', String(liveAgents.length), activeBreakdown, liveAgents.length ? 'accent' : ''),
+      kpi('Running now', String(T.running), T.running ? `${T.running} in flight` : 'idle', T.running ? 'accent' : ''),
       kpi('Runs', fmtN(T.runs), `${T.finished} ok · ${T.failed} failed${T.cancelled ? ' · ' + T.cancelled + ' cancelled' : ''}`),
       kpi('Success rate', fmtPct(T.successRate), T.successRate == null ? 'no finished runs yet' : 'of finished runs', T.successRate == null ? '' : T.successRate >= 0.9 ? 'ok' : T.successRate < 0.6 ? 'bad' : ''),
       kpi('Tokens', fmtN(tokens), `${fmtN(T.tokensIn)} in · ${fmtN(T.tokensOut)} out`),
@@ -66,12 +88,17 @@ function render() {
   }
 
   // live runs
-  const live = runs.filter((r) => r.status === 'active' || r.status === 'idle'), lr = clear($('#live-runs'));
-  $('#live-count').textContent = live.length ? `${live.length} in flight` : '';
+  const lr = clear($('#live-runs'));
+  $('#live-count').textContent = live.length ? `${live.length} in flight across ${liveAgents.length} agent${liveAgents.length === 1 ? '' : 's'}` : '';
   if (!live.length) lr.append(h('div', { class: 'empty', text: 'Nothing is running right now.' }));
-  for (const r of live) lr.append(h('button', { class: 'run-card', type: 'button', onclick: () => openRun(r.id) },
-    h('span', { class: `dot ${r.status}` }), h('span', null, agentTag(r.agent), ' ', h('span', { class: 'muted', text: r.model || '' })), h('span', { class: 't', 'data-start': r.startedAt, text: fmtMs(Date.now() - r.startedAt) }),
-    h('span', { class: 'sub', text: `${r.toolCalls} tool call${r.toolCalls === 1 ? '' : 's'} · last event ${ago(r.lastEventAgoMs)} · ${r.origin}${r.cwd ? ' · ' + r.cwd : ''}` })));
+  for (const r of live) {
+    const subCount = r.subagents?.length || 0;
+    lr.append(h('button', { class: 'run-card', type: 'button', onclick: () => openRun(r.id) },
+      h('span', { class: `dot ${r.status}` }),
+      h('span', null, agentTag(r.agent), ' ', h('span', { class: 'muted', text: r.model || '' }), subCount ? [' ', h('span', { class: 'chip', style: 'color:var(--accent)', text: `${subCount} subagent${subCount === 1 ? '' : 's'}` })] : null),
+      h('span', { class: 't', 'data-start': r.startedAt, text: fmtMs(Date.now() - r.startedAt) }),
+      h('span', { class: 'sub', text: `${r.toolCalls} tool call${r.toolCalls === 1 ? '' : 's'} · last event ${ago(r.lastEventAgoMs)} · ${r.origin}${r.cwd ? ' · ' + r.cwd : ''}` })));
+  }
 
   renderTimeline(sum);
   renderAgents(sum, A);
@@ -139,16 +166,31 @@ function renderTimeline(sum) {
 
 function renderRuns(runs) {
   const f = state.status;
-  const rows = runs.filter((r) => (f === 'ok' ? r.status === 'finished' : f === 'failed' ? isFailed(r) : f === 'rescued' ? !!r.fallback : true)).slice(0, 150);
+  const rows = runs.filter((r) => (
+    f === 'active' ? (r.status === 'active' || r.status === 'idle') :
+    f === 'ok' ? r.status === 'finished' :
+    f === 'failed' ? isFailed(r) :
+    f === 'rescued' ? !!r.fallback : true
+  )).slice(0, 150);
   const tb = clear($('#runs tbody'));
   const empty = $('#empty'); empty.hidden = rows.length > 0;
   if (!rows.length) { clear(empty).append(runs.length ? 'No runs match this filter.' : h('div', null, 'No runs recorded in this window yet.', h('br'), 'Run something such as ', h('code', { text: 'ab ask claude "hello"' }), ' and it will show up here.')); }
   for (const r of rows) {
-    const tk = runTokens(r), tr = h('tr', { tabindex: '0', onclick: () => openRun(r.id), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRun(r.id); } } },
+    const tk = runTokens(r);
+    const errText = isFailed(r) ? shortErr(r) : '';
+    const statusContent = [
+      badge(r.status),
+      errText ? h('span', { class: 'sub-err', title: r.error || errText, text: errText }) : null,
+    ].filter(Boolean);
+    const tr = h('tr', { tabindex: '0', onclick: () => openRun(r.id), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRun(r.id); } } },
       h('td', { text: fmtTime(r.startedAt) }),
       h('td', null, agentTag(r.agent), r.fallback ? [' ', h('span', { class: 'chip rescue', title: 'the primary hit a limit or failed; another agent answered', text: '→ ' + r.fallback.used })] : null),
-      h('td', { class: 'muted', title: r.model || '', text: r.model || '–' }), h('td', null, h('span', { class: 'chip', text: r.origin })), h('td', null, badge(r.status)),
-      h('td', { class: 'num', text: fmtMs(r.elapsedMs) }), h('td', { class: 'num', text: tk == null ? '–' : fmtN(tk) }), h('td', { class: 'num', text: String(r.toolCalls) + (r.toolCallsPartial ? '+' : '') }));
+      h('td', { class: 'muted', title: r.model || '', text: r.model || '–' }),
+      h('td', null, h('span', { class: 'chip', text: r.origin })),
+      h('td', null, ...statusContent),
+      h('td', { class: 'num', text: fmtMs(r.elapsedMs) }),
+      h('td', { class: 'num', text: tk == null ? '–' : fmtN(tk) }),
+      h('td', { class: 'num', text: String(r.toolCalls) + (r.toolCallsPartial ? '+' : '') }));
     tb.append(tr);
   }
 }
@@ -196,7 +238,12 @@ async function tick() {
     if (r.status === 401) throw new Error('unauthorized (open the URL with ?token=…)');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     state.data = await r.json(); state.fails = 0;
-    const l = $('#live'); l.className = 'live on'; l.lastChild.textContent = 'live · ' + new Date().toLocaleTimeString();
+    const l = $('#live'); l.className = 'live on';
+    const activeRuns = (state.data?.runs || []).filter((x) => x.status === 'active' || x.status === 'idle');
+    const activeAgentsCount = [...new Set(activeRuns.map((x) => x.agent))].length;
+    l.lastChild.textContent = activeRuns.length
+      ? `${activeRuns.length} active (${activeAgentsCount} agent${activeAgentsCount === 1 ? '' : 's'}) · ${new Date().toLocaleTimeString()}`
+      : 'idle · ' + new Date().toLocaleTimeString();
     render();
   } catch (e) { state.fails++; const l = $('#live'); l.className = 'live err'; l.lastChild.textContent = state.fails > 1 ? 'disconnected: ' + e.message : 'retrying…'; }
   schedule();

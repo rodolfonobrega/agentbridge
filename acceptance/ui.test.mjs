@@ -54,6 +54,9 @@ test('summarize: counts, rates, tokens, cost, fallback, durations and buckets', 
   assert.equal(s.byAgent.codex.cost, null, 'no cost is invented for agents that do not report it');
   assert.ok(!s.byAgent.old, 'runs outside the window are excluded');
   assert.deepEqual(s.topTools, [{ name: 'Read', count: 2 }]);
+  assert.equal(s.activeRuns, 1);
+  assert.deepEqual(s.activeAgents, ['codex']);
+  assert.deepEqual(s.activeByAgent, { codex: 1 });
   assert.equal(s.timeline.length, 12); assert.equal(s.timeline.reduce((n, b) => n + b.ok + b.failed, 0), 3);
   assert.equal(summarize([], { now }).total.successRate, null, 'empty window: no division by zero');
 });
