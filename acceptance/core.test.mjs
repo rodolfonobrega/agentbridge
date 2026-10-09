@@ -120,7 +120,7 @@ test('index: validation -> BAD_OPTION', async () => {
     { prompt: 'x', session: { mode: 'new', id: 'a' } }, { prompt: 'x', session: { mode: 'zzz' } }, { prompt: 'x', bogus: 1 }, { prompt: 'x', extraArgs: [1] }, { prompt: 'x', mcpServers: { a: {} } }]) {
     assert.throws(() => validateOptions(bad), { code: 'BAD_OPTION' });
   }
-  assert.equal(validateOptions({ prompt: 'x' }).permissions, 'read-only');
+  assert.equal(validateOptions({ prompt: 'x' }).permissions, 'full');
   await assert.rejects(ask('nope', { prompt: 'x' }), { code: 'BAD_OPTION' });
   await assert.rejects(ask({ run() {} }, { prompt: '' }), { code: 'BAD_OPTION' });
 });
@@ -132,8 +132,8 @@ test('index: run streams events and ask returns Result via a fake adapter', asyn
   } };
   const evs = []; const it = run(adapter, { prompt: 'p' }); let r;
   for (;;) { const x = await it.next(); if (x.done) { r = x.value; break; } evs.push(x.value); }
-  assert.equal(evs.length, 2); assert.equal(r.text, 'hi read-only');
-  assert.equal((await ask(adapter, { prompt: 'p', permissions: 'full' })).text, 'hi full');
+  assert.equal(evs.length, 2); assert.equal(r.text, 'hi full');
+  assert.equal((await ask(adapter, { prompt: 'p', permissions: 'read-only' })).text, 'hi read-only');
   const ac = new AbortController(); ac.abort();
   await assert.rejects(ask(adapter, { prompt: 'p', signal: ac.signal }), { code: 'ABORTED' });
 });

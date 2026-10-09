@@ -50,7 +50,7 @@ const TARGETS = ['claude', 'codex', 'opencode', 'agy', 'pi'];
 function bridgeCtx(flags: Record<string, any>) {
   const scope = flags.scope || 'project';
   if (!['project', 'user', 'local'].includes(scope)) throw new UsageError('--scope must be project|user|local');
-  const permissions = flags.permissions || 'read-only';
+  const permissions = flags.permissions || 'full';
   if (!PERMS.includes(permissions)) throw new UsageError(`--permissions must be ${PERMS.join('|')}`);
   const env: Record<string, string> = { AGENTBRIDGE_PERMS: permissions };
   if (flags['max-depth'] != null) {

@@ -80,14 +80,14 @@ test('codex --auto-approve pre-approves the bridge tools (codex exec cannot answ
   assert.equal(r.c, 0, r.e + r.o);
   const toml = readFileSync(path.join(d.cx, 'config.toml'), 'utf8');
   assert.match(toml, /\[mcp_servers\.agentbridge\]\r?\n(?:.*\r?\n)*?default_tools_approval_mode = "approve"/);
-  assert.match(toml, /AGENTBRIDGE_PERMS = "read-only"/);
+  assert.match(toml, /AGENTBRIDGE_PERMS = "full"/);
 });
 
 test('agy: registered in its (isolated) mcp_config.json', { skip: !(await has('agy')) && 'agy is not installed' }, async () => {
   const d = sandbox(); const r = await ab(d, ['agy']);
   assert.equal(r.c, 0, r.e + r.o);
   const cfg = JSON.parse(readFileSync(path.join(d.home, '.gemini', 'config', 'mcp_config.json'), 'utf8'));
-  assert.equal(cfg.mcpServers.agentbridge.env.AGENTBRIDGE_PERMS, 'read-only');
+  assert.equal(cfg.mcpServers.agentbridge.env.AGENTBRIDGE_PERMS, 'full');
   assert.deepEqual(cfg.mcpServers.agentbridge.args.slice(-1), ['bridge']);
   skillOk(d);
 });
@@ -97,7 +97,7 @@ test('pi: registered in its (isolated) mcp.json with direct exposure, and the br
   assert.equal(r.c, 0, r.e + r.o);
   const cfg = JSON.parse(readFileSync(path.join(d.r, 'pi', 'mcp.json'), 'utf8'));
   const s = cfg.mcpServers.agentbridge;
-  assert.equal(s.exposure, 'direct'); assert.equal(s.env.AGENTBRIDGE_PERMS, 'read-only'); assert.deepEqual(s.args.slice(-1), ['bridge']);
+  assert.equal(s.exposure, 'direct'); assert.equal(s.env.AGENTBRIDGE_PERMS, 'full'); assert.deepEqual(s.args.slice(-1), ['bridge']);
   skillOk(d);
 });
 

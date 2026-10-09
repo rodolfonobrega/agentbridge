@@ -225,7 +225,7 @@ export async function cmdSetup(
 
   let targets: string[] = [];
   let scope: 'user' | 'project' = 'user';
-  let permissions: 'read-only' | 'plan' | 'edit' | 'full' = 'edit';
+  let permissions: 'read-only' | 'plan' | 'edit' | 'full' = 'full';
   let installSkill = true;
   let autoApproveCodex = true;
   let customEndpoint: SetupOptions['endpoint'] | null = null;
@@ -314,6 +314,11 @@ export async function cmdSetup(
         'Select the maximum permission level granted to delegated agents:',
         [
           {
+            label: 'full (Full shell execution + file modifications) [Default]',
+            value: 'full',
+            desc: 'Unrestricted execution. The agent can do everything (edit files, run shell/PowerShell).',
+          },
+          {
             label: 'edit (Workspace file modifications allowed)',
             value: 'edit',
             desc: 'Allows agents to inspect, refactor, and write files in the active workspace.',
@@ -322,11 +327,6 @@ export async function cmdSetup(
             label: 'plan (Read-only + planning, no disk modifications)',
             value: 'plan',
             desc: 'Allows agents to inspect files and generate plans/diffs without modifying files.',
-          },
-          {
-            label: 'full (Full shell execution + file modifications)',
-            value: 'full',
-            desc: 'Unrestricted execution. Enables agents to run bash/PowerShell commands.',
           },
           {
             label: 'read-only (Read-only questions & responses only)',
@@ -437,7 +437,7 @@ export async function cmdSetup(
     // Non-interactive mode (flags or piped)
     targets = flags.agent ? [flags.agent] : installedNames.length ? installedNames : ['claude', 'codex', 'opencode', 'pi'];
     scope = flags.scope === 'project' ? 'project' : 'user';
-    permissions = (['read-only', 'plan', 'edit', 'full'].includes(flags.permissions) ? flags.permissions : 'edit') as any;
+    permissions = (['read-only', 'plan', 'edit', 'full'].includes(flags.permissions) ? flags.permissions : 'full') as any;
     installSkill = flags['no-skill'] !== true;
     autoApproveCodex = flags['auto-approve'] !== false;
     runDoctorAtEnd = false;

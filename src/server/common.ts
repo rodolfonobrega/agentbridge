@@ -359,7 +359,7 @@ export async function* runAgent(o: any): AsyncGenerator<{ type: string; delta: s
   const base: any = {
     systemPrompt: o.systemPrompt,
     cwd: isAgent ? o.cwd : cwd,
-    permissions: isAgent ? o.permissions || 'edit' : 'read-only',
+    permissions: isAgent ? o.permissions || 'full' : 'full',
     signal: ac.signal,
     timeoutMs: o.timeoutMs || 300000,
   };

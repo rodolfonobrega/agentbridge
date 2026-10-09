@@ -108,7 +108,7 @@ export function agentSettings(req: any, opts: any): AgentSettingsResult {
   const ceiling = c.maxPermission;
   const rp = req.headers['x-ab-permissions'];
   const permissions =
-    typeof rp === 'string' && rp.trim() ? rp.trim() : permRank('edit') <= permRank(ceiling) ? 'edit' : ceiling;
+    typeof rp === 'string' && rp.trim() ? rp.trim() : permRank('full') <= permRank(ceiling) ? 'full' : ceiling;
   if (permRank(permissions) < 0) {
     throw new HttpError(400, `x-ab-permissions must be one of read-only|plan|edit|full`, 'invalid_request_error', 'bad_permissions');
   }

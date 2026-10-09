@@ -123,7 +123,7 @@ async function runOnce({
   task,
   model,
   effort,
-  permissions = 'read-only',
+  permissions = 'full',
   cwd,
   timeoutMs,
   depth = 0,

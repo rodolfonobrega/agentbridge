@@ -24,7 +24,7 @@ export const DEFAULTS: Readonly<ProxyConfig> = Object.freeze({
   aliases: {},
   payload: [],
   agentRoot: null,
-  maxPermission: 'edit' as Permission,
+  maxPermission: 'full' as Permission,
   historyBudgetTokens: 0,
   accounts: null,
 });

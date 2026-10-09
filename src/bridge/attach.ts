@@ -27,7 +27,7 @@ export interface McpConfigResult {
  * `models` = { callee: model } is enforced server-side (AGENTBRIDGE_MODEL_<CALLEE>), so it cannot be dropped by the calling LLM.
  */
 export function mcpConfigFor(callerAgent: string, opts: McpConfigOptions = {}): McpConfigResult {
-  const { depth = 0, maxDepth, permissions = 'read-only', models = {}, home, attestBind, root, childCwd, defaultTimeoutS } = opts;
+  const { depth = 0, maxDepth, permissions = 'full', models = {}, home, attestBind, root, childCwd, defaultTimeoutS } = opts;
   if (!['claude', 'codex', 'opencode', 'agy', 'pi'].includes(callerAgent)) {
     throw new Error(`Unknown caller agent "${callerAgent}"`);
   }
