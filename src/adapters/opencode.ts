@@ -8,6 +8,7 @@ import { AgentError } from '../core/errors.js';
 import { ev } from '../core/events.js';
 import { hintFor } from '../core/hints.js';
 import { spawnProc, runCollect, resolveBinary, killTree, ProcessHandle } from '../core/spawn.js';
+import { extractJson, validate } from '../extras/schema.js';
 import { AgentAdapter, AgentEvent, RunOptions, RunResult, Usage } from '../types/index.js';
 
 const BIN = 'opencode';
@@ -272,64 +273,11 @@ function buildConfig(o: RunOptions): Record<string, any> {
   return cfg;
 }
 
-export function validateSchema(v: any, s: any, p = '$'): string[] {
-  const errs: string[] = [];
-  if (!s || typeof s !== 'object') return errs;
-  const t = (x: any) =>
-    x === null ? 'null' : Array.isArray(x) ? 'array' : Number.isInteger(x) ? 'integer' : typeof x;
-  if (s.enum && !s.enum.some((e: any) => JSON.stringify(e) === JSON.stringify(v))) {
-    errs.push(`${p}: not in enum`);
-  }
-  if ('const' in s && JSON.stringify(s.const) !== JSON.stringify(v)) {
-    errs.push(`${p}: not const`);
-  }
-  if (s.type) {
-    const types: string[] = [].concat(s.type);
-    const ok = types.some(
-      (x) => x === t(v) || (x === 'number' && typeof v === 'number') || (x === 'integer' && Number.isInteger(v))
-    );
-    if (!ok) {
-      errs.push(`${p}: expected ${types.join('|')}, got ${t(v)}`);
-      return errs;
-    }
-  }
-  if (v && typeof v === 'object' && !Array.isArray(v)) {
-    for (const k of s.required || []) {
-      if (!(k in v)) errs.push(`${p}.${k}: required`);
-    }
-    for (const [k, sub] of Object.entries(s.properties || {})) {
-      if (k in v) errs.push(...validateSchema(v[k], sub, `${p}.${k}`));
-    }
-    if (s.additionalProperties === false) {
-      for (const k of Object.keys(v)) {
-        if (!(s.properties || {})[k]) errs.push(`${p}.${k}: additional property`);
-      }
-    }
-  }
-  if (Array.isArray(v) && s.items) {
-    v.forEach((x, i) => errs.push(...validateSchema(x, s.items, `${p}[${i}]`)));
-  }
-  return errs;
-}
-
-export function extractJson(text: string): { value: any } | null {
-  const cands = [text.trim()];
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) cands.push(fence[1].trim());
-  const a = text.indexOf('{'),
-    b = text.lastIndexOf('}');
-  if (a >= 0 && b > a) cands.push(text.slice(a, b + 1));
-  const c = text.indexOf('['),
-    d = text.lastIndexOf(']');
-  if (c >= 0 && d > c) cands.push(text.slice(c, d + 1));
-  for (const x of cands) {
-    try {
-      return { value: JSON.parse(x) };
-    } catch {
-      /* next */
-    }
-  }
-  return null;
+// Thin value-first adapter over the canonical schema validator (src/extras/schema.ts), so jsonSchema
+// runs here carry the same semantics as pi/endpoint ($ref, allOf/anyOf/oneOf/not, numeric bounds,
+// string constraints) instead of the weaker copy this adapter used to carry locally.
+export function validateSchema(v: any, s: any): string[] {
+  return validate(s, v);
 }
 
 const schemaSuffix = (schema: any) =>
@@ -448,6 +396,11 @@ const adapter: AgentAdapter & { _run: (o: RunOptions) => AsyncGenerator<AgentEve
         }
       }
       throw e;
+    } finally {
+      // A consumer breaking out of the stream must still reach _run's finally (session-lock
+      // release, serve-process kill, live.delete); without return() the suspended generator
+      // would leak the opencode serve child tree and its session locks. No-op once exhausted.
+      await it.return?.(undefined as any);
     }
   },
 
@@ -939,10 +892,10 @@ const adapter: AgentAdapter & { _run: (o: RunOptions) => AsyncGenerator<AgentEve
       if (o.jsonSchema) {
         for (let attempt = 0; ; attempt++) {
           const x = extractJson(text);
-          const errs = x ? validateSchema(x.value, o.jsonSchema) : ['reply is not valid JSON'];
+          const errs = x.ok ? validateSchema(x.value, o.jsonSchema) : ['reply is not valid JSON'];
           if (!errs.length) {
-            json = x!.value;
-            text = JSON.stringify(x!.value);
+            json = x.value;
+            text = JSON.stringify(x.value);
             break;
           }
           if (attempt >= 1) {

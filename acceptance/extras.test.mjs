@@ -2,14 +2,15 @@
 // parallel fanout/race. Agent calls are cheap models, capped by keeping each test single- or dual-agent.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, realpathSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, realpathSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { validate, extractJson, askWithSchema } from '../dist/extras/schema.js';
-import { Budget, runBudgeted } from '../dist/extras/budget.js';
+import { Budget, drain, runBudgeted } from '../dist/extras/budget.js';
 import { createSandbox, withWorktree, runInWorktree } from '../dist/extras/worktree.js';
 import { fanout, race } from '../dist/extras/parallel.js';
 import { doctor, portFree } from '../dist/extras/doctor.js';
+import { spawnProc } from '../dist/core/spawn.js';
 import { AgentError } from '../dist/core/errors.js';
 
 const tmp = () => realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-ex-')));
@@ -57,6 +58,27 @@ test('budget: trips on tokens/cost/time thresholds without any agent call', () =
   const bc = new Budget({ maxCost: 0.01 }); bc.track('a', { type: 'usage', input: 1, output: 1, cost: 0.02 }); assert.equal(bc.exceeded, 'cost'); bc.dispose();
 });
 
+test('budget: drain still runs a suspended generator cleanup when onEvent throws', async () => {
+  const log = [];
+  async function* gen(returnVal) {
+    try {
+      for (let i = 0; i < 3; i++) yield { type: 'text', delta: String(i) };
+      return returnVal;
+    } finally {
+      log.push('cleanup');
+    }
+  }
+  // Consumer callback throws mid-stream: the generator must not be left suspended mid-yield with
+  // its finally (adapter-style cleanup: child kill, lock release) never reached.
+  await assert.rejects(drain(gen(), () => { throw new Error('consumer bailed'); }), /consumer bailed/);
+  assert.equal(log.length, 1);
+  // Normal completion keeps drain semantics: events forwarded, return value delivered, cleanup ran.
+  const evs = [];
+  assert.equal(await drain(gen('done'), (e) => evs.push(e.delta)), 'done');
+  assert.deepEqual(evs, ['0', '1', '2']);
+  assert.deepEqual(log, ['cleanup', 'cleanup']);
+});
+
 test('budget: runBudgeted aborts a real run cleanly on --max-time and returns partial text, no throw', { timeout: 60000 }, async () => {
   const r = await runBudgeted('claude', { prompt: 'Count slowly from 1 to 1000000, one number per line, explaining each in detail.', model: M.claude, cwd: tmp() }, { maxTimeMs: 3000 });
   assert.equal(r.aborted, true);
@@ -76,6 +98,24 @@ test('worktree: falls back to a temp copy when cwd is not a git repo', () => {
   const d = tmp();
   const sb = createSandbox(d);
   try { assert.equal(sb.mode, 'copy'); assert.ok(existsSync(sb.cwd)); } finally { sb.cleanup(); }
+});
+
+test('worktree: cleanup is best effort while another process holds the sandbox as its cwd', { timeout: 60000 }, async () => {
+  const d = tmp();
+  const sb = createSandbox(d); // non-git dir -> copy mode
+  assert.equal(sb.mode, 'copy');
+  // A child living inside the sandbox dir holds it as cwd: on Windows rmSync then fails with EBUSY/EPERM.
+  // The cleanup must swallow that instead of masking the run result (that is the withWorktree finally path).
+  const p = spawnProc(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { cwd: sb.cwd });
+  try {
+    await new Promise((r) => setTimeout(r, 300)); // let the child establish its cwd
+    assert.ok(p.pid > 0);
+    sb.cleanup();
+  } finally {
+    p.kill();
+    await p.wait().catch(() => {});
+    try { rmSync(sb.dir, { recursive: true, force: true }); } catch { /* child may still linger briefly */ }
+  }
 });
 
 test('worktree: uses a real git worktree when cwd is a git repo, and returns a real diff', async () => {

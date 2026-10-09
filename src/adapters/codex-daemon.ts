@@ -11,17 +11,18 @@ export type ReviewDecision =
   | 'timed_out'
   | 'abort';
 
-class AsyncQueue<T> {
+export class AsyncQueue<T> {
   private queue: T[] = [];
-  private resolvers: Array<(value: IteratorResult<T>) => void> = [];
+  private resolvers: Array<{ resolve: (value: IteratorResult<T>) => void; reject: (err: any) => void }> = [];
   private closed = false;
-  private error: any = null;
+  /** Last failure stored by fail(), if any. */
+  public error: any = null;
 
   push(value: T) {
     if (this.closed) return;
     if (this.resolvers.length > 0) {
-      const resolve = this.resolvers.shift()!;
-      resolve({ value, done: false });
+      const wait = this.resolvers.shift()!;
+      wait.resolve({ value, done: false });
     } else {
       this.queue.push(value);
     }
@@ -31,8 +32,8 @@ class AsyncQueue<T> {
     if (this.closed) return;
     this.closed = true;
     while (this.resolvers.length > 0) {
-      const resolve = this.resolvers.shift()!;
-      resolve({ value: undefined as any, done: true });
+      const wait = this.resolvers.shift()!;
+      wait.resolve({ value: undefined as any, done: true });
     }
   }
 
@@ -40,9 +41,11 @@ class AsyncQueue<T> {
     if (this.closed) return;
     this.closed = true;
     this.error = err;
+    // Failure must REACH consumers suspended inside next(): a pending wait resolves with
+    // done:false would make the surrounding for-await loop look like a normal, successful end.
     while (this.resolvers.length > 0) {
-      const resolve = this.resolvers.shift()!;
-      resolve({ value: undefined as any, done: true });
+      const wait = this.resolvers.shift()!;
+      wait.reject(err);
     }
   }
 
@@ -54,8 +57,8 @@ class AsyncQueue<T> {
     if (this.closed) {
       return { value: undefined as any, done: true };
     }
-    return new Promise<IteratorResult<T>>((resolve) => {
-      this.resolvers.push(resolve);
+    return new Promise<IteratorResult<T>>((resolve, reject) => {
+      this.resolvers.push({ resolve, reject });
     });
   }
 
@@ -307,8 +310,26 @@ export class CodexAppServerDaemon {
     this.sendResponse(id, { decision });
   }
 
+  /**
+   * Whether a server notification belongs to the currently active turn.
+   * Notifications from an orphaned turn (started by a run that was aborted while turn/start
+   * was in flight) must not be routed to the next turn's queue. A notification that carries
+   * no turn/thread ids at all (legacy shape) is always accepted.
+   */
+  private ownsNotification(turn: ActiveTurnContext, params: any, raw: any): boolean {
+    const p = params || {};
+    const rp = raw?.params || {};
+    const turnId = p.turnId ?? p.turn?.id ?? rp.turnId ?? rp.turn?.id ?? raw?.turnId ?? raw?.turn?.id;
+    const threadId = p.threadId ?? p.thread?.id ?? rp.threadId ?? rp.thread?.id ?? raw?.threadId ?? raw?.thread?.id;
+    // turnCtx.turnId is only known after turn/start resolves: pre-turnId notifications are accepted.
+    if (turnId != null && turn.turnId != null && turnId !== turn.turnId) return false;
+    if (threadId != null && turn.threadId != null && threadId !== turn.threadId) return false;
+    return true;
+  }
+
   private handleServerNotification(method: string, params: any = {}, raw: any) {
     if (!this.activeTurn) return;
+    if (!this.ownsNotification(this.activeTurn, params, raw)) return;
 
     this.activeTurn.queue.push(ev.raw(raw));
 
@@ -528,6 +549,10 @@ export class CodexAppServerDaemon {
         for await (const event of queue) {
           yield event;
         }
+
+        // A failed queue must surface as a failure, never as a normal end-of-stream success
+        // (e.g. fail() raced the loop exit).
+        if (queue.error) throw queue.error;
 
         return {
           text: turnCtx.text,

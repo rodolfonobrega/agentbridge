@@ -51,6 +51,8 @@ export function makeAcpAdapter(config: AcpAdapterOptions = {}): AgentAdapter {
       let text = '', sessionId: string | undefined;
       let usage: any = { input: 0, output: 0, cost: null };
       let initialized = false;
+      let rpcError: { code: any; message: string } | null = null;
+      let completed = false;
 
       for await (const line of p.lines) {
         const j = parseJsonLine(line);
@@ -70,6 +72,12 @@ export function makeAcpAdapter(config: AcpAdapterOptions = {}): AgentAdapter {
             yield ev.tool('acp:approval', j.params, { approved: isApproved }) as any;
             continue;
           }
+        }
+
+        // JSON-RPC error response to one of our requests: fail the run instead of returning success
+        if (j.id != null && j.error !== undefined) {
+          rpcError = { code: j.error?.code ?? 'unknown', message: j.error?.message || JSON.stringify(j.error) };
+          break;
         }
 
         if (j.id === 1 && !initialized) {
@@ -94,6 +102,7 @@ export function makeAcpAdapter(config: AcpAdapterOptions = {}): AgentAdapter {
         } else if (j.method === 'tool/call') {
           yield ev.tool(j.params?.name || 'tool', j.params?.args) as any;
         } else if (j.method === 'turn/completed' || j.method === 'session/completed') {
+          completed = true;
           const u = j.params?.usage || {};
           usage = { input: u.inputTokens || 0, output: u.outputTokens || 0, cost: u.cost ?? null };
           yield ev.usage(usage.input, usage.output) as any;
@@ -114,6 +123,24 @@ export function makeAcpAdapter(config: AcpAdapterOptions = {}): AgentAdapter {
           agent: 'acp',
           partial: text.trim(),
         });
+      }
+
+      if (rpcError) {
+        const tail = String(r.stderr || '').trim();
+        throw new AgentError(
+          'AGENT_FAILED',
+          `ACP agent error ${rpcError.code}: ${rpcError.message}${tail ? `. stderr: ${tail}` : ''}`,
+          { agent: 'acp', exitCode: r.exitCode, stderr: tail, partial: text.trim() || undefined }
+        );
+      }
+
+      if (r.exitCode !== 0 && !text.trim() && !completed) {
+        const blob = String(r.stderr || '').trim();
+        throw new AgentError(
+          'AGENT_FAILED',
+          `ACP process exited with code ${r.exitCode}${blob ? `: ${blob}` : ''}`,
+          { agent: 'acp', exitCode: r.exitCode, stderr: blob }
+        );
       }
 
       return {

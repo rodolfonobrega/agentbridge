@@ -1,8 +1,9 @@
 import { createCheckpoint, rollbackCheckpoint } from '../core/checkpoint.js';
 import { spawnProc } from '../core/spawn.js';
-import { agents, loadConfig } from '../index.js';
+import { loadConfig } from '../index.js';
 import { AgentError } from '../core/errors.js';
-import type { AgentAdapter, RunOptions } from '../types/index.js';
+import { invokeAgent } from './invoke.js';
+import type { AgentAdapter } from '../types/index.js';
 
 export interface RepairOptions {
   testCommand: string | string[];
@@ -160,29 +161,6 @@ function buildRepairPrompt(
     'Please analyze the test failure and edit the files to fix the issue so the test passes.'
   );
   return parts.join('\n\n');
-}
-
-async function invokeAgent(
-  agent: string | AgentAdapter,
-  runOpts: RunOptions
-): Promise<string> {
-  const adapter = typeof agent === 'string' ? await agents.get(agent) : agent;
-  const gen = adapter.run(runOpts);
-  let output = '';
-  while (true) {
-    const next = await gen.next();
-    if (next.done) {
-      if (!output && next.value && typeof next.value.text === 'string') {
-        output = next.value.text;
-      }
-      break;
-    }
-    const event = next.value;
-    if (event.type === 'text') {
-      output += event.delta || '';
-    }
-  }
-  return output;
 }
 
 export async function autoRepair(opts: RepairOptions): Promise<RepairResult> {

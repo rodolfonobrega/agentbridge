@@ -91,12 +91,19 @@ export class Budget {
 
 let seq = 0;
 
-/** Iterate an event generator to its return value, forwarding events. */
+/** Iterate an event generator to its return value, forwarding events. If onEvent throws, the
+ *  unwound-on-error return() below still drives the generator's own finally clauses, so adapter
+ *  cleanup (child kill, lock release) cannot be skipped by a generator left suspended mid-yield. */
 export async function drain(it: AsyncGenerator<any, any, any>, onEvent?: (e: any) => void): Promise<any> {
-  for (;;) {
-    const { value, done } = await it.next();
-    if (done) return value;
-    if (onEvent) onEvent(value);
+  try {
+    for (;;) {
+      const { value, done } = await it.next();
+      if (done) return value;
+      if (onEvent) onEvent(value);
+    }
+  } finally {
+    // No-op once exhausted; on unwind it resumes the suspended generator through its finally.
+    await it.return?.(undefined as any);
   }
 }
 
