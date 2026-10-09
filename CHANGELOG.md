@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.5] - 2026-10-09
+
+### Changes
+  - c1ffc41 docs(skill): document app-server dual-mode and expose transport option in CLI & MCP
+  - 1c8bcdc feat: shared skills, MCP mirroring and safe passthrough (v0.3.4)
+  - 378a2ef feat: MCP passthrough, skills discovery, and host diagnostics (v0.3.3)
+  - 2fc3ba4 feat: add check_quota MCP tool and showcase Escalation Ladder (A Escadinha) across docs and README
+  - bb24ac5 docs: emphasize Safety Lock (trava de seguranca) concept in skill and documentation
+
+
 ## [0.3.4] - 2026-10-09
 
 ### Shared Skills, MCPs and Safer Passthrough (learned from Orca and T3 Code)
