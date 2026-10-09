@@ -40,20 +40,39 @@ export interface Sandbox {
   diff: (isolatedIndex?: boolean) => { diff: string; files: string[] };
 }
 
+function normalizePath(p: string): string {
+  try {
+    p = realpathSync(path.resolve(p));
+  } catch {
+    p = path.resolve(p);
+  }
+  if (process.platform === 'win32' && /^[a-z]:/i.test(p)) {
+    p = p[0].toUpperCase() + p.slice(1);
+  }
+  return path.normalize(p);
+}
+
 export function createSandbox(cwd = process.cwd()): Sandbox {
-  cwd = realpathSync(path.resolve(cwd));
-  const dir = mkdtempSync(path.join(tmpdir(), 'ab-wt-'));
-  const top = tryGit(cwd, ['rev-parse', '--show-toplevel'])?.trim();
+  cwd = normalizePath(cwd);
+  const dir = normalizePath(mkdtempSync(path.join(tmpdir(), 'ab-wt-')));
+  const rawTop = tryGit(cwd, ['rev-parse', '--show-toplevel'])?.trim();
+  const top = rawTop ? normalizePath(rawTop) : null;
   const hasHead = top && tryGit(cwd, ['rev-parse', '--verify', 'HEAD']) != null;
   let mode: 'git-worktree' | 'copy',
     root = dir,
     sub = '';
   if (hasHead && top) {
-    const wt = path.join(dir, 'wt');
+    const wt = normalizePath(path.join(dir, 'wt'));
     git(top, ['worktree', 'add', '--detach', wt, 'HEAD']);
     mode = 'git-worktree';
     root = wt;
-    sub = path.relative(realpathSync(top), cwd);
+    let rel = '';
+    if (process.platform === 'win32') {
+      rel = top.toLowerCase() === cwd.toLowerCase() ? '' : path.relative(top, cwd);
+    } else {
+      rel = top === cwd ? '' : path.relative(top, cwd);
+    }
+    sub = !rel || rel === '.' || rel.startsWith('..') ? '' : rel;
     const patch = tryGit(top, ['diff', 'HEAD', '--binary']);
     let dirty = false;
     if (patch && patch.trim()) {

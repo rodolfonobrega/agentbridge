@@ -530,7 +530,7 @@ export async function cmdSetup(
     }
   } else {
     // Non-interactive mode (flags or piped)
-    targets = flags.agent ? [flags.agent] : installedNames.length ? installedNames : ['claude', 'codex', 'opencode', 'pi'];
+    targets = flags.agent ? [flags.agent] : installedNames;
     scope = flags.scope === 'project' ? 'project' : 'user';
     permissions = (['read-only', 'plan', 'edit', 'full'].includes(flags.permissions) ? flags.permissions : 'full') as any;
     installSkill = flags['no-skill'] !== true;
@@ -558,21 +558,25 @@ export async function cmdSetup(
 
   const results: { agent: string; success: boolean; message: string }[] = [];
 
-  for (const t of targets) {
-    try {
-      await cmdInstall([t], installFlags, {
-        out: (msg) => {
-          if (typeof msg === 'string' && msg.trim()) {
-            io.out(`  ${c.green}✔${c.reset} ${c.bold}${t.toUpperCase()}:${c.reset} ${msg.trim()}`);
-          }
-        },
-        err: io.err,
-      });
-      results.push({ agent: t, success: true, message: 'Configured' });
-    } catch (e: any) {
-      io.out(`  ${c.red}✖${c.reset} ${c.bold}${t.toUpperCase()}:${c.reset} ${e.message}`);
-      results.push({ agent: t, success: false, message: e.message });
-      process.exitCode = 1;
+  if (targets.length === 0) {
+    io.out(`  ${c.dim}No coding agent CLIs detected on PATH. Skipping agent hook installation (use "ab setup --agent <name>" to force a specific CLI).${c.reset}\n`);
+  } else {
+    for (const t of targets) {
+      try {
+        await cmdInstall([t], installFlags, {
+          out: (msg) => {
+            if (typeof msg === 'string' && msg.trim()) {
+              io.out(`  ${c.green}✔${c.reset} ${c.bold}${t.toUpperCase()}:${c.reset} ${msg.trim()}`);
+            }
+          },
+          err: io.err,
+        });
+        results.push({ agent: t, success: true, message: 'Configured' });
+      } catch (e: any) {
+        io.out(`  ${c.red}✖${c.reset} ${c.bold}${t.toUpperCase()}:${c.reset} ${e.message}`);
+        results.push({ agent: t, success: false, message: e.message });
+        process.exitCode = 1;
+      }
     }
   }
 
@@ -626,7 +630,7 @@ export async function cmdSetup(
   io.out(`${c.green}├${cardDivider}┤${c.reset}`);
   io.out(`${c.green}│${c.reset}  • Scope:            ${c.bold}${scope}${c.reset}${' '.repeat(Math.max(0, 50 - scope.length))}${c.green}│${c.reset}`);
   io.out(`${c.green}│${c.reset}  • Permissions:      ${c.bold}${permissions}${c.reset}${' '.repeat(Math.max(0, 50 - permissions.length))}${c.green}│${c.reset}`);
-  const targetStr = targets.join(', ');
+  const targetStr = targets.length ? targets.join(', ') : 'none (skills installed)';
   io.out(`${c.green}│${c.reset}  • Configured:       ${c.bold}${targetStr}${c.reset}${' '.repeat(Math.max(0, 50 - targetStr.length))}${c.green}│${c.reset}`);
   const skillStr = installSkill ? 'agentbridge-delegate installed & synchronized' : 'skipped';
   io.out(`${c.green}│${c.reset}  • Skills:           ${c.cyan}${skillStr}${c.reset}${' '.repeat(Math.max(0, 50 - skillStr.length))}${c.green}│${c.reset}`);

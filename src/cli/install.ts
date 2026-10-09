@@ -74,29 +74,11 @@ const writtenSkills = new Set<string>();
 export function writeSkill(
   base: string,
   out: (msg: string) => void,
-  opts?: { force?: boolean; scope?: string; cwd?: string }
+  _opts?: { force?: boolean; scope?: string; cwd?: string }
 ) {
   const dest = path.join(base, 'skills', 'agentbridge-delegate');
   const destFile = path.join(dest, 'SKILL.md');
   if (writtenSkills.has(destFile)) return;
-
-  const scope = opts?.scope || (base.includes(homedir()) ? 'user' : 'project');
-  const globalDest = path.join(homedir(), '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
-
-  // Prevent project duplicate if user already has it installed globally (covers Pi, Codex, OpenCode, Agy)
-  if (scope === 'project' && !opts?.force && existsSync(globalDest)) {
-    try {
-      const gContent = readFileSync(globalDest, 'utf8');
-      const cContent = readFileSync(SKILL, 'utf8');
-      if (gContent === cContent) {
-        out(
-          `Skill "agentbridge-delegate" already installed globally at ~/.agents/skills (covers Pi, Codex, OpenCode, Antigravity). Skipping local duplicate to avoid harness skill conflicts.`
-        );
-        writtenSkills.add(destFile);
-        return;
-      }
-    } catch {}
-  }
 
   mkdirSync(dest, { recursive: true });
   copyFileSync(SKILL, destFile);
@@ -396,21 +378,12 @@ export async function cmdInstall(
     }
   }
   if (!flags['no-skill']) {
-    const agentsProject = path.join(cwd, '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
-    const agentsGlobal = path.join(homedir(), '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
-    const alreadyInAgents = existsSync(agentsProject) || existsSync(agentsGlobal);
-    if (alreadyInAgents && !flags.force) {
-      out(
-        'Skill "agentbridge-delegate" already available in .agents/skills (Open Agent Skills standard). Skipping duplicate in .claude/skills to prevent harness collision.'
-      );
-    } else {
-      const base =
-        scope === 'user' ? process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude') : path.join(cwd, '.claude');
-      const dest = path.join(base, 'skills', 'agentbridge-delegate');
-      mkdirSync(dest, { recursive: true });
-      copyFileSync(SKILL, path.join(dest, 'SKILL.md'));
-      out(`wrote skill ${path.join(dest, 'SKILL.md')}`);
-    }
+    const base =
+      scope === 'user' ? process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude') : path.join(cwd, '.claude');
+    const dest = path.join(base, 'skills', 'agentbridge-delegate');
+    mkdirSync(dest, { recursive: true });
+    copyFileSync(SKILL, path.join(dest, 'SKILL.md'));
+    out(`wrote skill ${path.join(dest, 'SKILL.md')}`);
   }
   out(
     scope === 'project'

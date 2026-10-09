@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.2] - 2026-10-09
+
+### CI & Cross-Platform Stability
+- **CI Test Guards:** Added runtime presence check (`isInstalled('codex')`) to skip live Codex daemon turn execution on CI runners lacking the `codex` executable.
+- **Setup Non-Interactive Resilience:** Handled environments where zero agent CLIs are detected on `PATH` (such as clean CI containers) without triggering unexpected failure exit codes.
+- **Windows Path Canonicalization:**
+  - Resolved Windows 8.3 short names (`RUNNER~1`) vs long path discrepancies in `createSandbox` and worktree isolation.
+  - Normalized drive casing and symlink paths in `findProjectRoot` and `getRepoHash` for bulletproof memory persistence across all platforms.
+  - Streamlined per-execution skill write deduplication across harnesses.
+
 ## [0.4.1] - 2026-10-09
 
 ### MCP Timeout & Universal Open Agent Skills Hardening

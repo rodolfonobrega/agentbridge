@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, renameSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { homedir } from 'node:os';
 import { home } from '../bridge/runs.js';
@@ -22,11 +22,26 @@ export interface AgentBridgeConfig {
   [key: string]: any;
 }
 
+function normalizeConfigDir(p: string): string {
+  try {
+    p = realpathSync(path.resolve(p));
+  } catch {
+    p = path.resolve(p);
+  }
+  if (process.platform === 'win32' && /^[a-z]:/i.test(p)) {
+    p = p[0].toUpperCase() + p.slice(1);
+  }
+  return path.normalize(p);
+}
+
 export function findProjectRoot(startDir: string = process.cwd()): string {
-  let cur = path.resolve(startDir);
-  const userHome = path.resolve(homedir());
+  let cur = normalizeConfigDir(startDir);
+  const userHome = normalizeConfigDir(homedir());
+  const isSameDir = (a: string, b: string) =>
+    process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+
   while (true) {
-    if (cur !== userHome && existsSync(path.join(cur, '.agentbridge'))) {
+    if (!isSameDir(cur, userHome) && existsSync(path.join(cur, '.agentbridge'))) {
       return cur;
     }
     if (existsSync(path.join(cur, '.git'))) {
@@ -38,7 +53,7 @@ export function findProjectRoot(startDir: string = process.cwd()): string {
     }
     cur = parent;
   }
-  return path.resolve(startDir);
+  return normalizeConfigDir(startDir);
 }
 
 export function globalConfigFile(env: NodeJS.ProcessEnv = process.env): string {

@@ -2,7 +2,7 @@
 // Persists repository rules, architectural decisions, and variables
 // to <cwd>/.agentbridge/memory.json with fallback to ~/.agentbridge/memory/<repoHash>.json.
 
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, renameSync, realpathSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { home } from '../bridge/runs.js';
@@ -24,8 +24,20 @@ export interface ProjectMemory {
   variables: Record<string, string>;
 }
 
+export function canonicalPath(p: string): string {
+  try {
+    p = realpathSync(path.resolve(p));
+  } catch {
+    p = path.resolve(p);
+  }
+  if (process.platform === 'win32') {
+    p = p.toLowerCase();
+  }
+  return path.normalize(p);
+}
+
 export function getRepoHash(repoPath: string): string {
-  return createHash('sha256').update(path.resolve(repoPath)).digest('hex');
+  return createHash('sha256').update(canonicalPath(repoPath)).digest('hex');
 }
 
 export function getMemoryFilePath(cwd?: string): string {

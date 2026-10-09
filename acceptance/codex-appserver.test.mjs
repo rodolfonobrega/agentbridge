@@ -6,6 +6,7 @@ import path from 'node:path';
 import codex, { codexDaemonPool } from '../dist/adapters/codex.js';
 import { validateOptions } from '../dist/index.js';
 import { AgentError } from '../dist/core/errors.js';
+import { isInstalled } from '../dist/core/readiness.js';
 
 const T = 120000;
 const cwd = mkdtempSync(path.join(tmpdir(), 'cx-appserver-'));
@@ -31,7 +32,11 @@ test('validateOptions accepts transport and appServer options', () => {
   );
 });
 
-test('codex app-server: live turn with streaming deltas and session continuity', { timeout: T }, async () => {
+test('codex app-server: live turn with streaming deltas and session continuity', { timeout: T }, async (t) => {
+  if (!isInstalled('codex')) {
+    t.skip('codex is not installed');
+    return;
+  }
   // First turn
   const gen1 = codex.run({
     cwd,
