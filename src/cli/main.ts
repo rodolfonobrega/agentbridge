@@ -53,6 +53,8 @@ function baseOpts(flags: Record<string, any>, prompt: string): RunOptions {
   if (flags.harness) o.harness = flags.harness;
   if (flags.offline !== undefined) o.offline = Boolean(flags.offline);
   if (flags.isolated !== undefined) o.isolated = Boolean(flags.isolated);
+  if (flags.transport) o.transport = flags.transport;
+  if (flags['app-server'] || flags.appServer) o.appServer = true;
   if (flags.cwd) o.cwd = flags.cwd;
   if (flags.timeout != null) o.timeoutMs = num(flags, 'timeout', { min: 0 }) * 1000;
   if (flags.system) o.systemPrompt = flags.system;

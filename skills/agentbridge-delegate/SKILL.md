@@ -64,6 +64,30 @@ AgentBridge is engineered with a **Zero-Accident Safety Lock**:
 - `timeoutSeconds`: default 300; raise it for big tasks.
 - `session`: `{mode:'continue', id}` to follow up in the same agent conversation (`new`, `ephemeral`, `continue`, `fork`).
 - `fallback`: e.g. `["codex","ollama:glm-5.3-flash:cloud"]`. If the agent fails with `RATE_LIMITED` (or a code listed in `fallbackOn`), the next one answers. It is skipped if the first agent already ran tools under `edit`/`full`, to avoid redoing side effects. The result's `fallback` field says who answered and whether context was lost (fallback agents start a fresh session).
+- `transport`: `auto` (default), `cli`, `app-server`.
+  - Pass `transport: "app-server"` for **Codex** to run via a persistent JSON-RPC 2.0 daemon instead of batch process spawns.
+
+## Execution Transports: CLI vs App-Server Mode
+
+AgentBridge supports **Dual-Mode Execution** for OpenAI Codex:
+
+1. **Batch CLI Mode (`transport: "cli"`, default):**
+   - Each call spawns a one-off `codex exec` process.
+   - Clean, fully isolated, and requires no daemon state.
+   - Ideal for independent, single-turn tasks or when process teardown between runs is desired.
+
+2. **Persistent Daemon Mode (`transport: "app-server"`):**
+   - Spawns `codex app-server` once and communicates via JSON-RPC 2.0 frames over bidirectional stdio.
+   - **What You Gain:**
+     - **Zero Cold-Start:** The process stays warm in memory. Eliminates 2-5 seconds of process startup and auth bootstrapping on subsequent turns.
+     - **Live Interactive Approval:** Codex proactively asks via RPC before mutating files or executing shell commands (`item/commandExecution/requestApproval`, `item/fileChange/requestApproval`). AgentBridge evaluates permissions programmatically (`read-only` denies immediately; `edit`/`full` approves) without ever blocking on an interactive terminal prompt.
+     - **Structured Streaming:** Token-by-token deltas and granular tool lifecycle notifications without terminal scraping or ANSI parsing fragility.
+     - **Clean Cancellation:** Turns can be aborted cleanly via `turn/cancel` notifications without `SIGKILL` or corrupting half-written files.
+     - **Stateful Thread Continuity:** Native thread and turn tracking across multiple conversational steps.
+
+> **Why Resource Linking & Config Mirroring were chosen over in-memory MCP injection:**
+> Other systems (like Orca) abandon `config.toml` and inject MCPs entirely in-memory via `app-server` JSON-RPC calls, which forces users to run exclusively in `app-server` mode.
+> AgentBridge instead combines **Resource Linking (Junctions)** for skills with **Config Mirroring (`config.toml` / `.mcp.json`)** for MCP servers. This ensures that your skills and MCPs are seamlessly available **in both modes** (`cli` and `app-server`), as well as across Pi, Claude Code, OpenCode, and Antigravity, without requiring complex memory hacks or breaking existing setups.
 
 ## Delegating to Subagents
 

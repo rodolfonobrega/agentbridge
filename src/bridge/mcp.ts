@@ -169,6 +169,12 @@ function askSchema(agent: string) {
           type: 'boolean',
           description: 'Enable discovery of shared skills from ~/.agents/skills/ (default false for strict isolation)',
         },
+        transport: {
+          type: 'string',
+          enum: ['cli', 'app-server', 'stdio', 'auto'],
+          description:
+            'Execution transport mode. "app-server" runs a persistent JSON-RPC 2.0 daemon (fast zero cold-start, live interactive approvals for Codex); "cli" uses standard batch process spawn.',
+        },
       },
       required: ['prompt'],
     },
@@ -490,6 +496,9 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
   if (args.skills != null) {
     if (typeof args.skills !== 'boolean') throw new Error('skills must be a boolean');
     opts.skills = args.skills;
+  }
+  if (args.transport != null) {
+    opts.transport = args.transport;
   }
   if (args.mcpPassthrough != null && !(Array.isArray(args.mcpPassthrough) && args.mcpPassthrough.every((x: any) => typeof x === 'string'))) {
     throw new Error('mcpPassthrough must be an array of server names');

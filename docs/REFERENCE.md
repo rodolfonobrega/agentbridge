@@ -444,9 +444,57 @@ If you are working in sensitive, private, corporate, or air-gapped environments 
 2. **Block File System Modifications (Read-Only):**
    Use `--permissions read-only` (the default) or `--permissions plan`. Agents cannot edit, overwrite, or delete local files.
 
-3. **Block Shell / Terminal Execution:**
-   All modes except `full` (`read-only`, `plan`, `edit`) deny arbitrary shell execution (`bash: deny`, `command(*): deny`, `powershell: deny`). The agent cannot execute unapproved system scripts or shell binaries.
+### Execution Transports: CLI vs Persistent App-Server Mode
 
+AgentBridge features **Dual-Mode Execution** for OpenAI Codex:
+
+```bash
+# Batch CLI mode (default)
+ab run codex "Run unit tests" --permissions edit
+
+# Persistent App-Server mode (JSON-RPC 2.0 daemon)
+ab run codex "Run unit tests" --permissions edit --transport app-server
+```
+
+Via the programmatic library:
+```js
+import { run } from '@rodolfonobrega/agentbridge';
+
+const res = await run({
+  agent: 'codex',
+  prompt: 'Analyze codebase',
+  transport: 'app-server', // or 'cli' (default)
+  permissions: 'read-only',
+});
+```
+
+#### What You Gain with `transport: "app-server"`:
+1. **Zero Cold-Start (Warm Process):**
+   - Standard CLI mode spawns a brand new `codex exec` binary process on each invocation, paying process startup, configuration loading, and auth bootstrapping costs every time.
+   - `app-server` keeps a long-lived background daemon warm via JSON-RPC 2.0 stdio frames. Subsequent conversation turns and instructions dispatch instantly without startup lag.
+2. **Real-Time Bidirectional Security Approvals:**
+   - In CLI mode, subagent automation must either bypass approvals completely or risk hanging in an unmonitored terminal prompt.
+   - In `app-server` mode, the Codex daemon actively asks AgentBridge before taking actions:
+     - `item/commandExecution/requestApproval`
+     - `item/fileChange/requestApproval`
+     - `item/permissions/requestApproval`
+   - AgentBridge programmatically responds to these requests based on the session's active permissions (`read-only` and `plan` reject with `{ denied: { rejection: ... } }`; `edit` and `full` approve), enforcing safety with zero interactive delays.
+3. **Structured Streaming & Event Delivery:**
+   - Text deltas (`item/agentMessage/delta`) and tool lifecycle notifications (`item/commandExecution/started`, `completed`) are delivered through standardized JSON-RPC 2.0 frames instead of fragile ANSI log parsing or stdout scraping.
+4. **Clean Protocol Cancellation:**
+   - Instead of abruptly sending `SIGKILL` / `taskkill` to an active process (which can leave incomplete file edits or lock contention), AgentBridge sends a `turn/cancel` notification. The model halts immediately while preserving daemon state.
+5. **Stateful Multi-Turn Sessions:**
+   - Native thread continuity (`threadId`, `turnId`) without having to persist and reload entire conversational context trees from disk.
+
+#### Architectural Comparison: Memory Injection vs Resource Linking & Config Mirroring
+Systems like Orca abandon configuration files and inject MCP servers purely in-memory over `app-server` JSON-RPC calls, forcing all workflows into `app-server` mode. Similarly, T3 Code uses an in-memory proxy to intercept tool payloads.
+
+**AgentBridge takes a more resilient and universal approach:**
+- **Resource Linking (Junctions / Symlinks):** Transparently exposes shared skills into isolated sandboxes and subagent directories without copying or polluting repository git history.
+- **Config Mirroring (`config.toml` / `.mcp.json`):** Mirrors MCP definitions into configuration structures.
+
+**Why this matters:**
+Your MCP servers and skills work seamlessly and identically across **both** batch CLI mode (`codex exec`) and daemon mode (`codex app-server`), as well as across Pi, Claude Code, OpenCode, and Antigravity, without locking you into a single execution mode or requiring brittle memory rewrites.
 
 ### Errors
 

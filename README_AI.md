@@ -72,9 +72,10 @@ AgentBridge is a unified hub and orchestration bridge that connects every coding
 When the user or another agent asks you to delegate work, use the `agentbridge` MCP tools:
 
 ### Available Tools:
-- **`ask_<agent>(prompt, model?, effort?, permissions?, cwd?, timeoutSeconds?)`**:
+- **`ask_<agent>(prompt, model?, effort?, permissions?, cwd?, timeoutSeconds?, transport?, mcpPassthrough?, skills?)`**:
   Synchronous tool call. Blocks until the target agent finishes, returning the text, usage, and session ID.
   Available agents: `ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama` (and any custom endpoints).
+  - Use `transport: "app-server"` for Codex to run a persistent warm JSON-RPC daemon (zero cold start, real-time approval handling).
 - **`dispatch_<agent>(prompt, ...)`**:
   Asynchronous dispatch. Returns a `runId` immediately.
 - **`wait_run(id, timeoutSeconds?)`**:
@@ -82,7 +83,7 @@ When the user or another agent asks you to delegate work, use the `agentbridge` 
 - **`check_run(id)`**:
   Polls progress, status, tokens, and recent events of an async run.
 - **`cancel_run(id)`**:
-  Kills the child agent process.
+  Kills the child agent process (or cleanly cancels active turn in `app-server` mode).
 - **`checkpoint_create(message, cwd?)`**, **`checkpoint_list(cwd?)`**, **`checkpoint_diff(id, cwd?)`** & **`checkpoint_rollback(id, cwd?)`**:
   Git hidden-ref snapshots callable directly from MCP for fail-safe code modification.
 
@@ -330,4 +331,5 @@ ab serve --port 8787
 - [ ] Hit an error `permissions broader than caller`? Run `ab install all --permissions full`.
 - [ ] Need to verify what agents and host MCPs are available? Run `ab doctor`.
 - [ ] Delegating a task requiring special MCP tools (e.g. `rea`)? Confirm the destination harness has the MCP configured with `"exposure": "direct"` and proper permissions (`permissions: "edit"` / `"full"`), or execute directly on the host agent.
+- [ ] Want low-latency, warm multi-turn execution with Codex? Use `transport: "app-server"`.
 - [ ] Want to monitor real-time runs and tokens? Check `ab ui` at `http://127.0.0.1:8788`.
