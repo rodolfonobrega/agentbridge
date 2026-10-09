@@ -6,6 +6,7 @@ export const TOS_WARNING =
 
 const STRATEGIES = ['round-robin', 'fill-first', 'sticky'] as const;
 export type Strategy = (typeof STRATEGIES)[number];
+const STICKY_CAP = 1000; // remembered session->account bindings, oldest dropped past this
 
 const COOLDOWN_MS: Record<string, number> = { quota: 30 * 60_000, overloaded: 30_000, rate: 60_000 };
 const hash = (s: string) => createHash('sha256').update(String(s)).digest().readUInt32BE(0);
@@ -109,7 +110,15 @@ export function createPool(raw: any, { now = Date.now }: { now?: () => number } 
           }
         }
       }
-      if (sessionKey && a) sticky.set(`${agent}:${sessionKey}`, a.name);
+      if (sessionKey && a) {
+        const k = `${agent}:${sessionKey}`;
+        sticky.set(k, a.name);
+        while (sticky.size > STICKY_CAP) {
+          const oldest = sticky.keys().next();
+          if (oldest.done) break;
+          sticky.delete(oldest.value);
+        }
+      }
       return a || null;
     },
     ok(agent: string, name: string) {

@@ -31,6 +31,17 @@ const skillOk = (d) => {
   assert.ok(existsSync(f), f);
   assert.match(readFileSync(f, 'utf8'), /^---\r?\nname: agentbridge-delegate/);
 };
+// An env whose PATH holds no agent CLI, so `claude mcp add-json` reliably falls back to writing .mcp.json
+const abNoClaude = (d, args) => {
+  const env = { ...process.env, HOME: d.home, USERPROFILE: d.home, CODEX_HOME: d.cx, XDG_CONFIG_HOME: d.xdg, PI_CODING_AGENT_DIR: path.join(d.r, 'pi'), AGENTBRIDGE_HOME: path.join(d.r, 'ab') };
+  delete env.Path;
+  env.PATH = ''; // resolveBinary then finds no `claude`, on every platform and install layout
+  return new Promise((res) => {
+    const p = spawn(process.execPath, [MAIN, 'install', ...args, '--cwd', d.proj], { env });
+    let o = '', e = '';
+    p.stdout.on('data', (b) => (o += b)); p.stderr.on('data', (b) => (e += b)); p.on('close', (c) => res({ c, o, e }));
+  });
+};
 
 test('opencode: merges into an existing opencode.json, keeps other keys, installs the skill', async () => {
   const d = sandbox();
@@ -99,6 +110,35 @@ test('pi: registered in its (isolated) mcp.json with direct exposure, and the br
   const s = cfg.mcpServers.agentbridge;
   assert.equal(s.exposure, 'direct'); assert.equal(s.env.AGENTBRIDGE_PERMS, 'full'); assert.deepEqual(s.args.slice(-1), ['bridge']);
   skillOk(d);
+});
+
+test('claude fallback (no claude CLI): an absent .mcp.json is created with the agentbridge entry', async () => {
+  const d = sandbox();
+  const r = await abNoClaude(d, ['claude', '--no-skill', '--no-agents']);
+  assert.equal(r.c, 0, r.e + r.o);
+  const cfg = JSON.parse(readFileSync(path.join(d.proj, '.mcp.json'), 'utf8'));
+  assert.deepEqual(cfg.mcpServers.agentbridge.args.slice(-1), ['bridge']);
+  assert.equal(cfg.mcpServers.agentbridge.env.AGENTBRIDGE_DEFAULT_PERMS, 'read-only');
+});
+
+test('claude fallback (no claude CLI): merges into a valid .mcp.json and keeps the user servers', async () => {
+  const d = sandbox();
+  writeFileSync(path.join(d.proj, '.mcp.json'), JSON.stringify({ mcpServers: { other: { command: 'z' } } }));
+  const r = await abNoClaude(d, ['claude', '--no-skill', '--no-agents']);
+  assert.equal(r.c, 0, r.e + r.o);
+  const cfg = JSON.parse(readFileSync(path.join(d.proj, '.mcp.json'), 'utf8'));
+  assert.ok(cfg.mcpServers.other, 'the pre-existing server must survive the merge');
+  assert.deepEqual(cfg.mcpServers.agentbridge.args.slice(-1), ['bridge']);
+});
+
+test('claude fallback (no claude CLI): a .mcp.json with comments is refused untouched', async () => {
+  const d = sandbox(); const f = path.join(d.proj, '.mcp.json');
+  const src = '/* mine */\n{ "mcpServers": { "other": { "command": "z" } } }';
+  writeFileSync(f, src);
+  const r = await abNoClaude(d, ['claude']);
+  assert.notEqual(r.c, 0);
+  assert.match(r.e + r.o, /not touched/);
+  assert.equal(readFileSync(f, 'utf8'), src);
 });
 
 test('unknown target and bad options fail', async () => {

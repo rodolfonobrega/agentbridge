@@ -228,7 +228,12 @@ export async function cmdPipeline(
   if (!fs.existsSync(filePath)) {
     throw new AgentError('BAD_OPTION', `Pipeline file not found: ${filePath}`);
   }
-  const config: PipelineConfig = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  let config: PipelineConfig;
+  try {
+    config = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (e: any) {
+    throw new AgentError('BAD_OPTION', `invalid pipeline JSON in ${filePath}: ${e.message}`);
+  }
   const res = await runPipeline(config, {
     cwd: flags.cwd,
     checkpointEach: flags['checkpoint-each'],

@@ -14,9 +14,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 const AUTH_RE =
   /not logged in|please run \/login|invalid (x-)?api key|authentication_error|invalid authentication|oauth token (has )?(expired|revoked)|failed to authenticate/i;
-const ours = new Map<string, string[]>(); // resolved cwd -> ordered session ids started/used by THIS process
+const ours = new Map<string, string[]>(); // normCwd(resolved cwd) -> ordered session ids started/used by THIS process
 const busy = new Map<string, number>(); // session id -> number of in-flight continue runs
 const locks = new Map<string, Promise<void>>(); // session id -> promise tail
+// NTFS/Windows paths are case-insensitive: resolve then fold case (win32 only) so map keys match
+const normCwd = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p);
 
 async function lock(id: string): Promise<() => void> {
   const prev = locks.get(id) || Promise.resolve();
@@ -158,7 +160,7 @@ const adapter: AgentAdapter = {
     if (sess && (sess.mode === 'continue' || sess.mode === 'fork')) {
       if (sess.id) resumeId = sess.id;
       else {
-        const mine = [...(ours.get(path.resolve(o.cwd || process.cwd())) || [])].reverse();
+        const mine = [...(ours.get(normCwd(path.resolve(o.cwd || process.cwd()))) || [])].reverse();
         if (sess.mode === 'continue') {
           resumeId = mine.find((id) => !busy.get(id));
           if (!resumeId && mine.length) throw bad('session busy (in use by another continue); pass an explicit session.id');
@@ -229,7 +231,7 @@ const adapter: AgentAdapter = {
           sawSession = true;
           sessionId = m.session_id;
           if (sess?.mode !== 'ephemeral') {
-            const k = path.resolve(o.cwd || process.cwd());
+            const k = normCwd(path.resolve(o.cwd || process.cwd()));
             const l = ours.get(k) || [];
             if (!l.includes(sessionId!)) l.push(sessionId!);
             ours.set(k, l);

@@ -253,7 +253,8 @@ export function dispatch({ agent, model, cwd, key, prompt = '', env = process.en
   }).finally(() => { clearInterval(poll); rec.endedAt = Date.now(); save(rec, env); });
   live.set(id, { ac, done, rec });
   done.finally(() => setTimeout(() => live.delete(id), 0));
-  return { rec: decorate({ ...rec }, env), deduped: false };
+  // own the events array: the live rec keeps mutating (and shifting) it while this summary is read
+  return { rec: decorate({ ...rec, events: [...rec.events] }, env), deduped: false };
 }
 
 export async function waitRun(id: string, timeoutMs: number, env: NodeJS.ProcessEnv = process.env): Promise<RunRecord | null> {

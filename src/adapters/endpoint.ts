@@ -130,13 +130,16 @@ function writeSession(rec: any, env: NodeJS.ProcessEnv): void {
   renameSync(tmp, f);
 }
 
+// Windows paths are case-insensitive: fold case (win32 only) when comparing recorded session cwds
+const norm = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p);
+
 function latestSession(endpoint: string, cwd: string, env: NodeJS.ProcessEnv): any {
   let best: any;
   try {
     for (const f of readdirSync(sessDir(env))) {
       if (!f.endsWith('.json') || !UUID.test(f.slice(0, -5))) continue;
       const r = readSession(f.slice(0, -5), env);
-      if (r && r.endpoint === endpoint && r.cwd === cwd && !busy.has(r.id) && (!best || r.updatedAt > best.updatedAt)) best = r;
+      if (r && r.endpoint === endpoint && r.cwd && norm(r.cwd) === norm(cwd) && !busy.has(r.id) && (!best || r.updatedAt > best.updatedAt)) best = r;
     }
   } catch {
     /* none */

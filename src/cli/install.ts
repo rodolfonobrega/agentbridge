@@ -348,12 +348,26 @@ export async function cmdInstall(
     if (scope === 'project') {
       const mcpFile = path.join(cwd, '.mcp.json');
       let current: any = { mcpServers: {} };
+      let existing: string | undefined;
       try {
-        current = JSON.parse(readFileSync(mcpFile, 'utf8'));
+        existing = readFileSync(mcpFile, 'utf8');
       } catch {
-        /* empty */
+        /* absent */
       }
-      if (!current || typeof current !== 'object') current = { mcpServers: {} };
+      if (existing && existing.trim()) {
+        try {
+          current = JSON.parse(existing);
+        } catch (e: any) {
+          throw new UsageError(
+            `${mcpFile} contains invalid JSON (comments?), so it was not touched and your other MCP servers are preserved. Add this under "mcpServers" yourself:\n"agentbridge": ${json}\n(JSON parse error: ${e.message})`
+          );
+        }
+        if (!current || typeof current !== 'object' || Array.isArray(current)) {
+          throw new UsageError(
+            `${mcpFile} is not a JSON object with an "mcpServers" map, so it was not touched. Add this under "mcpServers" yourself:\n"agentbridge": ${json}`
+          );
+        }
+      }
       if (!current.mcpServers) current.mcpServers = {};
       current.mcpServers.agentbridge = JSON.parse(json);
       writeFileSync(mcpFile, JSON.stringify(current, null, 2) + '\n');
