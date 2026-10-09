@@ -116,7 +116,19 @@ function buildArgs(o: any, mcpFile?: string, resumeId?: string): string[] {
   if (s.mode === 'ephemeral') a.push('--no-session-persistence');
   else if (s.mode === 'continue') a.push('--resume', resumeId!);
   else if (s.mode === 'fork') a.push('--resume', resumeId!, '--fork-session');
-  if (o.extraArgs) a.push(...o.extraArgs);
+  if (o.extraArgs) {
+    if (!Array.isArray(o.extraArgs) || !o.extraArgs.every((x: any) => typeof x === 'string')) {
+      throw bad('extraArgs must be string[]');
+    }
+    if (o.permissions !== 'full') {
+      for (const arg of o.extraArgs) {
+        if (/^(--permission-mode|--tools|--allowedTools|--dangerously-skip-permissions)/i.test(arg.trim())) {
+          throw bad(`extraArgs cannot override permissions or tools under "${o.permissions}" permissions`);
+        }
+      }
+    }
+    a.push(...o.extraArgs);
+  }
   return a;
 }
 

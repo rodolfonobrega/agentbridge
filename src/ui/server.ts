@@ -1,5 +1,6 @@
 // `ab ui`: a read-only local dashboard over telemetry
 import http from 'node:http';
+import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
 import { stats, loadTrackedRun } from '../telemetry/stats.js';
@@ -130,9 +131,41 @@ export interface StartUiOptions {
   token?: string;
   env?: NodeJS.ProcessEnv;
   allowNonLoopback?: boolean;
+  allowMutations?: boolean;
+  allowedRoot?: string;
 }
 
-/** startUi({port=8788, host='127.0.0.1', token, env, allowNonLoopback}) -> {server, url, port, close()} */
+function originOk(req: http.IncomingMessage, allowNonLoopback?: boolean): boolean {
+  const secSite = req.headers['sec-fetch-site'];
+  if (secSite && secSite !== 'same-origin' && secSite !== 'same-site' && secSite !== 'none') {
+    return false;
+  }
+  const origin = req.headers.origin;
+  if (origin) {
+    try {
+      const u = new URL(origin);
+      const h = u.hostname.toLowerCase();
+      if (!LOOPBACK.has(h) && !allowNonLoopback) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const referer = req.headers.referer;
+  if (referer) {
+    try {
+      const u = new URL(referer);
+      const h = u.hostname.toLowerCase();
+      if (!LOOPBACK.has(h) && !allowNonLoopback) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** startUi({port=8788, host='127.0.0.1', token, env, allowNonLoopback, allowMutations, allowedRoot}) -> {server, url, port, close()} */
 export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
   const host = o.host || '127.0.0.1',
     env = o.env || process.env;
@@ -160,6 +193,22 @@ export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
   };
   const json = (res: http.ServerResponse, code: number, v: any) => send(res, code, JSON.stringify(v));
 
+  const checkCwdRoot = (rawCwd?: string | null): string => {
+    const requestedCwd = path.resolve(rawCwd || o.allowedRoot || process.cwd());
+    const rootConstraint = o.allowedRoot
+      ? path.resolve(o.allowedRoot)
+      : env.AGENTBRIDGE_ROOT
+        ? path.resolve(env.AGENTBRIDGE_ROOT)
+        : null;
+    if (rootConstraint) {
+      const rel = path.relative(rootConstraint, requestedCwd);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        throw new Error(`forbidden: cwd is outside authorized root "${rootConstraint}"`);
+      }
+    }
+    return requestedCwd;
+  };
+
   const server = http.createServer((req, res) => {
     try {
       if (!hostOk(req.headers.host)) return json(res, 403, { error: 'bad host' });
@@ -168,6 +217,12 @@ export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         if (!(req.method === 'POST' && /^\/api\/checkpoints\/[\w-]+\/rollback$/.test(p))) {
           return json(res, 405, { error: 'read-only dashboard' });
+        }
+        if (!originOk(req, o.allowNonLoopback)) {
+          return json(res, 403, { error: 'cross-origin request blocked' });
+        }
+        if (o.allowMutations === false) {
+          return json(res, 403, { error: 'mutations are disabled on this dashboard' });
         }
       }
       if (p.startsWith('/api/') && !authOk(req, o.token)) return json(res, 401, { error: 'missing or invalid token' });
@@ -236,8 +291,8 @@ export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
         });
       }
       if (p === '/api/checkpoints') {
-        const repoCwd = u.searchParams.get('cwd') || process.cwd();
         try {
+          const repoCwd = checkCwdRoot(u.searchParams.get('cwd'));
           const list = listCheckpoints(repoCwd);
           return json(res, 200, { checkpoints: list });
         } catch (e: any) {
@@ -246,8 +301,8 @@ export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
       }
       let cpM: RegExpExecArray | null;
       if ((cpM = /^\/api\/checkpoints\/([\w-]+)\/diff$/.exec(p))) {
-        const repoCwd = u.searchParams.get('cwd') || process.cwd();
         try {
+          const repoCwd = checkCwdRoot(u.searchParams.get('cwd'));
           const diff = diffCheckpoint(repoCwd, cpM[1]);
           return json(res, 200, { id: cpM[1], diff });
         } catch (e: any) {
@@ -256,8 +311,8 @@ export async function startUi(o: StartUiOptions = {}): Promise<UiServerResult> {
       }
       if ((cpM = /^\/api\/checkpoints\/([\w-]+)\/rollback$/.exec(p))) {
         if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
-        const repoCwd = u.searchParams.get('cwd') || process.cwd();
         try {
+          const repoCwd = checkCwdRoot(u.searchParams.get('cwd'));
           const result = rollbackCheckpoint(repoCwd, cpM[1]);
           return json(res, 200, { ok: true, id: cpM[1], ...result });
         } catch (e: any) {

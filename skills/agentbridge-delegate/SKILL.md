@@ -130,6 +130,13 @@ When delegating tasks via `ask_*` or `dispatch_*`, AgentBridge enforces **determ
     `ask_pi({ "prompt": "List all your available tools.", "permissions": "read-only" })`
   - **Direct Host Execution:** If a task strictly requires an MCP server that is only present in your primary agent session and cannot be passed through, execute that task directly in the host agent rather than delegating to an isolated subagent.
 
+- **Strict Security Guarantees & Sandboxes:**
+  - **Default Permissions & Operator Ceiling:** By default, subagents run under `read-only`. The ceiling (`AGENTBRIDGE_PERMS_CEILING`) can never be widened by `extraArgs` or client options.
+  - **Proxy Mode Tool Disablement:** Plain text API proxying automatically enforces `permissions: 'read-only'` and verifiably turns off tools (`--tools ""` for Claude, `--sandbox read-only` for Codex, `-ne -np -ns` for Pi).
+  - **Time Machine (Checkpoints) Guard:** `checkpoint_rollback` is strictly forbidden under `read-only` or `plan` permissions and omitted from MCP tools under restricted ceilings. Workspaces are strictly confined to `AGENTBRIDGE_ROOT`. Rollback automatically purges both untracked and post-checkpoint staged files.
+  - **Image Proxy SSRF & DNS Rebinding Protection:** Image fetching inspects both IPv4 and IPv6 representations (including mapped hex variants) and resolves hostnames to verified public IPs before connecting.
+  - **Dashboard CSRF Protection:** The UI dashboard (`ab ui`) blocks cross-origin POST mutations via strict Origin and `Sec-Fetch-Site` verification.
+
 ## Proactive Quota Awareness & The Escalation Ladder ("A Escadinha")
 
 To avoid burning expensive subscription tokens or hitting 429 rate limits midway through a task, you can query remaining token quotas and dynamically step down the escalation ladder:

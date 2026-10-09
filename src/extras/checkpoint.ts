@@ -154,7 +154,7 @@ export function listCheckpoints(cwd: string = process.cwd(), sessionId?: string)
   return list.sort((a, b) => b.createdAt - a.createdAt);
 }
 
-export function rollbackCheckpoint(cwd: string = process.cwd(), checkpointId: string): { restoredOid: string } {
+export function rollbackCheckpoint(cwd: string = process.cwd(), checkpointId: string): { restoredOid: string; removedFiles: string[] } {
   const root = findRepoRoot(cwd);
   const all = listCheckpoints(root);
   const target = all.find((c) => c.id === checkpointId || c.ref.endsWith(`/${checkpointId}`));
@@ -162,17 +162,46 @@ export function rollbackCheckpoint(cwd: string = process.cwd(), checkpointId: st
     throw new AgentError('BAD_OPTION', `Checkpoint not found: ${checkpointId}`);
   }
 
-  // Restore working tree files directly from the checkpoint commit
+  // 1. Identify files currently in the index that did not exist in the checkpoint
+  const targetFiles = new Set(
+    git(root, ['ls-tree', '-r', '--name-only', target.commitOid])
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+
+  const currentTracked = git(root, ['ls-files'])
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const removedFiles: string[] = [];
+  for (const file of currentTracked) {
+    if (!targetFiles.has(file)) {
+      try {
+        git(root, ['rm', '-f', '--', file]);
+        removedFiles.push(file);
+      } catch {
+        const fullPath = path.join(root, file);
+        if (existsSync(fullPath)) {
+          rmSync(fullPath, { recursive: true, force: true });
+          removedFiles.push(file);
+        }
+      }
+    }
+  }
+
+  // 2. Restore working tree and index files directly from the checkpoint commit
   git(root, ['checkout', target.commitOid, '--', '.']);
 
-  // Clean untracked files that didn't exist in the checkpoint
+  // 3. Clean untracked files that didn't exist in the checkpoint
   try {
     git(root, ['clean', '-fd']);
   } catch {
     /* ignore clean errors */
   }
 
-  return { restoredOid: target.commitOid };
+  return { restoredOid: target.commitOid, removedFiles };
 }
 
 export function diffCheckpoint(cwd: string = process.cwd(), checkpointId: string): string {

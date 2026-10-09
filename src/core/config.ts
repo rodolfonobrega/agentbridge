@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { homedir } from 'node:os';
 import { home } from '../bridge/runs.js';
@@ -33,9 +33,13 @@ export function projectConfigFile(cwd: string = process.cwd()): string {
 function readJsonFile(filePath: string): any {
   if (!existsSync(filePath)) return {};
   try {
-    return JSON.parse(readFileSync(filePath, 'utf8'));
-  } catch {
-    return {};
+    const content = readFileSync(filePath, 'utf8');
+    if (!content.trim()) return {};
+    const parsed = JSON.parse(content);
+    if (parsed && typeof parsed === 'object') return parsed;
+    throw new Error('Config root must be an object');
+  } catch (err: any) {
+    throw new AgentError('BAD_OPTION', `Failed to parse configuration file "${filePath}": ${err.message}`);
   }
 }
 
@@ -44,10 +48,14 @@ function writeJsonFile(filePath: string, data: any): void {
   const tmp = `${filePath}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
   writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
   try {
-    writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
-    unlinkSync(tmp);
+    renameSync(tmp, filePath);
   } catch {
-    // Fallback if atomic replacement was not possible
+    try {
+      writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+      unlinkSync(tmp);
+    } catch {
+      /* ignore cleanup fallback */
+    }
   }
 }
 
@@ -62,6 +70,14 @@ export function loadConfig(cwd: string = process.cwd(), env: NodeJS.ProcessEnv =
     ...globalCfg,
     ...projectCfg,
   };
+
+  // Validate loaded permission values from config files
+  if (merged.defaultPermissions && !PERMISSION_LEVELS.includes(merged.defaultPermissions as PermissionLevel)) {
+    delete merged.defaultPermissions;
+  }
+  if (merged.permissionsCeiling && !PERMISSION_LEVELS.includes(merged.permissionsCeiling as PermissionLevel)) {
+    delete merged.permissionsCeiling;
+  }
 
   // Environment variables take precedence over config files
   const envDefault = env.AGENTBRIDGE_DEFAULT_PERMS || env.AGENTBRIDGE_DEFAULT_PERMISSIONS;
@@ -86,7 +102,8 @@ export function getPermissionsCeiling(env: NodeJS.ProcessEnv = process.env, cwd:
     return envCeiling as PermissionLevel;
   }
   const cfg = loadConfig(cwd, env);
-  return cfg.permissionsCeiling || 'full';
+  const ceiling = cfg.permissionsCeiling;
+  return ceiling && PERMISSION_LEVELS.includes(ceiling) ? ceiling : 'full';
 }
 
 /**
@@ -98,7 +115,8 @@ export function getDefaultPermissions(env: NodeJS.ProcessEnv = process.env, cwd:
     return envDefault as PermissionLevel;
   }
   const cfg = loadConfig(cwd, env);
-  return cfg.defaultPermissions || 'read-only';
+  const def = cfg.defaultPermissions;
+  return def && PERMISSION_LEVELS.includes(def) ? def : 'read-only';
 }
 
 /**

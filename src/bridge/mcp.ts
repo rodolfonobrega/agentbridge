@@ -2,6 +2,7 @@
 // Dependency-free stdio MCP server (newline-delimited JSON-RPC 2.0) exposing ask_*/dispatch_* agent tools + run management.
 import { pathToFileURL } from 'node:url';
 import { realpathSync } from 'node:fs';
+import path from 'node:path';
 import http from 'node:http';
 import { run, parseFallbackTarget } from '../index.js';
 import { createTracker } from '../telemetry/stats.js';
@@ -316,11 +317,21 @@ export const QUOTA_TOOLS = [
 
 export const allTools = (env: NodeJS.ProcessEnv = process.env): any[] => {
   const L = agentList(env);
+  let ceiling = 'full';
+  try {
+    ceiling = resolvePermissionLevel(undefined, { env }).ceiling;
+  } catch {
+    /* ignore */
+  }
+  const cpTools =
+    ceiling === 'read-only' || ceiling === 'plan'
+      ? CHECKPOINT_TOOLS.filter((t) => t.name !== 'checkpoint_rollback')
+      : CHECKPOINT_TOOLS;
   return [
     ...L.map((a) => toolSchema(a)),
     ...L.map((a) => toolSchema(a, 'dispatch')),
     ...RUN_TOOLS,
-    ...CHECKPOINT_TOOLS,
+    ...cpTools,
     ...QUOTA_TOOLS,
   ];
 };
@@ -710,23 +721,63 @@ export async function callAny(name: string, args: any, ctx: any = {}): Promise<a
     return { content, structuredContent: out, ...(r.state === 'error' ? { isError: true } : {}) };
   }
   if (name === 'checkpoint_create') {
+    const cwdTarget = path.resolve(args?.cwd || process.cwd());
+    const allowedRoot = env.AGENTBRIDGE_ROOT ? path.resolve(env.AGENTBRIDGE_ROOT) : null;
+    if (allowedRoot) {
+      const rel = path.relative(allowedRoot, cwdTarget);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return errResult(`Forbidden: cwd "${cwdTarget}" is outside authorized AGENTBRIDGE_ROOT "${allowedRoot}"`);
+      }
+    }
+    const { ceiling } = resolvePermissionLevel(args?.permissions, { env, cwd: cwdTarget });
+    if (ceiling === 'read-only' || args?.permissions === 'read-only') {
+      return errResult(`Permission denied: checkpoint_create is not allowed under read-only permissions`);
+    }
     const { createCheckpoint } = await import('../extras/checkpoint.js');
-    const cp = createCheckpoint(args?.cwd || process.cwd(), { message: args?.message, sessionId: args?.sessionId });
+    const cp = createCheckpoint(cwdTarget, { message: args?.message, sessionId: args?.sessionId });
     return { content: [{ type: 'text', text: JSON.stringify(cp) }], structuredContent: cp };
   }
   if (name === 'checkpoint_rollback') {
+    const cwdTarget = path.resolve(args?.cwd || process.cwd());
+    const allowedRoot = env.AGENTBRIDGE_ROOT ? path.resolve(env.AGENTBRIDGE_ROOT) : null;
+    if (allowedRoot) {
+      const rel = path.relative(allowedRoot, cwdTarget);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return errResult(`Forbidden: cwd "${cwdTarget}" is outside authorized AGENTBRIDGE_ROOT "${allowedRoot}"`);
+      }
+    }
+    const { ceiling } = resolvePermissionLevel(args?.permissions, { env, cwd: cwdTarget });
+    if (ceiling === 'read-only' || ceiling === 'plan' || args?.permissions === 'read-only' || args?.permissions === 'plan') {
+      return errResult(`Permission denied: checkpoint_rollback is not allowed under "${ceiling}" permissions`);
+    }
     const { rollbackCheckpoint } = await import('../extras/checkpoint.js');
-    const res = rollbackCheckpoint(args?.cwd || process.cwd(), args?.id);
+    const res = rollbackCheckpoint(cwdTarget, args?.id);
     return { content: [{ type: 'text', text: JSON.stringify(res) }], structuredContent: res };
   }
   if (name === 'checkpoint_list') {
+    const cwdTarget = path.resolve(args?.cwd || process.cwd());
+    const allowedRoot = env.AGENTBRIDGE_ROOT ? path.resolve(env.AGENTBRIDGE_ROOT) : null;
+    if (allowedRoot) {
+      const rel = path.relative(allowedRoot, cwdTarget);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return errResult(`Forbidden: cwd "${cwdTarget}" is outside authorized AGENTBRIDGE_ROOT "${allowedRoot}"`);
+      }
+    }
     const { listCheckpoints } = await import('../extras/checkpoint.js');
-    const list = listCheckpoints(args?.cwd || process.cwd(), args?.sessionId);
+    const list = listCheckpoints(cwdTarget, args?.sessionId);
     return { content: [{ type: 'text', text: JSON.stringify(list) }], structuredContent: { checkpoints: list } };
   }
   if (name === 'checkpoint_diff') {
+    const cwdTarget = path.resolve(args?.cwd || process.cwd());
+    const allowedRoot = env.AGENTBRIDGE_ROOT ? path.resolve(env.AGENTBRIDGE_ROOT) : null;
+    if (allowedRoot) {
+      const rel = path.relative(allowedRoot, cwdTarget);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return errResult(`Forbidden: cwd "${cwdTarget}" is outside authorized AGENTBRIDGE_ROOT "${allowedRoot}"`);
+      }
+    }
     const { diffCheckpoint } = await import('../extras/checkpoint.js');
-    const diff = diffCheckpoint(args?.cwd || process.cwd(), args?.id);
+    const diff = diffCheckpoint(cwdTarget, args?.id);
     return { content: [{ type: 'text', text: diff || '(no differences)' }], structuredContent: { id: args?.id, diff } };
   }
   if (name === 'check_quota') {

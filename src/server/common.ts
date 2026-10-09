@@ -360,17 +360,21 @@ export async function* runAgent(o: any): AsyncGenerator<{ type: string; delta: s
   if (o.signal?.aborted) ac.abort();
   else o.signal?.addEventListener('abort', onAbort, { once: true });
   const base: any = {
-    systemPrompt: o.systemPrompt,
+    systemPrompt: isAgent ? o.systemPrompt : [o.systemPrompt, NO_TOOLS].filter(Boolean).join('\n\n'),
     cwd: isAgent ? o.cwd : cwd,
-    permissions: isAgent ? o.permissions || 'full' : 'full',
+    permissions: isAgent ? o.permissions || 'full' : 'read-only',
     signal: ac.signal,
     timeoutMs: o.timeoutMs || 300000,
   };
   if (model) base.model = model;
-  if (o.mcpServers) base.mcpServers = o.mcpServers;
+  if (isAgent && o.mcpServers) base.mcpServers = o.mcpServers;
   if (o.images?.length) base.images = o.images;
   if (o.jsonSchema) base.jsonSchema = o.jsonSchema;
-  if (aname === 'claude' && !isAgent) base.extraArgs = ['--tools', ''];
+  if (!isAgent) {
+    if (aname === 'claude') base.extraArgs = ['--tools', ''];
+    else if (aname === 'codex') base.extraArgs = ['--sandbox', 'read-only'];
+    else if (aname === 'pi') base.extraArgs = ['-ne', '-np', '-ns'];
+  }
   const holdMs = o.holdMs ?? (o.fallback?.length ? 1500 : 0),
     holdChars = o.holdChars ?? 160;
   let effort = o.effort,

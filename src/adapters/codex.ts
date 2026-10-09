@@ -118,9 +118,19 @@ function buildArgs(o: any, schemaFile?: string, claim: { id?: string } = {}, ima
       a.push('-c', `${k}.env={${Object.entries(srv.env).map(([x, y]) => `${toml(x)}=${toml(String(y))}`).join(',')}}`);
   }
   if (schemaFile) a.push('--output-schema', schemaFile);
-  if (o.extraArgs != null && !(Array.isArray(o.extraArgs) && o.extraArgs.every((x: any) => typeof x === 'string')))
-    throw bad('extraArgs must be string[]');
-  if (o.extraArgs?.length) a.push(...o.extraArgs.map(String));
+  if (o.extraArgs != null) {
+    if (!Array.isArray(o.extraArgs) || !o.extraArgs.every((x: any) => typeof x === 'string')) {
+      throw bad('extraArgs must be string[]');
+    }
+    if (o.permissions !== 'full') {
+      for (const arg of o.extraArgs) {
+        if (/^(--sandbox|-c\s*sandbox_mode=|-c\s*windows\.sandbox=|-c\s*sandbox_workspace_write\.)/i.test(arg.trim())) {
+          throw bad(`extraArgs cannot override sandbox configuration under "${o.permissions}" permissions`);
+        }
+      }
+    }
+    if (o.extraArgs.length) a.push(...o.extraArgs.map(String));
+  }
   if (sub.length) {
     let id = s.id;
     if (!id) {

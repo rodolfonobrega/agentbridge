@@ -140,8 +140,9 @@ export function validateOptions(opts: RunOptions): RunOptions {
     if (o[k] != null && typeof o[k] !== 'string') throw bad(`${k} must be a string`);
   }
   if (o.effort != null && !EFFORT.includes(o.effort)) throw bad(`effort must be one of ${EFFORT.join('|')}`);
+  const effectiveEnv = o.env ? { ...process.env, ...o.env } : process.env;
   const resolved = resolvePermissionLevel(o.permissions, {
-    env: o.env || process.env,
+    env: effectiveEnv,
     cwd: o.cwd || process.cwd(),
   });
   o.permissions = resolved.permissions;

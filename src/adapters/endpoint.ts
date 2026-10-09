@@ -205,7 +205,7 @@ async function* runWithHarness(
       ...(targetModel ? { ANTHROPIC_MODEL: targetModel } : {}),
       ...(cfg.apiKey || cfg.apiKeyEnv ? { OPENROUTER_API_KEY: authToken } : {}),
     };
-    const isolated = forwardOpts.isolated ?? false;
+    const isolated = forwardOpts.isolated !== false;
     return yield* claudeAdapter.run({
       ...forwardOpts,
       isolated,
