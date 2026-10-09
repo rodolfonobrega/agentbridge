@@ -171,7 +171,7 @@ export async function runPipeline(
           success: false,
           error: err?.message || String(err),
         };
-        if (opts.stopOnError !== false) {
+        if (!failedStepId) {
           failedStepId = step.id;
         }
       }
@@ -179,7 +179,7 @@ export async function runPipeline(
 
     await Promise.all(wavePromises);
 
-    if (failedStepId) break;
+    if (failedStepId && opts.stopOnError !== false) break;
 
     if (opts.checkpointEach) {
       try {
@@ -190,7 +190,8 @@ export async function runPipeline(
     }
   }
 
-  const success = !failedStepId;
+  const anyFailed = Object.values(stepResults).some((r: any) => !r.success);
+  const success = !anyFailed;
   let rolledBack = false;
 
   if (!success && opts.autoRollback && initialCheckpointId) {

@@ -339,13 +339,13 @@ export class SubagentRoster {
 
     // 5. Tool call: ask_* or dispatch_*
     const toolName = String(event.name || event.tool || '');
+    const cleanTool = toolName.replace(/^(?:mcp__)?(?:agentbridge__)?/, '');
     if (
       eventType === 'tool' ||
-      toolName.startsWith('ask_') ||
-      toolName.startsWith('dispatch_') ||
-      toolName.includes('agentbridge')
+      cleanTool.startsWith('ask_') ||
+      cleanTool.startsWith('dispatch_')
     ) {
-      if (toolName.startsWith('ask_') || toolName.startsWith('dispatch_')) {
+      if (cleanTool.startsWith('ask_') || cleanTool.startsWith('dispatch_')) {
         return this.consumeToolCall(event);
       }
     }
@@ -361,6 +361,7 @@ export class SubagentRoster {
 
     const callId = String(toolCall.id || toolCall.callId || toolCall.toolCallId || '');
     const toolName = String(toolCall.name || toolCall.tool || '');
+    const cleanTool = toolName.replace(/^(?:mcp__)?(?:agentbridge__)?/, '');
 
     // Check if we already registered this tool call
     let existingId = callId ? this.toolCallToId.get(callId) : undefined;
@@ -378,9 +379,11 @@ export class SubagentRoster {
         });
       }
       if (toolCall.output !== undefined || toolCall.result !== undefined) {
+        const out = toolCall.output ?? toolCall.result;
+        const isAsyncDispatch = cleanTool.startsWith('dispatch_') && typeof out === 'object' && out !== null && (out.runId || out.id);
         return this.updateStatus(existingId, {
-          status: 'completed',
-          result: toolCall.output ?? toolCall.result,
+          status: isAsyncDispatch ? 'running' : 'completed',
+          result: out,
           tokens: toolCall.tokens,
         });
       }
@@ -399,17 +402,18 @@ export class SubagentRoster {
           })()
         : toolCall.input?.prompt || toolCall.prompt || '';
 
-    const agentName = toolName.replace(/^(?:mcp__agentbridge__)?(?:ask_|dispatch_)/, '');
+    const agentName = cleanTool.replace(/^(?:ask_|dispatch_)/, '');
 
     const id = callId || `tool-${randomUUID().slice(0, 8)}`;
+    const isAsyncDispatch = cleanTool.startsWith('dispatch_') && toolCall.output !== undefined;
     const node = this.registerSubagent({
       id,
-      name: agentName || toolName,
+      name: agentName || cleanTool,
       toolName,
       parentToolCallId: callId || null,
       parentId: parentId || toolCall.parentId || null,
       task: prompt,
-      status: toolCall.error ? 'failed' : toolCall.output !== undefined ? 'completed' : 'running',
+      status: toolCall.error ? 'failed' : isAsyncDispatch ? 'running' : toolCall.output !== undefined ? 'completed' : 'running',
       startedAt: toolCall.timestamp || Date.now(),
       tokens: toolCall.tokens,
     });

@@ -75,6 +75,8 @@ export interface AgentEnsembleOutput {
 export interface EnsembleResult {
   outputs: AgentEnsembleOutput[];
   consensus: string;
+  hasConsensus?: boolean;
+  consensusMethod?: 'majority' | 'plurality' | 'judge' | 'tie' | 'none';
   selectedAgent?: string;
   judgeOutput?: string;
   durationMs: number;
@@ -114,7 +116,14 @@ export function parseReviewVerdict(text: string, strict = false): ReviewVerdict 
     const parsed = JSON.parse(jsonCandidate);
     if (parsed && typeof parsed === 'object') {
       const v = String(parsed.verdict || parsed.status || '').toUpperCase();
-      const approved = v === 'APPROVED' || parsed.approved === true;
+      let approved: boolean;
+      if (v === 'REJECTED' || v === 'CHANGES_REQUESTED') {
+        approved = false;
+      } else if (v === 'APPROVED') {
+        approved = parsed.approved !== false;
+      } else {
+        approved = parsed.approved === true;
+      }
       const issues = Array.isArray(parsed.issues)
         ? parsed.issues.map(String)
         : parsed.issues
@@ -460,6 +469,8 @@ export async function runEnsemble(opts: EnsembleOptions): Promise<EnsembleResult
     return {
       outputs,
       consensus: judgeOutput,
+      hasConsensus: true,
+      consensusMethod: 'judge',
       selectedAgent,
       judgeOutput,
       durationMs: Date.now() - t0,
@@ -472,6 +483,8 @@ export async function runEnsemble(opts: EnsembleOptions): Promise<EnsembleResult
     return {
       outputs,
       consensus: '',
+      hasConsensus: false,
+      consensusMethod: 'none',
       durationMs: Date.now() - t0,
     };
   }
@@ -497,10 +510,16 @@ export async function runEnsemble(opts: EnsembleOptions): Promise<EnsembleResult
     }
   }
 
+  const hasConsensus = highestCount > 1 || successful.length === 1;
+  const isMajority = highestCount > successful.length / 2;
+  const consensusMethod = !hasConsensus ? 'tie' : isMajority ? 'majority' : 'plurality';
+
   return {
     outputs,
-    consensus: best.output,
-    selectedAgent: best.agent,
+    consensus: hasConsensus ? best.output : '',
+    hasConsensus,
+    consensusMethod,
+    selectedAgent: hasConsensus ? best.agent : undefined,
     durationMs: Date.now() - t0,
   };
 }

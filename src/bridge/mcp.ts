@@ -544,19 +544,20 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
       }
     }
   } else {
-    opts.mcpServers = {
-      ...mcpConfigFor(agent, {
-        depth: childDepth,
-        maxDepth: max,
-        permissions: perms,
-        models,
-        home: env.AGENTBRIDGE_HOME,
-        attestBind: env.AGENTBRIDGE_ATTEST_BIND,
-        root: env.AGENTBRIDGE_ROOT,
-        defaultTimeoutS: env.AGENTBRIDGE_DEFAULT_TIMEOUT_S,
-      }),
-      ...passthroughServers,
-    };
+    const childBridge = mcpConfigFor(agent, {
+      depth: childDepth,
+      maxDepth: max,
+      permissions: perms,
+      models,
+      home: env.AGENTBRIDGE_HOME,
+      attestBind: env.AGENTBRIDGE_ATTEST_BIND,
+      root: env.AGENTBRIDGE_ROOT,
+      defaultTimeoutS: env.AGENTBRIDGE_DEFAULT_TIMEOUT_S,
+    });
+    const combinedServers = { ...childBridge, ...passthroughServers };
+    if (Object.keys(combinedServers).length) {
+      opts.mcpServers = combinedServers;
+    }
   }
   try {
     const it = run(agent, opts);

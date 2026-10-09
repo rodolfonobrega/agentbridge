@@ -60,7 +60,14 @@ export class Budget {
 
   track(key: string, e: any): void {
     if (e?.type !== 'usage') return;
-    this.per.set(key, { tokens: (e.input || 0) + (e.output || 0), cost: e.cost || 0 });
+    const tokens = (e.input || 0) + (e.output || 0);
+    const cost = e.cost || 0;
+    if (e.incremental) {
+      const prev = this.per.get(key) || { tokens: 0, cost: 0 };
+      this.per.set(key, { tokens: prev.tokens + tokens, cost: prev.cost + cost });
+    } else {
+      this.per.set(key, { tokens, cost });
+    }
     this.check();
   }
 

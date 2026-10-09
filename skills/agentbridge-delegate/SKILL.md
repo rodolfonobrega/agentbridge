@@ -263,4 +263,17 @@ If you have shell execution access, you can run high-level orchestration workflo
 - **Live Visual Time Machine & Dashboard (`ab ui`):**
   Explore runs, tokens, cost, subagent trees, and time-machine checkpoints at `http://127.0.0.1:8788`.
 
+## Provider & Adapter Safety Guarantees (Phase 4 Hardening)
+
+- **Strict Permission & Tool Sandboxing Across All Providers:**
+  All providers (`cursor`, `gemini`, `devin`, `grok`, `acp`) strictly validate requested options. Passing unsupported parameters (e.g. attempting session fork on ephemeral endpoints, or passing images to text-only drivers) throws `AgentError('BAD_OPTION')` immediately rather than silently failing. In `read-only` or `plan` modes, explicit prompt guardrails and tool exclusion prevent code mutations.
+- **Abort & Timeout Propagation:**
+  All adapters check child-process timeout (`r.timedOut`) and abort cancellation (`r.aborted`) after waiting, cleanly raising `TIMEOUT` and `ABORTED` with partial output preserved for telemetry.
+- **DAG Pipeline Integrity:**
+  In multi-step pipelines (`ab pipeline`), success is strictly determined across all execution steps: if any step fails with `stopOnError: false`, overall success evaluates to `false` and triggers automated rollback if configured, preventing misleading partial deployments.
+- **Consensus & Ensemble Integrity:**
+  In multi-agent consensus reviews (`ab review`), rejected verdicts take unequivocal precedence over contradictory comments. In ensemble runs (`ab ensemble`), lack of a clear majority results in an explicit tie (`hasConsensus: false`, `consensusMethod: "tie"`) rather than picking an arbitrary winner.
+- **Subagent Delegation Discovery:**
+  The `SubagentRoster` normalizes full MCP server tool prefixes (such as `mcp__agentbridge__ask_*` and `mcp__agentbridge__dispatch_*`), allowing seamless subagent tree tracking and preventing premature completion of asynchronous background dispatches.
+
 

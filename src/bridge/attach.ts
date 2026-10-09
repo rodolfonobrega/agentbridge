@@ -97,11 +97,12 @@ export interface McpConfigOptions {
 }
 
 export interface McpConfigResult {
-  agentbridge: {
+  agentbridge?: {
     command: string;
     args: string[];
     env: Record<string, string>;
   };
+  [key: string]: any;
 }
 
 /**
@@ -110,8 +111,9 @@ export interface McpConfigResult {
  */
 export function mcpConfigFor(callerAgent: string, opts: McpConfigOptions = {}): McpConfigResult {
   const { depth = 0, maxDepth, permissions = 'full', models = {}, home, attestBind, root, childCwd, defaultTimeoutS } = opts;
-  if (!['claude', 'codex', 'opencode', 'agy', 'pi'].includes(callerAgent)) {
-    throw new Error(`Unknown caller agent "${callerAgent}"`);
+  const KNOWN_AGENTS = ['claude', 'codex', 'opencode', 'agy', 'pi', 'cursor', 'gemini', 'devin', 'grok', 'acp'];
+  if (!KNOWN_AGENTS.includes(callerAgent)) {
+    return {};
   }
   const env: Record<string, string> = { AGENTBRIDGE_DEPTH: String(depth), AGENTBRIDGE_PERMS: permissions };
   if (maxDepth != null) env.AGENTBRIDGE_MAX_DEPTH = String(maxDepth);

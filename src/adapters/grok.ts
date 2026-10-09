@@ -16,8 +16,25 @@ const adapter: AgentAdapter = {
   },
   async *run(opts: any): AsyncGenerator<AgentEvent, RunResult, void> {
     const o = validateOptions(opts);
+    if (o.session?.mode === 'continue' || o.session?.mode === 'fork') {
+      throw new AgentError('BAD_OPTION', `Grok adapter does not support session mode "${o.session.mode}"`, { agent: 'grok' });
+    }
+    if (o.offline) {
+      throw new AgentError('BAD_OPTION', 'Offline mode is not supported by Grok CLI adapter', { agent: 'grok' });
+    }
+    if (o.images?.length) {
+      throw new AgentError('BAD_OPTION', 'Multimodal images are not supported by Grok CLI adapter', { agent: 'grok' });
+    }
+
     const t0 = Date.now();
-    const args: string[] = ['-p', o.prompt, '--json'];
+    let effectivePrompt = o.prompt;
+    if (o.permissions === 'read-only') {
+      effectivePrompt = `[READ-ONLY MODE: Do NOT edit files or run modifying commands]\n\n${effectivePrompt}`;
+    } else if (o.permissions === 'plan') {
+      effectivePrompt = `[PLAN-ONLY MODE: Formulate a plan only; do NOT edit files]\n\n${effectivePrompt}`;
+    }
+
+    const args: string[] = ['-p', effectivePrompt, '--json'];
 
     if (o.model) args.push('-m', o.model);
     if (o.permissions === 'full') args.push('--permission-mode', 'bypassPermissions');
@@ -62,6 +79,20 @@ const adapter: AgentAdapter = {
     }
 
     const r = await p.wait();
+    if (r.timedOut) {
+      throw new AgentError('TIMEOUT', `Grok CLI timed out after ${o.timeoutMs}ms`, {
+        agent: 'grok',
+        partial: text.trim(),
+        timedOut: true,
+      });
+    }
+    if (r.aborted) {
+      throw new AgentError('ABORTED', 'Grok CLI execution was aborted', {
+        agent: 'grok',
+        partial: text.trim(),
+      });
+    }
+
     if (r.exitCode !== 0 && !text) {
       const blob = `${errMsg || ''}\n${r.stderr}`.trim();
       if (/auth|login|api[-_]?key/i.test(blob)) {

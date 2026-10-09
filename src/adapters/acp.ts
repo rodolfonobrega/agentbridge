@@ -102,6 +102,20 @@ export function makeAcpAdapter(config: AcpAdapterOptions = {}): AgentAdapter {
       }
 
       const r = await p.wait();
+      if (r.timedOut) {
+        throw new AgentError('TIMEOUT', `ACP process timed out after ${o.timeoutMs}ms`, {
+          agent: 'acp',
+          partial: text.trim(),
+          timedOut: true,
+        });
+      }
+      if (r.aborted) {
+        throw new AgentError('ABORTED', 'ACP process execution was aborted', {
+          agent: 'acp',
+          partial: text.trim(),
+        });
+      }
+
       return {
         text,
         sessionId,

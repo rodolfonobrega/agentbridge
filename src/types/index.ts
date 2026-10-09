@@ -20,9 +20,7 @@ export type FallbackErrorCode =
   | 'NOT_LOGGED_IN'
   | 'NOT_INSTALLED'
   | 'TIMEOUT'
-  | 'AGENT_FAILED'
-  | 'BAD_OPTION'
-  | 'ABORTED';
+  | 'AGENT_FAILED';
 
 export interface McpServerConfig {
   command: string;
@@ -81,6 +79,10 @@ export interface RunOptions {
   offline?: boolean;
   transport?: TransportKind;
   appServer?: boolean;
+  skills?: boolean;
+  mcpPassthrough?: string[];
+  defaultPermissions?: boolean;
+  writableRoots?: string[];
   [key: string]: any;
 }
 

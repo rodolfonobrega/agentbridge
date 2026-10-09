@@ -10,7 +10,18 @@ import { home } from '../bridge/runs.js';
 import { extractJson } from '../extras/schema.js';
 import { AgentAdapter, AgentEvent, RunResult } from '../types/index.js';
 
-export const BUILTIN = ['claude', 'codex', 'opencode', 'agy', 'pi'] as const;
+export const BUILTIN = [
+  'claude',
+  'codex',
+  'opencode',
+  'agy',
+  'pi',
+  'cursor',
+  'grok',
+  'gemini',
+  'devin',
+  'acp',
+] as const;
 const NAME_RE = /^[a-z][a-z0-9_]{0,31}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const OPENAI_EFFORT: Record<string, string> = { low: 'low', medium: 'medium', high: 'high', xhigh: 'high', max: 'high' };

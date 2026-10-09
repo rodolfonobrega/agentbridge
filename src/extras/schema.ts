@@ -13,17 +13,41 @@ const isType = (v: any, t: string) =>
     : typeOf(v) === t;
 const same = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
 
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 /** Validate value against schema. Returns string[] of errors (empty = valid). Supports local $ref '#/...'. */
-export function validate(schema: any, value: any, at = '$', root = schema): string[] {
+export function validate(
+  schema: any,
+  value: any,
+  at = '$',
+  root = schema,
+  depth = 0,
+  visitedRefs = new Set<string>()
+): string[] {
   const err: string[] = [];
   if (schema === true || schema == null) return err;
   if (schema === false) return [`${at}: no value allowed`];
+  if (depth > 64) return [`${at}: schema nesting exceeds maximum depth limit`];
+
   if (schema.$ref) {
+    const refStr = String(schema.$ref);
+    if (refStr === '#' || refStr === '#/' || visitedRefs.has(refStr)) {
+      return [`${at}: cyclic or self-referential $ref "${refStr}"`];
+    }
+    const nextVisited = new Set(visitedRefs);
+    nextVisited.add(refStr);
+
     let t = root;
-    for (const p of String(schema.$ref).replace(/^#\/?/, '').split('/').filter(Boolean))
-      t = t?.[p.replace(/~1/g, '/').replace(/~0/g, '~')];
+    for (const p of refStr.replace(/^#\/?/, '').split('/').filter(Boolean)) {
+      if (DANGEROUS_KEYS.has(p)) {
+        return [`${at}: prohibited prototype property in $ref "${p}"`];
+      }
+      t = t && typeof t === 'object' && Object.hasOwn(t, p.replace(/~1/g, '/').replace(/~0/g, '~'))
+        ? t[p.replace(/~1/g, '/').replace(/~0/g, '~')]
+        : undefined;
+    }
     if (!t) return [`${at}: unresolved $ref ${schema.$ref}`];
-    return validate(t, value, at, root);
+    return validate(t, value, at, root, depth + 1, nextVisited);
   }
   if (schema.type) {
     const ts: string[] = [].concat(schema.type);
@@ -31,13 +55,13 @@ export function validate(schema: any, value: any, at = '$', root = schema): stri
   }
   if ('const' in schema && !same(schema.const, value)) err.push(`${at}: must equal ${JSON.stringify(schema.const)}`);
   if (schema.enum && !schema.enum.some((x: any) => same(x, value))) err.push(`${at}: must be one of ${JSON.stringify(schema.enum)}`);
-  for (const s of schema.allOf || []) err.push(...validate(s, value, at, root));
-  if (schema.anyOf && !schema.anyOf.some((s: any) => !validate(s, value, at, root).length)) err.push(`${at}: matches none of anyOf`);
+  for (const s of schema.allOf || []) err.push(...validate(s, value, at, root, depth + 1, visitedRefs));
+  if (schema.anyOf && !schema.anyOf.some((s: any) => !validate(s, value, at, root, depth + 1, visitedRefs).length)) err.push(`${at}: matches none of anyOf`);
   if (schema.oneOf) {
-    const n = schema.oneOf.filter((s: any) => !validate(s, value, at, root).length).length;
+    const n = schema.oneOf.filter((s: any) => !validate(s, value, at, root, depth + 1, visitedRefs).length).length;
     if (n !== 1) err.push(`${at}: matches ${n} of oneOf (need exactly 1)`);
   }
-  if (schema.not && !validate(schema.not, value, at, root).length) err.push(`${at}: must not match "not" schema`);
+  if (schema.not && !validate(schema.not, value, at, root, depth + 1, visitedRefs).length) err.push(`${at}: must not match "not" schema`);
   if (typeof value === 'string') {
     if (schema.minLength != null && [...value].length < schema.minLength) err.push(`${at}: shorter than ${schema.minLength}`);
     if (schema.maxLength != null && [...value].length > schema.maxLength) err.push(`${at}: longer than ${schema.maxLength}`);
@@ -58,18 +82,18 @@ export function validate(schema: any, value: any, at = '$', root = schema): stri
       err.push(`${at}: items must be unique`);
     if (Array.isArray(schema.items))
       schema.items.forEach((s: any, i: number) => {
-        if (i < value.length) err.push(...validate(s, value[i], `${at}[${i}]`, root));
+        if (i < value.length) err.push(...validate(s, value[i], `${at}[${i}]`, root, depth + 1, visitedRefs));
       });
-    else if (schema.items) value.forEach((x, i) => err.push(...validate(schema.items, x, `${at}[${i}]`, root)));
+    else if (schema.items) value.forEach((x, i) => err.push(...validate(schema.items, x, `${at}[${i}]`, root, depth + 1, visitedRefs)));
   }
   if (isType(value, 'object')) {
     const props = schema.properties || {};
-    for (const r of schema.required || []) if (!(r in value)) err.push(`${at}: missing required property "${r}"`);
+    for (const r of schema.required || []) if (!Object.hasOwn(value, r)) err.push(`${at}: missing required property "${r}"`);
     for (const [k, v] of Object.entries(value)) {
-      if (k in props) err.push(...validate(props[k], v, `${at}.${k}`, root));
+      if (Object.hasOwn(props, k)) err.push(...validate(props[k], v, `${at}.${k}`, root, depth + 1, visitedRefs));
       else if (schema.additionalProperties === false) err.push(`${at}: unexpected property "${k}"`);
       else if (schema.additionalProperties && typeof schema.additionalProperties === 'object')
-        err.push(...validate(schema.additionalProperties, v, `${at}.${k}`, root));
+        err.push(...validate(schema.additionalProperties, v, `${at}.${k}`, root, depth + 1, visitedRefs));
     }
     if (schema.minProperties != null && Object.keys(value).length < schema.minProperties) err.push(`${at}: too few properties`);
   }

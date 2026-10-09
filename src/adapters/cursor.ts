@@ -16,6 +16,16 @@ const adapter: AgentAdapter = {
   },
   async *run(opts: any): AsyncGenerator<AgentEvent, RunResult, void> {
     const o = validateOptions(opts);
+    if (o.session?.mode === 'continue' || o.session?.mode === 'fork') {
+      throw new AgentError('BAD_OPTION', `Cursor adapter does not support session mode "${o.session.mode}"`, { agent: 'cursor' });
+    }
+    if (o.offline) {
+      throw new AgentError('BAD_OPTION', 'Offline mode is not supported by Cursor CLI adapter', { agent: 'cursor' });
+    }
+    if (o.images?.length) {
+      throw new AgentError('BAD_OPTION', 'Multimodal images are not supported by Cursor CLI adapter', { agent: 'cursor' });
+    }
+
     const t0 = Date.now();
     const args: string[] = ['agent', '--output-format', 'json'];
 
@@ -24,7 +34,13 @@ const adapter: AgentAdapter = {
     if (o.cwd) args.push('--workspace', o.cwd);
     if (o.extraArgs?.length) args.push(...o.extraArgs.map(String));
 
-    args.push('--prompt', o.prompt);
+    let effectivePrompt = o.prompt;
+    if (o.permissions === 'read-only') {
+      effectivePrompt = `[READ-ONLY MODE: Do NOT edit files or run modifying commands]\n\n${effectivePrompt}`;
+    } else if (o.permissions === 'plan') {
+      effectivePrompt = `[PLAN-ONLY MODE: Formulate a plan only; do NOT edit files]\n\n${effectivePrompt}`;
+    }
+    args.push('--prompt', effectivePrompt);
 
     const env: NodeJS.ProcessEnv = { ...process.env, ...(o.env || {}) };
     const p = spawnProc('cursor', args, {
@@ -66,6 +82,20 @@ const adapter: AgentAdapter = {
     }
 
     const r = await p.wait();
+    if (r.timedOut) {
+      throw new AgentError('TIMEOUT', `Cursor CLI timed out after ${o.timeoutMs}ms`, {
+        agent: 'cursor',
+        partial: text.trim(),
+        timedOut: true,
+      });
+    }
+    if (r.aborted) {
+      throw new AgentError('ABORTED', 'Cursor CLI execution was aborted', {
+        agent: 'cursor',
+        partial: text.trim(),
+      });
+    }
+
     if (r.exitCode !== 0 && !text) {
       const blob = `${errMsg || ''}\n${r.stderr}`.trim();
       if (/auth|login|unauthorized/i.test(blob)) {

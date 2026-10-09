@@ -121,6 +121,7 @@ const KNOWN = new Set([
   'appServer',
   'skills',
   'mcpPassthrough',
+  'writableRoots',
 ]);
 const HARNESS_MODES = ['auto', 'claude', 'pi', 'none'];
 const TRANSPORTS = ['cli', 'app-server', 'stdio', 'auto'];
