@@ -607,15 +607,11 @@ export async function cmdSetup(
   if (installSkill) {
     try {
       const baseDir = scope === 'user' ? path.join(homedir(), '.agents') : path.join(targetCwd, '.agents');
-      writeSkill(
-        baseDir,
-        (msg) => {
-          if (typeof msg === 'string' && msg.trim()) {
-            io.out(`  ${c.green}✔${c.reset} ${c.bold}SKILL:${c.reset} ${msg.trim()}`);
-          }
-        },
-        { scope, cwd: targetCwd }
-      );
+      writeSkill(baseDir, (msg) => {
+        if (typeof msg === 'string' && msg.trim()) {
+          io.out(`  ${c.green}✔${c.reset} ${c.bold}SKILL:${c.reset} ${msg.trim()}`);
+        }
+      });
     } catch {
       /* ignore skill copy errors */
     }

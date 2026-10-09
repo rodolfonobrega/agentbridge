@@ -71,11 +71,7 @@ function bridgeCtx(flags: Record<string, any>) {
 
 const writtenSkills = new Set<string>();
 
-export function writeSkill(
-  base: string,
-  out: (msg: string) => void,
-  _opts?: { force?: boolean; scope?: string; cwd?: string }
-) {
+export function writeSkill(base: string, out: (msg: string) => void) {
   const dest = path.join(base, 'skills', 'agentbridge-delegate');
   const destFile = path.join(dest, 'SKILL.md');
   if (writtenSkills.has(destFile)) return;
@@ -191,7 +187,7 @@ async function installCodex(flags: Record<string, any>, { out }: { out: (msg: st
   out(`registered MCP server "agentbridge" in Codex (global ~/.codex/config.toml, permission ceiling: ${c.permissions})`);
   setCodexTimeout(c.timeout, out);
   if (flags['auto-approve']) autoApproveCodex(out);
-  if (!flags['no-skill']) writeSkill(agentsBase(c), out, { force: flags.force, scope: c.scope, cwd: c.cwd });
+  if (!flags['no-skill']) writeSkill(agentsBase(c), out);
   out(
     'Restart Codex. Its tools appear as agentbridge ask_claude / ask_opencode / ask_agy / ask_pi / ask_ollama ... Codex may ask to approve MCP tool calls the first time.'
   );
@@ -207,7 +203,7 @@ async function installAgy(flags: Record<string, any>, { out }: { out: (msg: stri
   });
   if (r.exitCode !== 0) throw new UsageError(`agy mcp add failed: ${(r.stderr || r.stdout).trim()}`);
   out(`registered MCP server "agentbridge" in Antigravity (global, permission ceiling: ${c.permissions})`);
-  if (!flags['no-skill']) writeSkill(agentsBase(c), out, { force: flags.force, scope: c.scope, cwd: c.cwd });
+  if (!flags['no-skill']) writeSkill(agentsBase(c), out);
   out('Restart agy. Its tools appear as agentbridge ask_claude / ask_codex / ask_opencode / ask_pi / ask_ollama ...');
 }
 
@@ -239,7 +235,7 @@ async function installPi(flags: Record<string, any>, { out }: { out: (msg: strin
   writeFileSync(tmp, JSON.stringify(current, null, 2) + '\n');
   renameSync(tmp, mcpFile);
   out(`registered MCP server "agentbridge" in pi (global ~/.pi/agent/mcp.json, permission ceiling: ${c.permissions}, timeout: ${c.timeout}s)`);
-  if (!flags['no-skill']) writeSkill(agentsBase(c), out, { force: flags.force, scope: c.scope, cwd: c.cwd });
+  if (!flags['no-skill']) writeSkill(agentsBase(c), out);
   out('Restart pi. Its tools appear as agentbridge ask_claude / ask_codex / ask_opencode / ask_agy / ask_ollama ...');
 }
 
@@ -269,7 +265,7 @@ function installOpencode(flags: Record<string, any>, { out }: { out: (msg: strin
   writeFileSync(tmp, JSON.stringify(cfg, null, 2) + '\n');
   renameSync(tmp, file);
   out(`registered MCP server "agentbridge" in OpenCode (${file}, permission ceiling: ${c.permissions}, timeout: ${c.timeout}s)`);
-  if (!flags['no-skill']) writeSkill(agentsBase(c), out, { force: flags.force, scope: c.scope, cwd: c.cwd });
+  if (!flags['no-skill']) writeSkill(agentsBase(c), out);
   out(
     'Restart OpenCode. Its tools appear as agentbridge_ask_claude / agentbridge_ask_codex / agentbridge_ask_agy / agentbridge_ask_pi ...'
   );

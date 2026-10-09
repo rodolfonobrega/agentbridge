@@ -491,7 +491,7 @@ const HELP = `agentbridge (ab) — drive local claude/codex/opencode/agy/pi/curs
 
   ab run <agent> [prompt|-] [--model][--effort][--permissions][--harness auto|claude|pi|none][--cwd][--timeout s]
                              [--session new|ephemeral|continue|fork][--session-id id]
-                             [--system][--json-schema '<json>'][--stream][--json]
+                             [--system '<prompt>'][--json-schema '<json>'][--stream][--json]
                              [--fallback a,b:model][--fallback-on RATE_LIMITED,TIMEOUT,...]   # next agent when this one is out of tokens
                              [--worktree][--max-cost][--max-tokens][--max-time s]
   ab ask <agent> [prompt|-] [same flags]           # prints only the result text

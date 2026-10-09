@@ -138,7 +138,7 @@ test('skill installation prevents duplicate collision across harnesses and scope
     const out = (m) => logs.push(m);
 
     // First write to project
-    writeSkill(path.join(tmp, '.agents'), out, { scope: 'project', cwd: tmp });
+    writeSkill(path.join(tmp, '.agents'), out);
     const skillPath = path.join(tmp, '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
     assert.ok(existsSync(skillPath), 'skill must exist in .agents/skills');
     assert.equal(logs.length, 1);
@@ -146,7 +146,7 @@ test('skill installation prevents duplicate collision across harnesses and scope
 
     // Second write during same command execution should be deduplicated
     logs.length = 0;
-    writeSkill(path.join(tmp, '.agents'), out, { scope: 'project', cwd: tmp });
+    writeSkill(path.join(tmp, '.agents'), out);
     assert.equal(logs.length, 0, 'subsequent write in same execution must be skipped without duplicate writes');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
