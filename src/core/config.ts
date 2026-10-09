@@ -22,30 +22,21 @@ export interface AgentBridgeConfig {
   [key: string]: any;
 }
 
-function normalizeConfigDir(p: string): string {
-  try {
-    p = realpathSync(path.resolve(p));
-  } catch {
-    p = path.resolve(p);
-  }
-  if (process.platform === 'win32' && /^[a-z]:/i.test(p)) {
-    p = p[0].toUpperCase() + p.slice(1);
-  }
-  return path.normalize(p);
-}
-
 export function findProjectRoot(startDir: string = process.cwd()): string {
-  let cur = normalizeConfigDir(startDir);
-  const userHome = normalizeConfigDir(homedir());
+  let cur = path.resolve(startDir);
+  const userHome = path.resolve(homedir());
   const isSameDir = (a: string, b: string) =>
     process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 
   while (true) {
-    if (!isSameDir(cur, userHome) && existsSync(path.join(cur, '.agentbridge'))) {
+    if (existsSync(path.join(cur, '.agentbridge')) && !isSameDir(cur, userHome)) {
       return cur;
     }
-    if (existsSync(path.join(cur, '.git'))) {
+    if (existsSync(path.join(cur, '.git')) && !isSameDir(cur, userHome)) {
       return cur;
+    }
+    if (isSameDir(cur, userHome)) {
+      break;
     }
     const parent = path.dirname(cur);
     if (parent === cur) {
@@ -53,7 +44,7 @@ export function findProjectRoot(startDir: string = process.cwd()): string {
     }
     cur = parent;
   }
-  return normalizeConfigDir(startDir);
+  return path.resolve(startDir);
 }
 
 export function globalConfigFile(env: NodeJS.ProcessEnv = process.env): string {
