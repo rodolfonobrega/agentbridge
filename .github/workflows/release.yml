@@ -75,7 +75,14 @@ jobs:
 
       - name: Publish to npm
         if: ${{ !inputs.dry_run }}
-        run: npm publish --access public --provenance
+        run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VER=$(node -p "require('./package.json').version")
+          if npm view "${PKG_NAME}@${PKG_VER}" version >/dev/null 2>&1; then
+            echo "${PKG_NAME}@${PKG_VER} is already published on npm, skipping"
+          else
+            npm publish --access public --provenance
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -84,6 +91,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" *.tgz \
-            --title "Release ${GITHUB_REF_NAME}" \
-            --notes-file RELEASE_NOTES.md
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists, attaching release assets..."
+            gh release upload "${GITHUB_REF_NAME}" *.tgz --clobber || true
+          else
+            gh release create "${GITHUB_REF_NAME}" *.tgz \
+              --title "Release ${GITHUB_REF_NAME}" \
+              --notes-file RELEASE_NOTES.md
+          fi
