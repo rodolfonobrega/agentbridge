@@ -270,35 +270,50 @@ Unknown options raise `BAD_OPTION`. Anything an agent cannot do raises `BAD_OPTI
 
 ### Permissions & Sandboxing Architecture: How Edits are Blocked vs Allowed
 
-AgentBridge enforces permissions deterministically at the OS and CLI runtime levels. When a delegated agent runs with `permissions: 'read-only'` (the default) or `'plan'`, it is impossible for the model to mutate your codebase:
+AgentBridge enforces permissions deterministically at the OS and CLI runtime levels. By default, agents run with `permissions: 'full'` (unrestricted execution: shell, terminal, web, file editing). When sandboxing is requested (`edit`, `plan`, or `read-only`), AgentBridge restricts the agent's capabilities:
 
 | Permission | Read Files | Web Search | Edit/Write Files | Run Bash/Commands | Enforced By |
 |---|---|---|---|---|---|
-| `read-only` *(default)* | Yes | Yes | **NO** | **NO** | Tool schema stripping, OS read-only sandboxes, deny rules |
-| `plan` | Yes | Yes | **NO** | **NO** | Read-only sandbox + plan prompt mode; writes blocked |
+| `full` *(default)* | Yes | Yes | **YES** | **YES** | Unrestricted tools; permission bypass |
 | `edit` | Yes | Yes | **YES** | **NO** | Write/Edit tools enabled; cwd workspace-write sandbox |
-| `full` | Yes | Yes | **YES** | **YES** | Unrestricted tools; permission bypass |
+| `plan` | Yes | Yes | **NO** | **NO** | Read-only sandbox + plan prompt mode; writes blocked |
+| `read-only` | Yes | Yes | **NO** | **NO** | Tool schema stripping, OS read-only sandboxes, deny rules |
 
-#### How each adapter prevents edits:
+#### How each adapter prevents edits (when restricted):
 1. **Claude Code (`claude`):**
-   - In `read-only` and `plan`, AgentBridge passes `--tools Read,Glob,Grep,WebFetch,WebSearch` and `--permission-mode default\|plan`. The tools `Write`, `Edit`, `Bash`, `NotebookEdit`, and `KillShell` are **completely omitted from the tool definitions**. The LLM prompt literally receives zero write schemas.
+   - In `read-only` and `plan`, AgentBridge passes `--tools Read,Glob,Grep,WebFetch,WebSearch` and `--permission-mode default|plan`. The tools `Write`, `Edit`, `Bash`, `NotebookEdit`, and `KillShell` are **completely omitted from the tool definitions**. The LLM prompt literally receives zero write schemas.
    - External MCP servers are isolated (`--mcp-config {"mcpServers":{}} --strict-mcp-config`).
    - In `edit`, AgentBridge passes `--permission-mode acceptEdits`, unlocking `Write` and `Edit`.
+   - In `full` *(default)*, it passes `--permission-mode bypassPermissions`.
 2. **OpenAI Codex (`codex`):**
    - In `read-only` and `plan`, AgentBridge passes `--sandbox read-only`. Codex CLI runs inside an OS-level container sandbox where filesystem mutations are denied by kernel/sandbox restrictions.
    - In `edit`, Codex passes `--sandbox workspace-write` (strictly restricted to the workspace directory, excluding temp directories).
-   - In `full`, it passes `--sandbox danger-full-access`.
+   - In `full` *(default)*, it passes `--sandbox danger-full-access`.
 3. **OpenCode (`opencode`):**
-   - AgentBridge generates an inline runtime policy: `permission: { edit: 'deny', bash: 'deny', webfetch: 'allow' }`. Any tool invocation attempting filesystem modification is denied by OpenCode's policy engine.
+   - In `read-only` / `plan`, AgentBridge generates an inline runtime policy: `permission: { edit: 'deny', bash: 'deny', webfetch: 'allow' }`. Any tool invocation attempting filesystem modification is denied by OpenCode's policy engine.
+   - In `full` *(default)*, all tools including `bash` and file writes are allowed.
 4. **Antigravity (`agy`):**
-   - `agy` has no built-in read-only flag. AgentBridge creates a disposable, private HOME with generated `.gemini/antigravity-cli/settings.json` specifying explicit deny rules: `deny: ['command(*)', 'unsandboxed(*)', 'execute_url(*)', 'write_file(*)']`.
+   - `agy` has no built-in read-only flag. When restricted, AgentBridge creates a disposable, private HOME with generated `.gemini/antigravity-cli/settings.json` specifying explicit deny rules: `deny: ['command(*)', 'unsandboxed(*)', 'execute_url(*)', 'write_file(*)']`.
+   - In `full` *(default)*, `--dangerously-skip-permissions` is passed.
 5. **Pi (`pi`):**
-   - In `read-only` and `plan`, AgentBridge passes `--exclude-tools bash,powershell,edit,write,codemode,tool_search`. Pi completely unregisters those tools from its active runtime.
+   - In `read-only` and `plan`, AgentBridge passes `--exclude-tools bash,powershell,edit,write,codemode`. Pi completely unregisters those tools from its active runtime.
+   - In `edit`, `bash` and `powershell` are excluded, allowing only file read/write.
+   - In `full` *(default)*, no tools are excluded; full shell and file capabilities are active.
 6. **Endpoints (Ollama, OpenRouter, vLLM):**
-   - When running with a coding harness (`--harness claude\|pi`), the model inherits the exact tool allowlists and sandboxes described above.
+   - When running with a coding harness (`--harness claude|pi`), the model inherits the exact tool allowlists and sandboxes described above.
    - When running without a harness (`--harness none` or plain question), it makes a direct HTTP API call with no filesystem tools attached.
-7. **MCP Bridge Ceiling (`AGENTBRIDGE_PERMS`):**
-   - When AgentBridge runs as an MCP server, child runs can never exceed the install-time permission ceiling (default `read-only`). An attempt to escalate to `edit` throws `BAD_OPTION`.
+7. **MCP Bridge Ceiling (`AGENTBRIDGE_PERMS`) & How to Change It:**
+   - When AgentBridge runs as an MCP server, child runs can never exceed the install-time permission ceiling.
+   - **Default Ceiling is `full`:** The agent has full power to use terminal commands, shell, and file editing.
+   - **Restricted Ceilings:** If you installed with a lower ceiling (`ab install <agent> --permissions edit`), child runs are restricted to at most `edit`.
+   - **"Level Máximo" / "Broader than caller" Error:** If a subagent asks for `full` while the session ceiling is set to `edit` or `read-only`, AgentBridge throws:
+     `permissions "full" is broader than the caller's "<ceiling>"`
+   - **Altering / Updating Permissions with `ab`:** You can change the ceiling at any time simply by re-running:
+     ```bash
+     ab install all --permissions full    # unlock full access for all installed agents
+     ab install codex --permissions edit  # set Codex ceiling to edit
+     ab setup                             # interactive wizard to reconfigure
+     ```
 
 ### Events and results
 
@@ -341,7 +356,7 @@ const c = await ask('claude', { prompt: 'Try a different approach', session: { m
 
 ### Permissions and effort mapping
 
-`permissions` and `effort` are mapped to each CLI's native concepts (sandbox modes, permission modes, reasoning effort). `read-only` is the default everywhere. In the bridge, a child agent can never receive broader permissions than its caller.
+`permissions` and `effort` are mapped to each CLI's native concepts (sandbox modes, permission modes, reasoning effort). `full` is the default everywhere. In the bridge, a child agent can never receive broader permissions than its caller ceiling.
 
 ### Web Search, Tools, and Network Permissions Across Agents & Modes
 

@@ -63,7 +63,7 @@ A bad reload keeps the previous config. Requests in flight keep the config they 
 `/agent/v1`. It works in an **isolated copy** (git worktree, or a temp copy of a non-git folder), never in your folder:
 - Off unless the server was started with `--agent-root <dir>` **and** a token. Always loopback.
 - `x-ab-cwd`: folder to work on, inside the agent root; anything resolving outside it is a 403.
-- `x-ab-permissions`: `read-only|edit|full`, never above `--agent-max-permission` (default `edit`).
+- `x-ab-permissions`: `read-only|edit|full`, never above `--agent-max-permission` (default `full`).
 - `x-ab-session`: reuse the same sandbox and CLI session across requests.
 - The reply carries `agentbridge: { runId, filesChanged, diff }` (and the header `x-agentbridge-run`). Routes: `GET /agent/runs`,
   `GET /agent/runs/:id`, `GET /agent/runs/:id/diff`, `POST /agent/runs/:id/apply` (git apply into the real folder; 409 on conflict),

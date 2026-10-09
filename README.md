@@ -77,7 +77,7 @@ ab setup           # or: ab wizard
 
 The wizard will:
 - ✦ **Auto-detect** all installed agents (`claude`, `codex`, `opencode`, `pi`, `ollama`, `agy`)
-- ✦ Guide you through choosing target agents, scope (`user` global vs `project`), and permission ceilings (`edit`, `plan`, `read-only`, `full`)
+- ✦ Guide you through choosing target agents, scope (`user` global vs `project`), and permission ceilings (`full` [default], `edit`, `plan`, `read-only`)
 - ✦ Install the `agentbridge-delegate` skill so your agents can call each other as subagents
 - ✦ Configure Codex MCP tool auto-approval so you aren't interrupted by repetitive prompts
 - ✦ Connect local Ollama or OpenRouter endpoints
@@ -123,14 +123,23 @@ ab ui --open        # live dashboard on http://127.0.0.1:8788
 **8. Let your agents delegate to each other**
 
 ```bash
-ab install claude          # registers the MCP bridge, writes relay subagents and installs the `agentbridge-delegate` skill
+ab install claude          # registers the MCP bridge with default permissions: full
 ab install codex           # same for Codex
 ab install opencode        # same for OpenCode (opencode.json)
 ab install agy             # same for Antigravity
 ab install all             # every one of the above that is installed
 ```
 
-Now, from inside any of them, you can say "ask claude to review this" or "have pi write the tests": the agent calls the `ask_<agent>` tools (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...). `--scope user` installs globally; `--permissions` sets the ceiling a delegated agent can never exceed. `ab install pi` covers pi too.
+Now, from inside any of them, you can say "ask claude to review this" or "have pi write the tests": the agent calls the `ask_<agent>` tools (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...).
+
+> **Permission Ceilings & Changing Permissions with `ab`:**
+> - **Default is `full`:** By default, AgentBridge grants full capabilities (`full`): unrestricted shell/PowerShell execution, file editing, and terminal tools. The agent has no artificial blocks.
+> - **Custom Ceilings (Sandboxing):** If you prefer strict sandboxing, you can install or run with lower permissions:
+>   - `ab install all --permissions edit` (file edits allowed, no arbitrary shell)
+>   - `ab install all --permissions plan` (planning only, no disk writes)
+>   - `ab install all --permissions read-only` (read-only queries)
+> - **Updating existing permissions:** You can change or update permissions at any time simply by re-running `ab install <agent> --permissions <level>` or `ab setup`.
+> - **"Level Máximo / Broader than caller" Guard:** A delegated subagent can never escalate privileges above its caller's session ceiling. If an agent tries to request `full` while installed under an `edit` ceiling, AgentBridge prevents the privilege escalation. To allow it, update your ceiling with `ab install <agent> --permissions full`.
 
 ---
 
