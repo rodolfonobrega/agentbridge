@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { getPassthroughMcpServers } from '../dist/bridge/attach.js';
+import { getPassthroughMcpServers, resolvePassthrough } from '../dist/bridge/attach.js';
 import {
   linkResource,
   unlinkResource,
@@ -109,6 +109,58 @@ test('passthrough: also reads the project .mcp.json, skips non-stdio servers', (
 test('validateOptions accepts skills and mcpPassthrough (they used to be rejected as unknown options)', () => {
   const o = validateOptions({ prompt: 'hi', skills: true, mcpPassthrough: ['rea'] });
   assert.equal(o.skills, true);
+});
+
+// ---------------------------------------------------------------- passthrough drops
+
+test('resolvePassthrough reports why each explicitly requested server was dropped', () => {
+  const d = tmp();
+  try {
+    mcpFile(d, { rea: { command: 'node', args: ['rea.js'] }, urlsrv: { url: 'http://x' } });
+    // Offline drops every requested name.
+    const off = resolvePassthrough({ sourceDir: d, offline: true, permissions: 'full', passthrough: ['rea', 'db'], env: ENV() });
+    assert.deepEqual(off.servers, {});
+    assert.deepEqual(off.drops, [
+      { name: 'rea', reason: 'offline mode' },
+      { name: 'db', reason: 'offline mode' },
+    ]);
+    // Read-only drops every requested name.
+    const ro = resolvePassthrough({ sourceDir: d, permissions: 'read-only', passthrough: ['rea'], env: ENV() });
+    assert.deepEqual(ro.servers, {});
+    assert.deepEqual(ro.drops, [{ name: 'rea', reason: 'permissions "read-only" blocks MCP passthrough' }]);
+    // No operator allowlist set.
+    const noAllow = resolvePassthrough({ sourceDir: d, permissions: 'edit', passthrough: ['rea'], env: {} });
+    assert.deepEqual(noAllow.drops, [{ name: 'rea', reason: 'operator allowlist AGENTBRIDGE_MCP_PASSTHROUGH is not set' }]);
+    // Requested name outside the allowlist.
+    const na = resolvePassthrough({ sourceDir: d, permissions: 'edit', passthrough: ['other'], env: ENV() });
+    assert.deepEqual(na.servers, {});
+    assert.deepEqual(na.drops, [{ name: 'other', reason: 'not in operator allowlist' }]);
+    // Allowed but absent from every mcp.json source.
+    const nf = resolvePassthrough({ sourceDir: d, permissions: 'edit', passthrough: ['ghost'], env: ENV({ AGENTBRIDGE_MCP_PASSTHROUGH: 'rea,ghost' }) });
+    assert.deepEqual(nf.servers, {});
+    assert.deepEqual(nf.drops, [{ name: 'ghost', reason: 'not found in any mcp.json source' }]);
+    // Allowed but not a stdio server.
+    const ns = resolvePassthrough({ sourceDir: d, permissions: 'edit', passthrough: ['urlsrv'], env: ENV({ AGENTBRIDGE_MCP_PASSTHROUGH: 'rea,urlsrv' }) });
+    assert.deepEqual(ns.servers, {});
+    assert.deepEqual(ns.drops, [{ name: 'urlsrv', reason: 'not a stdio server (only command servers are passed)' }]);
+    // A "*" ask expands to the allowlist: drops only for allowed-but-invalid or not-found names.
+    const star = resolvePassthrough({ sourceDir: d, permissions: 'edit', passthrough: ['*'], env: ENV({ AGENTBRIDGE_MCP_PASSTHROUGH: 'rea,ghost,urlsrv' }) });
+    assert.deepEqual(Object.keys(star.servers), ['rea']);
+    assert.deepEqual(star.drops, [
+      { name: 'urlsrv', reason: 'not a stdio server (only command servers are passed)' },
+      { name: 'ghost', reason: 'not found in any mcp.json source' },
+    ]);
+    // No explicit ask: nothing is reported even when the default allowlist does not fully land.
+    const silent = resolvePassthrough({ sourceDir: d, permissions: 'edit', env: ENV({ AGENTBRIDGE_MCP_PASSTHROUGH: 'rea,ghost' }) });
+    assert.deepEqual(Object.keys(silent.servers), ['rea']);
+    assert.deepEqual(silent.drops, []);
+    // Everything requested landed: no drops.
+    const ok = resolvePassthrough({ sourceDir: d, permissions: 'edit', passthrough: ['rea'], env: ENV() });
+    assert.deepEqual(ok.drops, []);
+    assert.deepEqual(getPassthroughMcpServers({ sourceDir: d, permissions: 'edit', passthrough: ['rea'], env: ENV() }), ok.servers);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------- linking

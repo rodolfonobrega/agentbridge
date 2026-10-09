@@ -107,7 +107,6 @@ export const agents = {
 };
 
 const EFFORT = ['low', 'medium', 'high', 'xhigh', 'max'];
-const PERMS = ['read-only', 'edit', 'full', 'plan'];
 const SESSION_MODES = ['new', 'ephemeral', 'continue', 'fork'];
 const KNOWN = new Set([
   'prompt',

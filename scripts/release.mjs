@@ -102,6 +102,15 @@ async function main() {
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
   console.log(`\n\x1b[32m✔ Updated package.json to v${nextVersion}\x1b[0m`);
 
+  // Sync the runtime version constant with package.json
+  const versionPath = path.join(root, 'src', 'core', 'version.ts');
+  try {
+    writeFileSync(versionPath, readFileSync(versionPath, 'utf8').replace(/VERSION = '[^']+'/, `VERSION = '${nextVersion}'`));
+    console.log(`\x1b[32m✔ Synced src/core/version.ts to v${nextVersion}\x1b[0m`);
+  } catch (err) {
+    console.warn('\x1b[33mWarning: Failed to sync src/core/version.ts:\x1b[0m', err.message);
+  }
+
   // Sync package-lock.json
   try {
     console.log('\x1b[34m✦ Syncing package-lock.json with new version...\x1b[0m');
@@ -148,7 +157,7 @@ async function main() {
 
   // Git Commit and Tag
   console.log('\n\x1b[34m✦ Creating git commit and tag...\x1b[0m');
-  run('git add package.json CHANGELOG.md');
+  run('git add package.json CHANGELOG.md src/core/version.ts');
   if (runOutput('git ls-files package-lock.json')) run('git add package-lock.json');
   run(`git commit -m "chore(release): v${nextVersion}"`);
   run(`git tag -a "v${nextVersion}" -m "Release v${nextVersion}"`);

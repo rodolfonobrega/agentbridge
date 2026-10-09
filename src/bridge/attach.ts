@@ -22,31 +22,53 @@ const listOf = (raw: unknown): string[] =>
     .map((s) => String(s).trim().toLowerCase())
     .filter(Boolean);
 
+export interface PassthroughDrop {
+  name: string;
+  reason: string;
+}
+
 /**
- * Host MCP servers a delegated child may inherit.
+ * Host MCP servers a delegated child may inherit, plus why each requested name was dropped.
  * Gates, in order: offline blocks everything; read-only/plan get nothing; the operator allowlist
  * (AGENTBRIDGE_MCP_PASSTHROUGH) is the ceiling and a caller's `passthrough` can only select a subset of it.
  * Only stdio servers (with a `command`) are passed, always with `exposure: "direct"` (a deferred server
  * never shows its tools to the model).
+ * Drops are reported only for explicitly requested names; a `*` request expands to the allowlist.
  */
-export function getPassthroughMcpServers(opts: PassthroughMcpOptions = {}): Record<string, any> {
+export function resolvePassthrough(opts: PassthroughMcpOptions = {}): { servers: Record<string, any>; drops: PassthroughDrop[] } {
   const env = opts.env || process.env;
+  const drops: PassthroughDrop[] = [];
+  const asked = listOf(opts.passthrough);
   const isOffline = opts.offline || env.AGENTBRIDGE_OFFLINE === '1' || env.AGENTBRIDGE_OFFLINE === 'true';
-  if (isOffline) return {};
+  if (isOffline) {
+    for (const n of asked) drops.push({ name: n, reason: 'offline mode' });
+    return { servers: {}, drops };
+  }
 
   const perms = opts.permissions || env.AGENTBRIDGE_PERMS || 'read-only';
-  if (perms === 'read-only' || perms === 'plan') return {};
+  if (perms === 'read-only' || perms === 'plan') {
+    for (const n of asked) drops.push({ name: n, reason: `permissions "${perms}" blocks MCP passthrough` });
+    return { servers: {}, drops };
+  }
 
   const ceiling = listOf(env.AGENTBRIDGE_MCP_PASSTHROUGH);
-  if (!ceiling.length) return {};
-  const asked = listOf(opts.passthrough);
+  if (!ceiling.length) {
+    for (const n of asked) drops.push({ name: n, reason: 'operator allowlist AGENTBRIDGE_MCP_PASSTHROUGH is not set' });
+    return { servers: {}, drops };
+  }
   const anyOk = ceiling.includes('*');
   const allowed = asked.length
     ? asked.includes('*')
       ? ceiling
       : asked.filter((n) => anyOk || ceiling.includes(n))
     : ceiling;
-  if (!allowed.length) return {};
+  if (!allowed.length) {
+    for (const n of asked) drops.push({ name: n, reason: 'not in operator allowlist' });
+    return { servers: {}, drops };
+  }
+  for (const n of asked) {
+    if (n !== '*' && !allowed.includes(n)) drops.push({ name: n, reason: 'not in operator allowlist' });
+  }
 
   const files = [path.join(opts.sourceDir || env.AGENTBRIDGE_MCP_SOURCE_DIR || path.join(os.homedir(), '.pi', 'agent'), 'mcp.json')];
   if (opts.cwd) {
@@ -64,6 +86,8 @@ export function getPassthroughMcpServers(opts: PassthroughMcpOptions = {}): Reco
   }
 
   const result: Record<string, any> = {};
+  const landed = new Set<string>();
+  const invalid = new Map<string, string>();
   for (const f of files) {
     if (!existsSync(f)) continue;
     let servers: Record<string, any> = {};
@@ -77,11 +101,27 @@ export function getPassthroughMcpServers(opts: PassthroughMcpOptions = {}): Reco
       if (key === 'agentbridge' || name in result) continue;
       if (!/^[A-Za-z0-9_-]+$/.test(name)) continue;
       if (!allowed.includes('*') && !allowed.includes(key)) continue;
-      if (!cfg || typeof cfg !== 'object' || typeof cfg.command !== 'string') continue;
+      if (!cfg || typeof cfg !== 'object' || typeof cfg.command !== 'string') {
+        invalid.set(key, !cfg || typeof cfg !== 'object' ? 'invalid server config' : 'not a stdio server (only command servers are passed)');
+        continue;
+      }
       result[name] = { command: cfg.command, args: cfg.args || [], env: cfg.env || {}, exposure: 'direct' };
+      landed.add(key);
     }
   }
-  return result;
+  if (asked.length) {
+    for (const [n, reason] of invalid) drops.push({ name: n, reason });
+    for (const n of allowed) {
+      if (n === '*' || landed.has(n) || invalid.has(n)) continue;
+      drops.push({ name: n, reason: 'not found in any mcp.json source' });
+    }
+  }
+  return { servers: result, drops };
+}
+
+/** Same gates, servers only (previous shape, kept for callers that do not care about drops). */
+export function getPassthroughMcpServers(opts: PassthroughMcpOptions = {}): Record<string, any> {
+  return resolvePassthrough(opts).servers;
 }
 
 export interface McpConfigOptions {

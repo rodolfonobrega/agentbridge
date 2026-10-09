@@ -47,7 +47,7 @@ function finishErr(res: any, e: HttpError, started: boolean) {
   if (!started)
     return sendJson(
       res,
-      e.status === 499 ? 499 : e.status,
+      e.status,
       openaiError(e),
       e.retryAfter != null ? { 'retry-after': String(e.retryAfter) } : {}
     );

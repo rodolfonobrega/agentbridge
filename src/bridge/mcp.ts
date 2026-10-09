@@ -7,7 +7,7 @@ import http from 'node:http';
 import { run, parseFallbackTarget } from '../index.js';
 import { createTracker } from '../telemetry/stats.js';
 import { ev } from '../core/events.js';
-import { createHmac, createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHmac, createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { endpointNames, loadEndpoints } from '../adapters/endpoint.js';
 import {
   dispatch,
@@ -23,6 +23,7 @@ import {
   checkMessages,
 } from './runs.js';
 import { resolvePermissionLevel, PERMISSION_RANK } from '../core/config.js';
+import { VERSION } from '../core/version.js';
 
 const BUILTIN_AGENTS = ['claude', 'codex', 'opencode', 'agy', 'pi', 'cursor', 'grok', 'gemini', 'devin', 'acp'];
 const agentList = (env: NodeJS.ProcessEnv = process.env) => [...BUILTIN_AGENTS, ...endpointNames(env)];
@@ -472,6 +473,7 @@ async function execute(agent: string, args: any, ctx: any): Promise<any> {
 async function executeOne(agent: string, args: any, { env, onEvent, signal }: any): Promise<any> {
   const { opts, perms, childDepth, max } = prepare(agent, args, env);
   opts.signal = signal;
+  const passthroughAsked = Array.isArray(args?.mcpPassthrough) && args.mcpPassthrough.length > 0;
   if (isEndpoint(agent)) {
     const it = run(agent, opts);
     let r: any, sid: string | undefined;
@@ -495,9 +497,10 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
       permissions: perms,
       depth: childDepth,
       toolCalls: [],
+      ...(passthroughAsked ? { warnings: ['mcpPassthrough: not supported for endpoint/chat agents; ignored'] } : {}),
     };
   }
-  const { mcpConfigFor, getPassthroughMcpServers } = await import('./attach.js');
+  const { mcpConfigFor, resolvePassthrough } = await import('./attach.js');
   const models = Object.fromEntries(
     agentList(env).filter((a) => env[`AGENTBRIDGE_MODEL_${a.toUpperCase()}`]).map((a) => [a, env[`AGENTBRIDGE_MODEL_${a.toUpperCase()}`]])
   );
@@ -523,13 +526,14 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
   if (args.mcpPassthrough != null && !(Array.isArray(args.mcpPassthrough) && args.mcpPassthrough.every((x: any) => typeof x === 'string'))) {
     throw new Error('mcpPassthrough must be an array of server names');
   }
-  const passthroughServers = getPassthroughMcpServers({
+  const { servers: passthroughServers, drops } = resolvePassthrough({
     passthrough: args.mcpPassthrough,
     cwd: opts.cwd || process.cwd(),
     offline: !!opts.offline,
     permissions: perms,
     env: { ...env, ...grandchildEnv },
   });
+  const warnings = passthroughAsked ? drops.map((d) => `mcpPassthrough: "${d.name}" dropped (${d.reason})`) : [];
   let httpBridge: any = null;
   if (agent === 'codex') {
     const serverName = 'agentbridge_http';
@@ -593,6 +597,7 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
       permissions: perms,
       depth: childDepth,
       toolCalls: tools,
+      ...(passthroughAsked && warnings.length ? { warnings } : {}),
     };
   } finally {
     if (httpBridge) await httpBridge.close();
@@ -602,7 +607,11 @@ async function executeOne(agent: string, args: any, { env, onEvent, signal }: an
 const asResult = (st: any, env: NodeJS.ProcessEnv) => {
   const attestation = attest(st, env);
   return {
-    content: [{ type: 'text', text: st.text || '' }, { type: 'text', text: META + JSON.stringify(attestation) }],
+    content: [
+      { type: 'text', text: st.text || '' },
+      { type: 'text', text: META + JSON.stringify(attestation) },
+      ...(st.warnings?.length ? st.warnings.map((w: string) => ({ type: 'text', text: `${META}WARNING: ${w}` })) : []),
+    ],
     structuredContent: { ...st, attestation },
   };
 };
@@ -833,7 +842,7 @@ function makeHandler({ env, send }: { env: NodeJS.ProcessEnv; send: (m: any) => 
           result: {
             protocolVersion: v,
             capabilities: { tools: { listChanged: false } },
-            serverInfo: { name: 'agentbridge', version: '0.3.0' },
+            serverInfo: { name: 'agentbridge', version: VERSION },
           },
         };
       }
@@ -955,7 +964,9 @@ export function serveHttp({
   const authorized = (req: http.IncomingMessage) => {
     const h = req.headers.authorization || '';
     const token = h.startsWith('Bearer ') ? h.slice(7) : '';
-    return token && token === attestKey(env);
+    const a = Buffer.from(String(token || '')),
+      b = Buffer.from(attestKey(env));
+    return a.length === b.length && timingSafeEqual(a, b);
   };
   const respond = (res: http.ServerResponse, status: number, body?: any) => {
     res.writeHead(status, { 'content-type': 'application/json' });
