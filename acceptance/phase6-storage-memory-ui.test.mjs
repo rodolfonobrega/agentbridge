@@ -21,6 +21,7 @@ import {
 } from '../dist/index.js';
 import { readParams } from '../dist/server/common.js';
 import { HttpError } from '../dist/server/common.js';
+import { createAgentStore, disposeAgentRuns, ensureSweeper, sweep } from '../dist/server/agent.js';
 
 test('A27: findProjectRoot finds project root containing .git or .agentbridge from nested directory', () => {
   const tmp = mkdtempSync(path.join(tmpdir(), 'ab-p6-root-'));
@@ -240,5 +241,46 @@ test('A40: multiple proxy server instances maintain isolated AgentStores', async
   } finally {
     await proxy1.close();
     await proxy2.close();
+  }
+});
+
+test('A41: the agent sweeper is per-store: own timer per store, swept and disposed independently', () => {
+  const mk = () => {
+    const store = createAgentStore();
+    const cleanups = [];
+    // one run older than the 30min TTL, one fresh
+    for (const [id, expired] of [['run_expired_1', true], ['run_fresh_1', false]]) {
+      store.runs.set(id, {
+        id,
+        sandbox: { mode: 'copy', cleanup: () => cleanups.push(id) },
+        origin: 'x',
+        created: Date.now(),
+        last: expired ? Date.now() - 2 * 60 * 60 * 1000 : Date.now(),
+        applied: false,
+        busy: 0,
+      });
+    }
+    return { store, cleanups };
+  };
+  const a = mk(), b = mk();
+  try {
+    ensureSweeper(a.store);
+    ensureSweeper(b.store);
+    assert.ok(a.store.sweeper, 'first store gets its own sweeper timer');
+    assert.ok(b.store.sweeper, 'second store gets its own sweeper timer');
+    assert.notEqual(a.store.sweeper, b.store.sweeper, 'timers are per-store, not one shared module-global interval');
+    sweep(a.store);
+    sweep(b.store);
+    assert.deepEqual([...a.store.runs.keys()], ['run_fresh_1'], 'one sweep tick drops a expired run');
+    assert.deepEqual([...b.store.runs.keys()], ['run_fresh_1'], 'one sweep tick drops b expired run');
+    assert.deepEqual(a.cleanups, ['run_expired_1'], 'dropped run in a had its sandbox cleaned up');
+    assert.deepEqual(b.cleanups, ['run_expired_1'], 'dropped run in b had its sandbox cleaned up');
+    disposeAgentRuns(b.store);
+    assert.equal(b.store.sweeper, undefined, 'disposing b clears the b timer');
+    assert.ok(a.store.sweeper, 'disposing b does not touch the a timer');
+  } finally {
+    disposeAgentRuns(a.store);
+    disposeAgentRuns(b.store);
+    disposeAgentRuns(); // defaultStore path still clears its own timer
   }
 });

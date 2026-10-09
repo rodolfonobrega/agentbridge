@@ -24,6 +24,8 @@ export interface AgentRunRecord {
 export interface AgentStore {
   runs: Map<string, AgentRunRecord>;
   bySession: Map<string, string>;
+  /** Per-store sweeper timer: every store (default and per-proxy alike) must be swept and disposed on its own. */
+  sweeper?: NodeJS.Timeout;
 }
 
 export function createAgentStore(): AgentStore {
@@ -41,8 +43,7 @@ export function getStore(opts?: any): AgentStore {
   return opts?.agentStore || defaultStore;
 }
 
-let sweeper: NodeJS.Timeout | undefined;
-function sweep(store: AgentStore = defaultStore) {
+export function sweep(store: AgentStore = defaultStore) {
   const cut = Date.now() - TTL_MS;
   for (const [id, r] of store.runs) {
     if (r.last < cut && !r.busy) drop(id, store);
@@ -61,19 +62,19 @@ export function drop(id: string, store: AgentStore = defaultStore) {
     /* best effort */
   }
 }
-function ensureSweeper(store: AgentStore = defaultStore) {
-  if (!sweeper) {
-    sweeper = setInterval(() => sweep(store), 60_000);
-    sweeper.unref();
+export function ensureSweeper(store: AgentStore = defaultStore): void {
+  if (!store.sweeper) {
+    store.sweeper = setInterval(() => sweep(store), 60_000);
+    store.sweeper.unref();
   }
 }
-/** Remove every sandbox (server shutdown / tests). */
+/** Remove every sandbox (server shutdown / tests). Always stops the store's own sweeper timer. */
 export function disposeAgentRuns(store?: AgentStore): void {
   const s = store || defaultStore;
   for (const id of [...s.runs.keys()]) drop(id, s);
-  if (store === undefined || store === defaultStore) {
-    clearInterval(sweeper);
-    sweeper = undefined;
+  if (s.sweeper) {
+    clearInterval(s.sweeper);
+    s.sweeper = undefined;
   }
 }
 

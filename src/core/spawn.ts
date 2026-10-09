@@ -47,6 +47,13 @@ function parseShim(txt: string): string | null {
     if (!SHIM_BOILERPLATE.test(l)) return null;
   }
   if (exec === null) return null;
+  // One-line shims can quote BOTH the interpreter and the script (e.g. "%~dp0\node.exe" "%~dp0\pkg\bin\cli.js" %*):
+  // the first quoted token is then the interpreter, so the target is the LAST quoted token that is a real path.
+  const quoted = [...exec.matchAll(/"([^"]*)"/g)].map((mm) => mm[1]);
+  if (quoted.length > 1) {
+    const last = quoted[quoted.length - 1].replace(/^%(?:~dp0|dp0%)/i, '').replace(/^\\/, '');
+    if (last && !last.includes('%')) return last;
+  }
   const m = /"%(?:~dp0|dp0%)"?\\?([^"%\r\n]+?)"|"%dp0%\\([^"]+)"|%~dp0\\?([^\s"%]+)/i.exec(exec);
   return m ? (m[1] || m[2] || m[3]).replace(/^\\/, '') : null;
 }
@@ -126,33 +133,50 @@ export function killTree(child?: ChildProcess | null): void {
   if (!child || child.pid == null || child.exitCode !== null || child.signalCode) return;
   const pid = child.pid;
   if (isWin) {
+    let treeKilled = false;
     try {
-      spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+      const res = spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+      treeKilled = !res.error && res.status === 0;
     } catch {
       /* ignore */
     }
-  } else {
-    try {
-      process.kill(-pid, 'SIGTERM');
-      setTimeout(() => {
-        try {
-          process.kill(-pid, 'SIGKILL');
-        } catch {
-          /* ignore */
-        }
-      }, 250).unref();
-    } catch {
+    if (!treeKilled) {
+      // taskkill missing/failed: degrade to killing the leader only.
       try {
         child.kill('SIGKILL');
       } catch {
         /* ignore */
       }
     }
-  }
-  try {
-    child.kill('SIGKILL');
-  } catch {
-    /* ignore */
+  } else {
+    let group = false;
+    try {
+      process.kill(-pid, 'SIGTERM');
+      group = true;
+    } catch {
+      /* no process group */
+    }
+    if (group) {
+      // SIGTERM first: only escalate to SIGKILL once the 250ms grace has elapsed, group leader included.
+      setTimeout(() => {
+        try {
+          process.kill(-pid, 'SIGKILL');
+        } catch {
+          /* group gone */
+        }
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          /* ignore */
+        }
+      }, 250).unref();
+    } else {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 
@@ -355,11 +379,22 @@ export interface RunCollectResult extends ProcessWaitResult {
   stdout: string;
 }
 
-/** Convenience: run to completion, collect stdout. Resolves {stdout, stderr, exitCode, timedOut, aborted}. */
+/** Convenience: run to completion, collect stdout. Resolves {stdout, stderr, exitCode, timedOut, aborted}.
+ *  With maxBuffer, collected stdout keeps only the NEWEST lines that fit the cap (error-tail usage);
+ *  the cap applies to the collected (consumed) output, not to spawnProc's streaming queue. */
 export async function runCollect(cmd: string, args: (string | number)[] = [], opts: SpawnOptions = {}): Promise<RunCollectResult> {
-  const p = spawnProc(cmd, args, opts);
+  const { maxBuffer: cap, ...rest } = opts;
+  const p = spawnProc(cmd, args, rest);
   const out: string[] = [];
-  for await (const l of p.lines) out.push(l);
+  let outBytes = 0;
+  for await (const l of p.lines) {
+    out.push(l);
+    outBytes += l.length + 1;
+    while (cap != null && out.length && outBytes > cap) {
+      outBytes -= out[0].length + 1;
+      out.shift();
+    }
+  }
   const r = await p.wait();
   return { ...r, stdout: out.join('\n') };
 }

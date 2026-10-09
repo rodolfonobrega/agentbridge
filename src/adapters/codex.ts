@@ -186,18 +186,19 @@ const adapter: AgentAdapter = {
     if (o.jsonSchema != null && !(typeof o.jsonSchema === 'object' && !Array.isArray(o.jsonSchema) && o.jsonSchema.type === 'object'))
       throw bad('jsonSchema must be a JSON Schema object with type "object"');
     const imageFiles: string[] = [];
-    if (o.jsonSchema || o.images?.length) dir = mkdtempSync(path.join(tmpdir(), 'ab-codex-'));
-    if (o.jsonSchema) {
-      schemaFile = path.join(dir!, 'schema.json');
-      writeFileSync(schemaFile, JSON.stringify(o.jsonSchema));
-    }
-    for (const [n, im] of (o.images || []).entries()) {
-      const f = path.join(dir!, `image-${n}.${im.mediaType.split('/')[1].replace('jpeg', 'jpg')}`);
-      writeFileSync(f, Buffer.from(im.data, 'base64'));
-      imageFiles.push(f);
-    }
     const claim: { id?: string } = {};
     try {
+      // The temp dir and everything written into it stay inside the try so the finally below cleans up on any fs error.
+      if (o.jsonSchema || o.images?.length) dir = mkdtempSync(path.join(tmpdir(), 'ab-codex-'));
+      if (o.jsonSchema) {
+        schemaFile = path.join(dir!, 'schema.json');
+        writeFileSync(schemaFile, JSON.stringify(o.jsonSchema));
+      }
+      for (const [n, im] of (o.images || []).entries()) {
+        const f = path.join(dir!, `image-${n}.${im.mediaType.split('/')[1].replace('jpeg', 'jpg')}`);
+        writeFileSync(f, Buffer.from(im.data, 'base64'));
+        imageFiles.push(f);
+      }
       const args = buildArgs(o, schemaFile, claim, imageFiles);
       const env: NodeJS.ProcessEnv = { ...process.env, ...(o.env || {}) };
       if (!o.env?.OPENAI_API_KEY) delete env.OPENAI_API_KEY;

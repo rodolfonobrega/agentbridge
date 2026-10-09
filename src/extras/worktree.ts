@@ -115,7 +115,12 @@ export function createSandbox(cwd = process.cwd()): Sandbox {
     const cleanup = () => {
       tryGit(top, ['worktree', 'remove', '--force', wt]);
       tryGit(top, ['worktree', 'prune']);
-      rmSync(dir, { recursive: true, force: true });
+      // Best effort: a child process can still hold the sandbox as cwd (EBUSY/EPERM on Windows).
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        /* best effort */
+      }
     };
     return finish(mode, dir, root, sub, cleanup);
   }
@@ -132,7 +137,13 @@ export function createSandbox(cwd = process.cwd()): Sandbox {
   git(root, ['init', '-q']);
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'ab-baseline', '--allow-empty']);
-  return finish(mode, dir, root, '', () => rmSync(dir, { recursive: true, force: true }));
+  return finish(mode, dir, root, '', () => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+  });
 }
 
 function finish(mode: 'git-worktree' | 'copy', dir: string, root: string, sub: string, cleanup: () => void): Sandbox {
