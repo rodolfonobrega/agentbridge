@@ -99,7 +99,6 @@ export class CodexAppServerDaemon {
   private activeTurn?: ActiveTurnContext;
   private isAlive = false;
   private initPromise?: Promise<void>;
-  private lastActivityMs = Date.now();
   private idleTimer?: NodeJS.Timeout;
 
   constructor(cwd: string) {
@@ -130,7 +129,7 @@ export class CodexAppServerDaemon {
       this.listenBackground();
 
       // Handshake: initialize
-      const initRes = await this.sendRpc('initialize', {
+      await this.sendRpc('initialize', {
         clientInfo: { name: 'agentbridge', version: '0.3.0' },
       });
       // Send notification initialized
@@ -178,7 +177,7 @@ export class CodexAppServerDaemon {
       for await (const line of this.p.lines) {
         const j = parseJsonLine(line);
         if (!j) continue;
-        this.lastActivityMs = Date.now();
+        this.refreshIdleTimer();
 
         // 1. In-flight Request from Server to Client (id + method)
         if (j.id != null && typeof j.method === 'string') {

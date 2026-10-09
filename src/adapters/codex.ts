@@ -2,11 +2,14 @@
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
-import { spawnProc, ProcessHandle } from '../core/spawn.js';
+import { spawnProc } from '../core/spawn.js';
 import { AgentError } from '../core/errors.js';
 import { ev, parseJsonLine } from '../core/events.js';
 import { validateOptions } from '../index.js';
 import { AgentAdapter, AgentEvent, RunResult } from '../types/index.js';
+import { codexDaemonPool } from './codex-daemon.js';
+
+export { codexDaemonPool };
 
 const codexHome = (): string => process.env.CODEX_HOME || path.join(homedir(), '.codex');
 const toml = (v: any): string => JSON.stringify(v);
@@ -146,10 +149,6 @@ function listModels(): string[] {
     return [];
   }
 }
-
-import { codexDaemonPool } from './codex-daemon.js';
-
-export { codexDaemonPool };
 
 const adapter: AgentAdapter = {
   name: 'codex',
