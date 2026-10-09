@@ -185,7 +185,33 @@ Ollama is built in. Any OpenAI- or Anthropic-compatible base URL works, and is e
 ```bash
 ab serve --port 8787        # loopback only by default
 ```
-Point any OpenAI or Anthropic SDK at `http://127.0.0.1:8787`. Route with the model name: `claude/haiku`, `codex/gpt-5`, `agy/gemini-3.8-flash`, `pi/ollama/glm-5.3-flash:cloud`, `opencode/<provider>/<model>`, `ollama/<model>`. Streaming supported; limits answer HTTP 429 with `retry-after`. See [docs/PROXY.md](docs/PROXY.md).
+Point any OpenAI or Anthropic SDK directly at `http://127.0.0.1:8787`. Route with the model name: `claude/haiku`, `codex/gpt-5`, `agy/gemini-2.0-flash`, `pi/ollama/glm-5.3-flash:cloud`, `opencode/<provider>/<model>`, `ollama/<model>`. Full streaming support; limits answer HTTP 429 with `retry-after`.
+
+**Python Example:**
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="not-needed")
+stream = client.chat.completions.create(
+    model="claude/claude-3-7-sonnet",
+    messages=[{"role": "user", "content": "Explain async generator"}],
+    stream=True
+)
+for chunk in stream:
+    print(chunk.choices[0].delta.content or "", end="", flush=True)
+```
+
+**TypeScript / Node.js Example:**
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic({ baseURL: 'http://127.0.0.1:8787', apiKey: 'not-needed' });
+const res = await client.messages.create({
+  model: 'claude-3-7-sonnet',
+  max_tokens: 1024,
+  messages: [{ role: 'user', content: 'Say hello!' }]
+});
+console.log(res.content[0].text);
+```
+See **[docs/PROXY.md](docs/PROXY.md)** for full documentation, cURL, LangChain, and Agent Sandbox Mode.
 
 ### 8. Telemetry, context policy and handoff
 `ab ps`, `ab top`, `ab stats`, `ab context <session>`: live runs, token usage and context-window pressure per session, with warn/compact/hard thresholds, automatic compaction and `ab handoff <session> --to <agent>` to continue a conversation in a different agent. See [docs/TELEMETRY.md](docs/TELEMETRY.md).

@@ -26,6 +26,167 @@ responsible for compliance.
 | `POST /v1/messages/count_tokens` | estimate only (~chars/4) |
 | `GET /v1/models` | OpenAI list, or Anthropic list when `anthropic-version`/`x-api-key` header is present |
 
+---
+
+## Ready-to-Run Code Examples
+
+Start the proxy server first:
+```bash
+ab serve --port 8787
+```
+
+### 1. Python — Official `openai` SDK (Streaming)
+```python
+from openai import OpenAI
+
+# Connect to AgentBridge proxy (no API key required)
+client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="local-proxy")
+
+response = client.chat.completions.create(
+    model="claude/claude-3-7-sonnet",  # Or codex/gpt-4o, agy/gemini-2.0-flash, ollama/qwen3
+    messages=[
+        {"role": "system", "content": "You are an expert software engineer."},
+        {"role": "user", "content": "Explain how epoll works in Linux kernel."},
+    ],
+    stream=True,
+)
+
+for chunk in response:
+    content = chunk.choices[0].delta.content
+    if content:
+        print(content, end="", flush=True)
+print()
+```
+
+### 2. Python — Official `anthropic` SDK
+```python
+import anthropic
+
+# Connect to AgentBridge proxy (base URL without /v1 for Anthropic SDK)
+client = anthropic.Anthropic(base_url="http://127.0.0.1:8787", api_key="local-proxy")
+
+message = client.messages.create(
+    model="claude-3-7-sonnet",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Write a clean debounce function in TypeScript."}],
+)
+
+print(message.content[0].text)
+```
+
+### 3. TypeScript / Node.js — Official `openai` SDK
+```typescript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: 'http://127.0.0.1:8787/v1',
+  apiKey: 'local-proxy',
+});
+
+async function main() {
+  const stream = await client.chat.completions.create({
+    model: 'codex/gpt-4o',
+    messages: [{ role: 'user', content: 'Generate a binary search implementation with tests.' }],
+    stream: true,
+  });
+
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content || '';
+    process.stdout.write(text);
+  }
+}
+
+main();
+```
+
+### 4. TypeScript / Node.js — Official `@anthropic-ai/sdk`
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+
+const client = new Anthropic({
+  baseURL: 'http://127.0.0.1:8787',
+  apiKey: 'local-proxy',
+});
+
+async function main() {
+  const message = await client.messages.create({
+    model: 'claude-3-7-sonnet',
+    max_tokens=1000,
+    messages: [{ role: 'user', content: 'List 3 security best practices for JWT.' }],
+  });
+
+  console.log(message.content[0].text);
+}
+
+main();
+```
+
+### 5. cURL (Terminal Direct Call)
+```bash
+# OpenAI format
+curl http://127.0.0.1:8787/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude/haiku",
+    "messages": [{"role": "user", "content": "Say hello in 5 languages"}],
+    "stream": true
+  }'
+
+# Anthropic format
+curl http://127.0.0.1:8787/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{
+    "model": "claude-3-5-sonnet",
+    "max_tokens": 512,
+    "messages": [{"role": "user", "content": "What is WebAssembly?"}]
+  }'
+```
+
+### 6. LangChain (Python) Integration
+```python
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    base_url="http://127.0.0.1:8787/v1",
+    api_key="local-proxy",
+    model="claude/claude-3-7-sonnet",
+    streaming=True,
+)
+
+response = llm.invoke("Design a REST API for a task manager")
+print(response.content)
+```
+
+### 7. Agent Mode — Isolated Worktree Code Editing & Diff
+To let an AI agent safely modify code in an isolated git sandbox without risking your repository:
+```bash
+# Start proxy with agent root enabled
+ab serve --port 8787 --token my-secret --agent-root /path/to/projects
+```
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8787/agent/v1", api_key="my-secret")
+
+# Triggers an isolated git worktree run:
+res = client.chat.completions.create(
+    model="agent/claude/sonnet",
+    messages=[{"role": "user", "content": "Refactor src/db.ts to use connection pooling"}],
+    extra_headers={
+        "x-ab-cwd": "/path/to/projects/my-repo",
+        "x-ab-permissions": "edit"
+    }
+)
+
+# Inspect the changes: the proxy returns unified diff and filesChanged!
+# Then apply to the real working tree:
+# POST http://127.0.0.1:8787/agent/runs/<runId>/apply
+```
+
+---
+
 ## Model routing
 `claude/<model>`, `codex/<model>`, `agy/<model>`, `pi/<provider>/<model>`, `opencode/<provider>/<model>`, and `<endpoint>/<model>` for configured HTTP endpoints (e.g. `ollama/qwen3:14b`). Bare names by heuristics: `sonnet|haiku|opus|claude-*`
 -> claude; `gpt-*|o1/o3/o4|codex*` -> codex; anything with a `/` -> opencode. Otherwise 404

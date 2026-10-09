@@ -163,11 +163,38 @@ Start the proxy:
 ab serve --port 8787
 ```
 
-### Modes:
+### Modes & Code Examples:
 1. **API Mode (Default - `/v1/chat/completions`):**
    - Base URL: `http://127.0.0.1:8787/v1`
-   - Model name: `claude/claude-3-7-sonnet`, `codex/gpt-5`, `pi/ollama/qwen3:14b`, etc.
+   - Model name: `claude/claude-3-7-sonnet`, `codex/gpt-5`, `agy/gemini-2.0-flash`, `pi/ollama/qwen3:14b`, etc.
    - Operates as a standard OpenAI/Anthropic LLM API, using the user's subscription behind the scenes.
+
+   **Python (Official `openai` SDK):**
+   ```python
+   from openai import OpenAI
+
+   client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="not-needed")
+   stream = client.chat.completions.create(
+       model="claude/claude-3-7-sonnet",
+       messages=[{"role": "user", "content": "Write a distributed task worker in Go."}],
+       stream=True,
+   )
+   for chunk in stream:
+       print(chunk.choices[0].delta.content or "", end="", flush=True)
+   ```
+
+   **TypeScript / Node.js (Official `openai` SDK):**
+   ```typescript
+   import OpenAI from 'openai';
+
+   const client = new OpenAI({ baseURL: 'http://127.0.0.1:8787/v1', apiKey: 'not-needed' });
+   const response = await client.chat.completions.create({
+     model: 'codex/gpt-4o',
+     messages: [{ role: 'user', content: 'Generate database migration for PostgreSQL.' }],
+   });
+   console.log(response.choices[0]?.message?.content);
+   ```
+
 2. **Agent Mode (`/agent/v1` or model `agent/<agent>/<model>`):**
    - Executes in an isolated **git worktree** pointing to the workspace folder (`x-ab-cwd`).
    - The agent receives native file-editing tools under `permissions: "full"`.
@@ -182,6 +209,22 @@ ab serve --port 8787
      }
      ```
    - Diff endpoints: `GET /agent/runs/:id/diff` and `POST /agent/runs/:id/apply` to merge changes back to the main repository.
+
+   **Python (Agent Sandbox Mode):**
+   ```python
+   from openai import OpenAI
+
+   client = OpenAI(base_url="http://127.0.0.1:8787/agent/v1", api_key="token-if-configured")
+   res = client.chat.completions.create(
+       model="agent/claude/sonnet",
+       messages=[{"role": "user", "content": "Implement structured logging across src/"}],
+       extra_headers={
+           "x-ab-cwd": "/path/to/my-repo",
+           "x-ab-permissions": "edit"
+       }
+   )
+   # Inspect generated git diff returned in res.model_extra["agentbridge"]["diff"]
+   ```
 
 ---
 
