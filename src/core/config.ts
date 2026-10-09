@@ -24,8 +24,12 @@ export interface AgentBridgeConfig {
 
 export function findProjectRoot(startDir: string = process.cwd()): string {
   let cur = path.resolve(startDir);
+  const userHome = path.resolve(homedir());
   while (true) {
-    if (existsSync(path.join(cur, '.agentbridge')) || existsSync(path.join(cur, '.git'))) {
+    if (cur !== userHome && existsSync(path.join(cur, '.agentbridge'))) {
+      return cur;
+    }
+    if (existsSync(path.join(cur, '.git'))) {
       return cur;
     }
     const parent = path.dirname(cur);

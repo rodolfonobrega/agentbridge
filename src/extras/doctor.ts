@@ -8,28 +8,63 @@ import { findBinary as findAgy } from '../adapters/agy.js';
 import { findBinary as findPi } from '../adapters/pi.js';
 import { skillRoots } from '../core/shared-resources.js';
 
+import { getOpencodeUserConfigPaths } from '../cli/install.js';
+
 const home = os.homedir();
+
+export async function withTimeout<T>(promise: Promise<T>, ms: number, errMsg = 'timeout'): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(errMsg)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 const CRED: Record<string, () => string | undefined> = {
-  claude: () =>
-    [path.join(home, '.claude', '.credentials.json'), path.join(home, '.claude.json')].find((f) => {
+  claude: () => {
+    const list: string[] = [];
+    if (process.env.CLAUDE_CONFIG_DIR) {
+      list.push(
+        path.join(process.env.CLAUDE_CONFIG_DIR, '.credentials.json'),
+        path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json')
+      );
+    }
+    list.push(
+      path.join(home, '.claude', '.credentials.json'),
+      path.join(home, '.claude.json')
+    );
+    return list.find((f) => {
       try {
         return f.endsWith('.json') && /oauthAccount|claudeAiOauth/.test(readFileSync(f, 'utf8'));
       } catch {
         return false;
       }
-    }),
+    });
+  },
   codex: () => [path.join(process.env.CODEX_HOME || path.join(home, '.codex'), 'auth.json')].find(existsSync),
-  opencode: () =>
-    [
-      path.join(process.env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'opencode', 'auth.json'),
-      path.join(process.env.LOCALAPPDATA || '', 'opencode', 'auth.json'),
-    ].find((f) => {
+  opencode: () => {
+    const list: string[] = [];
+    if (process.env.XDG_DATA_HOME) list.push(path.join(process.env.XDG_DATA_HOME, 'opencode', 'auth.json'));
+    if (process.platform === 'win32') {
+      if (process.env.LOCALAPPDATA) list.push(path.join(process.env.LOCALAPPDATA, 'opencode', 'auth.json'));
+      if (process.env.APPDATA) list.push(path.join(process.env.APPDATA, 'opencode', 'auth.json'));
+    }
+    list.push(
+      path.join(home, '.local', 'share', 'opencode', 'auth.json'),
+      path.join(home, '.config', 'opencode', 'auth.json')
+    );
+    return list.find((f) => {
       try {
         return Object.keys(JSON.parse(readFileSync(f, 'utf8'))).length > 0;
       } catch {
         return false;
       }
-    }),
+    });
+  },
   cursor: () => (process.env.CURSOR_API_KEY ? 'CURSOR_API_KEY' : undefined),
   grok: () => (process.env.XAI_API_KEY || process.env.GROK_API_KEY ? 'XAI_API_KEY' : undefined),
   gemini: () => (process.env.GEMINI_API_KEY ? 'GEMINI_API_KEY' : undefined),
@@ -68,6 +103,12 @@ export function detectMcpServers(name: string, cwd = process.cwd()): string[] {
     } else if (name === 'claude') {
       const candidates = [
         path.join(cwd, '.mcp.json'),
+        ...(process.env.CLAUDE_CONFIG_DIR
+          ? [
+              path.join(process.env.CLAUDE_CONFIG_DIR, 'mcp.json'),
+              path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json'),
+            ]
+          : []),
         path.join(home, '.claude.json'),
         path.join(home, '.claude', 'mcp.json'),
       ];
@@ -96,8 +137,7 @@ export function detectMcpServers(name: string, cwd = process.cwd()): string[] {
     } else if (name === 'opencode') {
       const candidates = [
         path.join(cwd, 'opencode.json'),
-        path.join(home, '.config', 'opencode', 'opencode.json'),
-        path.join(process.env.LOCALAPPDATA || '', 'opencode', 'opencode.json'),
+        ...getOpencodeUserConfigPaths(home),
       ];
       for (const f of candidates) {
         if (existsSync(f)) {
@@ -198,12 +238,7 @@ export async function doctor({
       if (models) {
         try {
           const { agents: reg } = await import('../index.js');
-          a.models = (
-            await Promise.race([
-              reg.models(name),
-              new Promise<string[]>((_, r) => setTimeout(() => r(new Error('timeout')), 20000)),
-            ])
-          ).slice(0, 30);
+          a.models = (await withTimeout(reg.models(name), 20000)).slice(0, 30);
         } catch (e: any) {
           a.models = null;
           a.modelsError = e.message;

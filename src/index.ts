@@ -24,8 +24,18 @@ export {
   PERMISSION_RANK,
   PERMISSION_LEVELS,
 } from './core/config.js';
+import { BUILTIN_AGENTS } from './core/catalog.js';
 
-const NAMES = ['claude', 'codex', 'opencode', 'agy', 'pi', 'cursor', 'grok', 'gemini', 'devin', 'acp'];
+export {
+  BUILTIN_AGENTS,
+  VALID_ACCOUNT_AGENTS,
+  isBuiltinAgent,
+  isValidAccountAgent,
+  type BuiltinAgentName,
+  type ValidAccountAgentName,
+} from './core/catalog.js';
+
+const NAMES: readonly string[] = BUILTIN_AGENTS;
 const cache = new Map<string, Promise<AgentAdapter>>();
 
 async function loadEndpoint(name: string): Promise<AgentAdapter> {

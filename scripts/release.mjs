@@ -23,18 +23,22 @@ function runOutput(cmd) {
   }
 }
 
-function parseSemver(v) {
-  const m = v.replace(/^v/, '').match(/^(\d+)\.(\d+)\.(\d+)(?:-([\w.]+))?$/);
+export const SEMVER_REGEX = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/;
+
+export function parseSemver(v) {
+  const clean = v.replace(/^v/, '');
+  const m = clean.match(SEMVER_REGEX);
   if (!m) throw new Error(`Invalid semver: ${v}`);
   return {
     major: parseInt(m[1], 10),
     minor: parseInt(m[2], 10),
     patch: parseInt(m[3], 10),
     prerelease: m[4] || null,
+    build: m[5] || null,
   };
 }
 
-function bumpVersion(current, type) {
+export function bumpVersion(current, type) {
   const parsed = parseSemver(current);
   if (type === 'major') {
     return `${parsed.major + 1}.0.0`;
@@ -46,10 +50,12 @@ function bumpVersion(current, type) {
     return `${parsed.major}.${parsed.minor}.${parsed.patch + 1}`;
   }
   // Explicit version string
-  if (/^\d+\.\d+\.\d+/.test(type)) {
+  try {
+    parseSemver(type);
     return type.replace(/^v/, '');
+  } catch {
+    throw new Error(`Unknown bump type or invalid semver version: "${type}". Use patch, minor, major, or explicit X.Y.Z`);
   }
-  throw new Error(`Unknown bump type or version: "${type}". Use patch, minor, major, or explicit X.Y.Z`);
 }
 
 async function main() {
@@ -95,6 +101,15 @@ async function main() {
   pkg.version = nextVersion;
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
   console.log(`\n\x1b[32m✔ Updated package.json to v${nextVersion}\x1b[0m`);
+
+  // Sync package-lock.json
+  try {
+    console.log('\x1b[34m✦ Syncing package-lock.json with new version...\x1b[0m');
+    run('npm install --package-lock-only', { silent: true });
+    console.log('\x1b[32m✔ package-lock.json synchronized\x1b[0m');
+  } catch (err) {
+    console.warn('\x1b[33mWarning: Failed to sync package-lock.json via npm:\x1b[0m', err.message);
+  }
 
   // Update CHANGELOG.md if present
   try {
@@ -146,7 +161,10 @@ async function main() {
   console.log('     \x1b[36mnpm publish --access public\x1b[0m\n');
 }
 
-main().catch((err) => {
-  console.error('\n\x1b[31mRelease failed:\x1b[0m', err.message);
-  process.exit(1);
-});
+const isCLI = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+if (isCLI) {
+  main().catch((err) => {
+    console.error('\n\x1b[31mRelease failed:\x1b[0m', err.message);
+    process.exit(1);
+  });
+}

@@ -2,20 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, cpSync, rmSync, rea
 import path from 'node:path';
 import { homedir } from 'node:os';
 import { syncSharedResources, unlinkResource } from './shared-resources.js';
-
-const VALID_AGENTS = new Set([
-  'claude',
-  'codex',
-  'opencode',
-  'agy',
-  'pi',
-  'cursor',
-  'grok',
-  'gemini',
-  'devin',
-  'acp',
-  'ollama',
-]);
+import { isValidAccountAgent, VALID_ACCOUNT_AGENTS } from './catalog.js';
 
 export interface AccountRecord {
   name: string;
@@ -148,8 +135,8 @@ export function addAccount(
     throw new Error(`Invalid account name "${name}". Use alphanumeric characters, hyphens and underscores.`);
   }
   const ag = agent.toLowerCase().trim();
-  if (!VALID_AGENTS.has(ag)) {
-    throw new Error(`Invalid agent "${agent}". Expected one of: ${[...VALID_AGENTS].join(', ')}`);
+  if (!isValidAccountAgent(ag)) {
+    throw new Error(`Invalid agent "${agent}". Expected one of: ${VALID_ACCOUNT_AGENTS.join(', ')}`);
   }
   const manifest = loadAccountsManifest(options.baseDir);
   const existingList = manifest.accounts[ag] || [];
@@ -212,8 +199,8 @@ export function removeAccount(
   options: { deleteProfileDir?: boolean; baseDir?: string } = {}
 ): boolean {
   const ag = agent.toLowerCase().trim();
-  if (!VALID_AGENTS.has(ag)) {
-    throw new Error(`Invalid agent "${agent}". Expected one of: ${[...VALID_AGENTS].join(', ')}`);
+  if (!isValidAccountAgent(ag)) {
+    throw new Error(`Invalid agent "${agent}". Expected one of: ${VALID_ACCOUNT_AGENTS.join(', ')}`);
   }
   const manifest = loadAccountsManifest(options.baseDir);
   const existingList = manifest.accounts[ag] || [];

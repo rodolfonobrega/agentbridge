@@ -545,11 +545,14 @@ export async function cmdSetup(
   io.out(`${c.bold}${c.cyan}│${c.reset}   ${c.bold}⚙  Applying Configurations${c.reset}${' '.repeat(41)}${c.cyan}│${c.reset}`);
   io.out(`${c.bold}${c.cyan}╰${divider}╯${c.reset}`);
 
+  const targetCwd = flags.cwd ? path.resolve(flags.cwd) : process.cwd();
+
   const installFlags: Record<string, any> = {
     scope,
     permissions,
     'no-skill': !installSkill,
     'auto-approve': autoApproveCodex,
+    ...(flags.cwd ? { cwd: targetCwd } : {}),
   };
 
   const results: { agent: string; success: boolean; message: string }[] = [];
@@ -568,6 +571,7 @@ export async function cmdSetup(
     } catch (e: any) {
       io.out(`  ${c.red}✖${c.reset} ${c.bold}${t.toUpperCase()}:${c.reset} ${e.message}`);
       results.push({ agent: t, success: false, message: e.message });
+      process.exitCode = 1;
     }
   }
 
@@ -600,15 +604,15 @@ export async function cmdSetup(
       const canonicalSkill = path.resolve(fileURLToPath(new URL('../../skills/agentbridge-delegate/SKILL.md', import.meta.url)));
       if (existsSync(canonicalSkill)) {
         // Projeto local
-        const p1 = path.join(process.cwd(), '.agents', 'skills', 'agentbridge-delegate');
+        const p1 = path.join(targetCwd, '.agents', 'skills', 'agentbridge-delegate');
         mkdirSync(p1, { recursive: true });
         copyFileSync(canonicalSkill, path.join(p1, 'SKILL.md'));
 
-        const p2 = path.join(process.cwd(), '.claude', 'skills', 'agentbridge-delegate');
+        const p2 = path.join(targetCwd, '.claude', 'skills', 'agentbridge-delegate');
         mkdirSync(p2, { recursive: true });
         copyFileSync(canonicalSkill, path.join(p2, 'SKILL.md'));
 
-        // Usuário global se scope for 'user'
+        // Usuário global APENAS se scope for 'user'
         if (scope === 'user') {
           const u1 = path.join(homedir(), '.agents', 'skills', 'agentbridge-delegate');
           mkdirSync(u1, { recursive: true });

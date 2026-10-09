@@ -103,10 +103,42 @@ function autoApproveCodex(out: (msg: string) => void) {
   out('Codex will run agentbridge tools without asking (default_tools_approval_mode = "approve").');
 }
 
+export function getOpencodeUserConfigPaths(home: string = homedir()): string[] {
+  const paths: string[] = [];
+  if (process.env.XDG_CONFIG_HOME) {
+    paths.push(
+      path.join(process.env.XDG_CONFIG_HOME, 'opencode', 'opencode.jsonc'),
+      path.join(process.env.XDG_CONFIG_HOME, 'opencode', 'opencode.json')
+    );
+  }
+  if (process.platform === 'win32') {
+    if (process.env.LOCALAPPDATA) {
+      paths.push(
+        path.join(process.env.LOCALAPPDATA, 'opencode', 'opencode.jsonc'),
+        path.join(process.env.LOCALAPPDATA, 'opencode', 'opencode.json')
+      );
+    }
+    if (process.env.APPDATA) {
+      paths.push(
+        path.join(process.env.APPDATA, 'opencode', 'opencode.jsonc'),
+        path.join(process.env.APPDATA, 'opencode', 'opencode.json')
+      );
+    }
+  }
+  paths.push(
+    path.join(home, '.config', 'opencode', 'opencode.jsonc'),
+    path.join(home, '.config', 'opencode', 'opencode.json')
+  );
+  return paths;
+}
+
 async function installCodex(flags: Record<string, any>, { out }: { out: (msg: string) => void }) {
   const c = bridgeCtx(flags);
   const codexDir = process.env.CODEX_HOME || path.join(homedir(), '.codex');
   mkdirSync(codexDir, { recursive: true });
+  const configFile = path.join(codexDir, 'config.toml');
+  const backup = existsSync(configFile) ? readFileSync(configFile, 'utf8') : null;
+
   const envArgs = Object.entries(c.env).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
   await runCollect('codex', ['mcp', 'remove', 'agentbridge'], { cwd: c.cwd, timeoutMs: 30000 }).catch(() => {});
   const r = await runCollect(
@@ -114,7 +146,12 @@ async function installCodex(flags: Record<string, any>, { out }: { out: (msg: st
     ['mcp', 'add', 'agentbridge', ...envArgs, '--', process.execPath, MAIN, 'bridge'],
     { cwd: c.cwd, timeoutMs: 30000 }
   );
-  if (r.exitCode !== 0) throw new UsageError(`codex mcp add failed: ${(r.stderr || r.stdout).trim()}`);
+  if (r.exitCode !== 0) {
+    if (backup !== null) {
+      try { writeFileSync(configFile, backup, 'utf8'); } catch {}
+    }
+    throw new UsageError(`codex mcp add failed: ${(r.stderr || r.stdout).trim()}`);
+  }
   out(`registered MCP server "agentbridge" in Codex (global ~/.codex/config.toml, permission ceiling: ${c.permissions})`);
   if (flags['auto-approve']) autoApproveCodex(out);
   if (!flags['no-skill']) writeSkill(agentsBase(c), out);
@@ -142,10 +179,14 @@ async function installPi(flags: Record<string, any>, { out }: { out: (msg: strin
   const dir = path.join(process.env.PI_CODING_AGENT_DIR || path.join(homedir(), '.pi', 'agent'));
   const mcpFile = path.join(dir, 'mcp.json');
   let current: any = { mcpServers: {} };
-  try {
-    current = JSON.parse(readFileSync(mcpFile, 'utf8'));
-  } catch {
-    /* empty */
+  if (existsSync(mcpFile)) {
+    try {
+      current = JSON.parse(readFileSync(mcpFile, 'utf8'));
+    } catch (e: any) {
+      throw new UsageError(
+        `${mcpFile} contains invalid JSON; aborting to preserve existing Pi configuration: ${e.message}`
+      );
+    }
   }
   if (!current || typeof current !== 'object') current = { mcpServers: {} };
   if (!current.mcpServers) current.mcpServers = {};
@@ -157,7 +198,7 @@ async function installPi(flags: Record<string, any>, { out }: { out: (msg: strin
   };
   mkdirSync(dir, { recursive: true });
   const tmp = `${mcpFile}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(current, null, 2));
+  writeFileSync(tmp, JSON.stringify(current, null, 2) + '\n');
   renameSync(tmp, mcpFile);
   out(`registered MCP server "agentbridge" in pi (global ~/.pi/agent/mcp.json, permission ceiling: ${c.permissions})`);
   if (!flags['no-skill']) writeSkill(agentsBase(c), out);
@@ -166,13 +207,10 @@ async function installPi(flags: Record<string, any>, { out }: { out: (msg: strin
 
 function installOpencode(flags: Record<string, any>, { out }: { out: (msg: string) => void }) {
   const c = bridgeCtx(flags);
+  const userPaths = getOpencodeUserConfigPaths(homedir());
   const file =
     c.scope === 'user'
-      ? [
-          path.join(process.env.XDG_CONFIG_HOME || path.join(homedir(), '.config'), 'opencode', 'opencode.jsonc'),
-          path.join(process.env.XDG_CONFIG_HOME || path.join(homedir(), '.config'), 'opencode', 'opencode.json'),
-        ].find((f) => existsSync(f)) ||
-        path.join(process.env.XDG_CONFIG_HOME || path.join(homedir(), '.config'), 'opencode', 'opencode.json')
+      ? userPaths.find((f) => existsSync(f)) || userPaths[0]
       : path.join(c.cwd, 'opencode.json');
   const entry = { type: 'local', command: [process.execPath, MAIN, 'bridge'], environment: c.env, enabled: true };
   let cfg: any = {};

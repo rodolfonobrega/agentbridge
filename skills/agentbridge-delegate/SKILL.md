@@ -306,5 +306,22 @@ If you have shell execution access, you can run high-level orchestration workflo
 - **Isolated Proxy Server Stores:**
   Múltiplas instâncias de proxy programáticas mantêm seus próprios `AgentStore` e `sessionStore` isolados, eliminando vazamento de sessões ou sandboxes ativas entre instâncias concorrentes.
 
+## Tooling, Installers & Ecosystem Guarantees (Phase 7 Hardening)
+
+- **Centralized Agent Catalog (`src/core/catalog.ts`):**
+  Todos os agentes nativos (`claude`, `codex`, `opencode`, `agy`, `pi`) e regras de contas são definidos em um catálogo único e centralizado (`BUILTIN_AGENTS`, `VALID_ACCOUNT_AGENTS`), eliminando descompassos entre o CLI, proxy, MCP e gerenciamento de perfis.
+- **Universal IDE Compatibility (`process.execPath`):**
+  Instaladores de IDEs (`ab install vscode|cursor|zed|windsurf`) utilizam `process.execPath` canônico em vez de referências frágeis a `node` no PATH, prevenindo erros `node: command not found` quando a IDE é lançada de ambientes de desktop com PATH restrito.
+- **Transactional MCP Updates & Corruption Defense:**
+  A instalação de ferramentas MCP no Codex cria backups transacionais de `config.toml` antes da execução, restaurando o estado anterior caso `codex mcp add` falhe. No Pi (`~/.pi/agent/mcp.json`), arquivos com JSON inválido ou comentários são preservados sem perda de configurações prévias, emitindo mensagens de erro claras com instruções de configuração manual.
+- **Strict Scope Isolation in Setup Wizard (`ab setup` / `ab wizard`):**
+  Quando executado no escopo de projeto (`--scope project`), o assistente de instalação confina todas as configurações e cópias de skills estritamente ao diretório do projeto alvo (`flags.cwd` ou `process.cwd()`), sem poluir nem mutar `~/.agents/skills` ou `~/.claude/skills` do usuário. Falhas em qualquer agente no setup propagam explicitamente código de saída não-zero (`process.exitCode = 1`) para scripts de CI/CD.
+- **Zero Resource & Timer Leaks (`withTimeout`):**
+  Todas as sondagens de modelos e diagnósticos de saúde (`ab doctor`) utilizam `withTimeout` com cancelamento imediato de temporizadores (`clearTimeout`), impedindo timers residuais de 20 segundos de segurarem o loop de eventos ativo.
+- **Cross-Platform Diagnostic Precision (`ab doctor`):**
+  Diagnóstico de credenciais oferece suporte nativo à variável `CLAUDE_CONFIG_DIR` e unifica a detecção de configurações do OpenCode em todos os diretórios do Windows (`%LOCALAPPDATA%`, `%APPDATA%`, `.config`).
+- **Strict SemVer & Synchronized Lockfiles:**
+  Automações de lançamento e versionamento (`scripts/release.mjs`) validam estritamente versões no formato oficial SemVer e mantêm `package-lock.json` sincronizado com `package.json` através de `npm install --package-lock-only`, garantindo integridade absoluta de tags e releases.
+
 
 

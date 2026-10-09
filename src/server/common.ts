@@ -11,6 +11,7 @@ import { AccountPool } from './pool.js';
 import { StatsTracker } from './stats.js';
 import { RunOptions, AgentEvent } from '../types/index.js';
 import { getProactiveQuotaStatus } from '../quota/proactive.js';
+import { withTimeout } from '../extras/doctor.js';
 
 const run = (agent: any, opts: any) => runTracked(agent, opts, { origin: 'proxy' });
 
@@ -130,10 +131,7 @@ export async function listModels(): Promise<string[]> {
     agents.names.map(async (n) => {
       if (!isInstalled(n)) return;
       try {
-        const ms = await Promise.race([
-          agents.models(n),
-          new Promise<string[]>((_, r) => setTimeout(() => r(new Error('timeout')), 20000)),
-        ]);
+        const ms = await withTimeout(agents.models(n), 20000);
         for (const x of ms) add(n === 'opencode' ? (x.startsWith('opencode/') ? x : 'opencode/' + x) : `${n}/${x}`);
       } catch {
         /* best-effort */

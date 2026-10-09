@@ -163,7 +163,12 @@ export function getIdeConfigPath(
 
 function isSameServerConfig(existing: any, target: { command: string; args: string[] }): boolean {
   if (!existing || typeof existing !== 'object') return false;
-  if (existing.command !== target.command) return false;
+  const sameCommand =
+    existing.command === target.command ||
+    existing.command === 'node' ||
+    existing.command === 'node.exe' ||
+    path.basename(String(existing.command || '')) === path.basename(target.command);
+  if (!sameCommand) return false;
   if (!Array.isArray(existing.args)) return false;
   if (existing.args.length !== target.args.length) return false;
   return existing.args.every((arg: any, index: number) => arg === target.args[index]);
@@ -180,7 +185,7 @@ export function installIde(
   const targetPath = getIdeConfigPath(target, options);
   const cliPath = path.resolve(options?.cliPath || DEFAULT_CLI);
   const serverConfig = {
-    command: 'node',
+    command: process.execPath,
     args: [cliPath, 'bridge'],
   };
 
