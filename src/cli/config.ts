@@ -5,7 +5,6 @@ import {
   resetConfigValue,
   globalConfigFile,
   projectConfigFile,
-  PERMISSION_LEVELS,
   getDefaultPermissions,
   getPermissionsCeiling,
 } from '../core/config.js';

@@ -4,15 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { parseArgs, UsageError, num, readStdin } from './args.js';
 import {
-  run,
   runTracked,
-  ask,
   agents,
   AgentError,
   stats,
   contextOf,
   handoff,
-  compact,
   wait,
   fanout,
   race,
@@ -21,9 +18,9 @@ import {
 } from '../index.js';
 import { runBudgeted, Budget } from '../extras/budget.js';
 import { runInWorktree, withWorktree } from '../extras/worktree.js';
-import { listRuns, loadRun, summarize, cancelRun, sweep, RunSummary } from '../bridge/runs.js';
+import { listRuns, summarize, cancelRun, sweep } from '../bridge/runs.js';
 import { listSessions } from '../telemetry/stats.js';
-import { AgentEvent, RunOptions, RunResult, FallbackErrorCode } from '../types/index.js';
+import { AgentEvent, RunOptions, FallbackErrorCode } from '../types/index.js';
 
 const out = (o: any) =>
   process.stdout.write(typeof o === 'string' ? o + (o.endsWith('\n') ? '' : '\n') : JSON.stringify(o, null, 2) + '\n');

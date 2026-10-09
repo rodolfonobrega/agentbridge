@@ -7,9 +7,7 @@ import { runTracked, agents, endpointNames, AgentError } from '../index.js';
 import { globMatch, ConfigHolder } from './config.js';
 import { callId } from './tools/emulate.js';
 import { isInstalled } from '../core/readiness.js';
-import { AccountPool } from './pool.js';
-import { StatsTracker } from './stats.js';
-import { RunOptions, AgentEvent } from '../types/index.js';
+import { RunOptions } from '../types/index.js';
 import { getProactiveQuotaStatus } from '../quota/proactive.js';
 import { withTimeout } from '../extras/doctor.js';
 

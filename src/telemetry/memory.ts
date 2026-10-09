@@ -267,10 +267,6 @@ export function cliMemoryList(cwd?: string): ProjectMemory {
   return loadMemory(cwd);
 }
 
-export function cliMemoryClear(cwd?: string): void {
-  clearMemory(cwd);
-}
-
 export async function cmdMemory(
   _: string[],
   flags: Record<string, any>,

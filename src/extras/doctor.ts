@@ -2,7 +2,7 @@
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { existsSync, writeFileSync, unlinkSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolveBinary, runCollect } from '../core/spawn.js';
 import { findBinary as findAgy } from '../adapters/agy.js';
 import { findBinary as findPi } from '../adapters/pi.js';
@@ -302,5 +302,3 @@ export async function doctor({
   checks.sort((x, y) => x.name.localeCompare(y.name));
   return { ok: !checks.some((c) => c.status === 'fail'), checks, agents: info };
 }
-
-export const _unlink = unlinkSync;

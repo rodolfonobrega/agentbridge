@@ -14,7 +14,6 @@ const str = (o: any) =>
           return String(o);
         }
       })();
-const sha = (t: any) => createHash('sha256').update(String(t ?? '')).digest('hex');
 
 export interface BridgeMetaOptions {
   bind?: string;

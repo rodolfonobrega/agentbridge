@@ -202,5 +202,3 @@ if (isServerEntry()) {
     }
   );
 }
-
-export default { startProxy };

@@ -73,10 +73,6 @@ export function clearQuotaFixtures(): void {
   registeredFixtures.clear();
 }
 
-export function getQuotaFixture(agent: string): any | undefined {
-  return registeredFixtures.get(agent.toLowerCase());
-}
-
 export function parseResetTime(v: unknown): number | null {
   if (typeof v === 'number' && Number.isFinite(v)) {
     return v > 1e11 ? Math.round(v) : Math.round(v * 1000);

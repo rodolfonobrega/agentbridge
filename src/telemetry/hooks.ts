@@ -8,7 +8,6 @@ import { runCollect } from '../core/spawn.js';
 import { loadTrackedRun, listTrackedRuns, runStatus } from './stats.js';
 
 export const HOOK_EVENTS = ['start', 'finish', 'error', 'timeout', 'context-threshold'] as const;
-export type HookEventName = (typeof HOOK_EVENTS)[number];
 
 export const bus = new EventEmitter();
 bus.setMaxListeners(0);

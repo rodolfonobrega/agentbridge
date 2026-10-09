@@ -15,7 +15,6 @@ import {
   cliMemoryAdd,
   cliMemoryDecision,
   cliMemoryList,
-  cliMemoryClear,
 } from '../dist/telemetry/memory.js';
 
 test('loadMemory returns default empty memory for uninitialized directory', () => {

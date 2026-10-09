@@ -1,6 +1,5 @@
 // Which agent CLIs are installed on this machine, and what to tell the user when one is not (or is not logged in).
 import { hintFor } from './hints.js';
-export { INSTALL_HINT, LOGIN_HINT, hintFor } from './hints.js';
 import { resolveBinary } from './spawn.js';
 import { findBinary as findAgy } from '../adapters/agy.js';
 import { findBinary as findPi } from '../adapters/pi.js';

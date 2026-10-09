@@ -22,7 +22,7 @@ import {
   sendMessage,
   checkMessages,
 } from './runs.js';
-import { resolvePermissionLevel, PERMISSION_RANK } from '../core/config.js';
+import { resolvePermissionLevel } from '../core/config.js';
 import { VERSION } from '../core/version.js';
 
 const BUILTIN_AGENTS = ['claude', 'codex', 'opencode', 'agy', 'pi', 'cursor', 'grok', 'gemini', 'devin', 'acp'];

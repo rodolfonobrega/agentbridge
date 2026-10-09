@@ -9,7 +9,6 @@ import { findBinary as findAgy } from '../adapters/agy.js';
 import { findBinary as findPi } from '../adapters/pi.js';
 import { cmdInstall, cmdEndpoint, writeSkill } from './install.js';
 import { doctor } from '../extras/doctor.js';
-import { loadEndpoints } from '../adapters/endpoint.js';
 
 import { existsSync, copyFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

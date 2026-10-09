@@ -15,7 +15,7 @@ export {
 export { setPolicy, getPolicy, resolvePolicy, evaluate, handoff, compact, buildHandoffDoc } from './context.js';
 export type { PolicyLimits } from './context.js';
 export { wait, waitAll, fire, bus, normalizeHooks, HOOK_EVENTS } from './hooks.js';
-export type { HookEventName, RunSummary } from './hooks.js';
+export type { RunSummary } from './hooks.js';
 export {
   loadMemory,
   saveMemory,
@@ -28,7 +28,6 @@ export {
   cliMemoryAdd,
   cliMemoryDecision,
   cliMemoryList,
-  cliMemoryClear,
 } from './memory.js';
 export type { ProjectMemory, MemoryDecision } from './memory.js';
 

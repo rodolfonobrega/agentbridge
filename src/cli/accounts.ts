@@ -6,7 +6,6 @@ import {
   setActiveAccount,
   getActiveAccount,
   getAccountEnv,
-  AccountRecord,
 } from '../core/accounts.js';
 import { UsageError } from './args.js';
 import { getProactiveQuotaStatus, formatQuotaStatus } from '../quota/proactive.js';

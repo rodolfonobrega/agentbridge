@@ -17,9 +17,6 @@ export interface QuotaStatus {
   updatedAt: number;
 }
 
-const CLAUDE_OAUTH_USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
-const CODEX_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
-
 function parseResetTime(v: unknown): number | null {
   if (typeof v === 'number' && Number.isFinite(v)) return v > 1e11 ? v : v * 1000;
   if (typeof v === 'string') {
@@ -97,55 +94,4 @@ export function parseCodexUsageResponse(data: any): QuotaStatus {
     raw: data,
     updatedAt: Date.now(),
   };
-}
-
-export async function fetchClaudeQuota(
-  token: string,
-  options: { signal?: AbortSignal; timeoutMs?: number; fetchImpl?: typeof fetch } = {}
-): Promise<QuotaStatus | null> {
-  const timeoutMs = options.timeoutMs ?? 8000;
-  const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
-  const f = options.fetchImpl || globalThis.fetch;
-
-  try {
-    const res = await f(CLAUDE_OAUTH_USAGE_URL, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'anthropic-beta': 'oauth-2025-04-20',
-        'User-Agent': 'claude-code/2.1.0',
-      },
-      signal,
-    });
-    if (!res.ok) return null;
-    const body = await res.json();
-    return parseClaudeUsageResponse(body);
-  } catch {
-    return null;
-  }
-}
-
-export async function fetchCodexQuota(
-  token: string,
-  options: { signal?: AbortSignal; timeoutMs?: number; fetchImpl?: typeof fetch } = {}
-): Promise<QuotaStatus | null> {
-  const timeoutMs = options.timeoutMs ?? 8000;
-  const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
-  const f = options.fetchImpl || globalThis.fetch;
-
-  try {
-    const res = await f(CODEX_USAGE_URL, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'User-Agent': 'codex-cli/0.1.0',
-      },
-      signal,
-    });
-    if (!res.ok) return null;
-    const body = await res.json();
-    return parseCodexUsageResponse(body);
-  } catch {
-    return null;
-  }
 }

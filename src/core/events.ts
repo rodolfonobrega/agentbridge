@@ -89,15 +89,6 @@ export function parseJsonLine(line: string): any | undefined {
   }
 }
 
-/** Async-iterate parsed JSON objects from an async iterable of lines. Non-JSON lines are yielded as {__nonjson: line}. */
-export async function* jsonlObjects(lines: AsyncIterable<string> | Iterable<string>): AsyncGenerator<any, void, unknown> {
-  for await (const line of lines) {
-    if (!line.trim()) continue;
-    const o = parseJsonLine(line);
-    yield o === undefined ? { __nonjson: line } : o;
-  }
-}
-
 export interface LineSplitterOptions {
   maxLine?: number;
 }

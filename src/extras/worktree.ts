@@ -199,5 +199,3 @@ export async function runInWorktree(agent: any, opts: any, { runOne, budget, gen
   );
   return { ...(value as any), worktree: { mode, diff, files, path: kept } };
 }
-
-export const _exists = existsSync;

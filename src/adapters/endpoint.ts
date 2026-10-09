@@ -490,5 +490,3 @@ export function makeEndpointAdapter(cfg: EndpointConfig): AgentAdapter {
   };
   return adapter;
 }
-
-export default makeEndpointAdapter;
