@@ -137,7 +137,11 @@ export async function cmdAccount(
 
     const results: any[] = [];
     for (const acc of accounts) {
-      const q = await getProactiveQuotaStatus(acc.agent);
+      const accEnv = getAccountEnv(acc.agent, acc.name, flags.baseDir);
+      const q = await getProactiveQuotaStatus(acc.agent, undefined, {
+        env: accEnv,
+        profileDir: acc.profileDir,
+      });
       results.push({
         agent: acc.agent,
         account: acc.name,

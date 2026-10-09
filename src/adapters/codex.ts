@@ -11,7 +11,7 @@ import { codexDaemonPool } from './codex-daemon.js';
 
 export { codexDaemonPool };
 
-const codexHome = (): string => process.env.CODEX_HOME || path.join(homedir(), '.codex');
+const codexHome = (env?: NodeJS.ProcessEnv): string => env?.CODEX_HOME || process.env.CODEX_HOME || path.join(homedir(), '.codex');
 const toml = (v: any): string => JSON.stringify(v);
 const EFFORT: Record<string, string> = { low: 'low', medium: 'medium', high: 'high', max: 'xhigh' };
 const SANDBOX: Record<string, string> = { 'read-only': 'read-only', plan: 'read-only', edit: 'workspace-write', full: 'danger-full-access' };
@@ -20,8 +20,8 @@ const PLAN_NOTE = 'PLAN MODE: do not modify any files or run state-changing comm
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const bad = (m: string) => new AgentError('BAD_OPTION', m);
 
-function rolloutExists(id: string): boolean {
-  const root = path.join(codexHome(), 'sessions');
+function rolloutExists(id: string, env?: NodeJS.ProcessEnv): boolean {
+  const root = path.join(codexHome(env), 'sessions');
   let found = false;
   const walk = (d: string) => {
     for (const e of readdirSync(d, { withFileTypes: true })) {
@@ -36,8 +36,8 @@ function rolloutExists(id: string): boolean {
 
 const OWN = new Map<string, string>();
 
-function newestRollout(cwd: string, adoptForeign: boolean, scope = ''): string | undefined {
-  const root = path.join(codexHome(), 'sessions');
+function newestRollout(cwd: string, adoptForeign: boolean, scope = '', env?: NodeJS.ProcessEnv): string | undefined {
+  const root = path.join(codexHome(env), 'sessions');
   let best: { m: number; id: string } | null = null;
   const want = path.resolve(cwd).toLowerCase();
   const walk = (d: string) => {
@@ -134,12 +134,12 @@ function buildArgs(o: any, schemaFile?: string, claim: { id?: string } = {}, ima
   if (sub.length) {
     let id = s.id;
     if (!id) {
-      id = newestRollout(o.cwd || process.cwd(), s.adoptForeign === true, s.scope ?? '');
+      id = newestRollout(o.cwd || process.cwd(), s.adoptForeign === true, s.scope ?? '', o.env);
       if (!id)
         throw bad(
           `No codex session started by this process found in cwd to ${mode} (pass session.id, or session.adoptForeign=true to adopt the newest session in cwd)`
         );
-    } else if (!rolloutExists(id)) {
+    } else if (!rolloutExists(id, o.env)) {
       throw bad(`Session ${id} not found (cannot ${mode})`);
     }
     if (!s.id && (BUSY.get(id) || 0) > 0) throw bad('session busy; pass explicit id');

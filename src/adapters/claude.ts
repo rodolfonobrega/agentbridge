@@ -34,7 +34,7 @@ async function lock(id: string): Promise<() => void> {
 }
 const bad = (m: string) => new AgentError('BAD_OPTION', m);
 
-function latestSession(cwd: string): string | undefined {
+function latestSession(cwd: string, env?: NodeJS.ProcessEnv): string | undefined {
   let real = cwd;
   try {
     real = realpathSync(cwd);
@@ -42,7 +42,7 @@ function latestSession(cwd: string): string | undefined {
     /* keep */
   }
   const root = path.join(
-    process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude'),
+    env?.CLAUDE_CONFIG_DIR || process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude'),
     'projects',
     real.replace(/[^a-zA-Z0-9]/g, '-')
   );
@@ -163,7 +163,7 @@ const adapter: AgentAdapter = {
           resumeId = mine.find((id) => !busy.get(id));
           if (!resumeId && mine.length) throw bad('session busy (in use by another continue); pass an explicit session.id');
         } else resumeId = mine[0];
-        if (!resumeId && sess.adoptForeign) resumeId = latestSession(o.cwd || process.cwd());
+        if (!resumeId && sess.adoptForeign) resumeId = latestSession(o.cwd || process.cwd(), o.env);
       }
       if (!resumeId)
         throw bad(

@@ -126,7 +126,9 @@ export function createPool(raw: any, { now = Date.now }: { now?: () => number } 
     updateQuota(agent: string, name: string, quota: { sessionPercent?: number; weeklyPercent?: number; resetsAt?: number | null; isThrottled?: boolean }) {
       const s = st(agent, name);
       (s as any).quota = quota;
-      const throttled = quota.isThrottled || (typeof quota.sessionPercent === 'number' && quota.sessionPercent >= 95);
+      const throttled = quota.isThrottled ||
+        (typeof quota.sessionPercent === 'number' && quota.sessionPercent >= 95) ||
+        (typeof quota.weeklyPercent === 'number' && quota.weeklyPercent >= 95);
       if (throttled) {
         s.kind = 'quota';
         s.until = Math.max(s.until, quota.resetsAt && quota.resetsAt > now() ? quota.resetsAt : now() + COOLDOWN_MS.quota);

@@ -276,4 +276,16 @@ If you have shell execution access, you can run high-level orchestration workflo
 - **Subagent Delegation Discovery:**
   The `SubagentRoster` normalizes full MCP server tool prefixes (such as `mcp__agentbridge__ask_*` and `mcp__agentbridge__dispatch_*`), allowing seamless subagent tree tracking and preventing premature completion of asynchronous background dispatches.
 
+## Telemetry, Context & Quota Reliability Guarantees (Phase 5 Hardening)
+
+- **Loop-Free Compaction & Handoff Maintenance (`MAINTENANCE_POLICY`):**
+  Context maintenance routines (`compact` and cross-agent `handoff`) execute with all context policies and hard thresholds strictly suspended (`hardAction: 'none'`), eliminating recursive re-entry loops where a summarizing subagent is terminated by the very limit it was spawned to resolve.
+- **Accurate Context Overflow Tracking:**
+  Context window limits are never inflated to artificial boundaries (e.g. 1M tokens) when a session exceeds its known capacity. Instead, known windows remain authentic, overflow flags (`overflow: true`) are explicitly set, and percent indicators accurately exceed 100% to trigger warnings and hard boundaries without masking.
+- **Fallback Session Continuity & Effective Agent Attribution:**
+  When a requested agent triggers a fallback to an alternative model or agent, telemetry and persistent sessions are indexed under `effectiveAgent`. Subsequent continuation requests on the same session key cleanly resume on the effective agent that actually holds the conversational state, preventing mismatched CLI session errors.
+- **Multi-Window Proactive Quota & Account Health:**
+  `ab account quota` inspects both primary windows (5h/session) and secondary windows (7d/weekly for Codex and Claude). Accounts reaching >= 95% on weekly allocations are flagged as throttled (`blockingWindow: 'secondary'`) and placed into cooldown within account pools. Network errors or missing tokens are clearly reported as `error` or `unknown`, never falsified as 0% used.
+
+
 

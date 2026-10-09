@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+
 // Direct proactive quota querying before hitting 429 errors (inspired by Orca).
 // Queries provider usage APIs (Anthropic OAuth usage API, ChatGPT backend API)
 // with threshold-based health status and fallback mock/fixture support.
@@ -12,6 +15,8 @@ export interface AnthropicUsage {
   sevenDayResetsAt: number | null;
   fiveHour?: { usedPercent: number; resetsAt: number | null };
   sevenDay?: { usedPercent: number; resetsAt: number | null };
+  status?: 'ok' | 'error' | 'offline' | 'unknown';
+  error?: string;
   raw?: any;
 }
 
@@ -20,15 +25,21 @@ export interface CodexUsage {
   resetsAt: number | null;
   secondaryPercent?: number;
   windowMinutes: number;
+  status?: 'ok' | 'error' | 'offline' | 'unknown';
+  error?: string;
   raw?: any;
 }
 
 export interface ProactiveQuotaHealth {
   agent: string;
   usedPercent: number;
+  secondaryPercent?: number;
   windowMinutes: number;
   resetAt: number | null;
   okToProceed: boolean;
+  status?: 'ok' | 'error' | 'offline' | 'unknown';
+  error?: string;
+  blockingWindow?: 'primary' | 'secondary' | null;
 }
 
 export interface QuotaQueryOptions {
@@ -37,6 +48,8 @@ export interface QuotaQueryOptions {
   fetchImpl?: typeof fetch;
   fixture?: any;
   thresholdPercent?: number;
+  env?: NodeJS.ProcessEnv;
+  profileDir?: string;
 }
 
 const registeredFixtures = new Map<string, any>();
@@ -156,7 +169,7 @@ export async function fetchAnthropicUsage(
       signal,
     });
     if (!res.ok) {
-      if (process.env.NODE_ENV === 'test' || isMockOrOffline('claude', options)) {
+      if (options.fixture || registeredFixtures.has('claude')) {
         return parseAnthropicUsage(DEFAULT_MOCK_FIXTURES.claude);
       }
       return {
@@ -164,13 +177,17 @@ export async function fetchAnthropicUsage(
         sevenDayPercent: 0,
         fiveHourResetsAt: null,
         sevenDayResetsAt: null,
+        status: 'error',
+        error: `HTTP ${res.status}: ${res.statusText || 'request failed'}`,
         raw: null,
       };
     }
     const body = await res.json();
-    return parseAnthropicUsage(body);
-  } catch (e) {
-    if (process.env.NODE_ENV === 'test' || isMockOrOffline('claude', options)) {
+    const parsed = parseAnthropicUsage(body);
+    parsed.status = 'ok';
+    return parsed;
+  } catch (e: any) {
+    if (options.fixture || registeredFixtures.has('claude')) {
       return parseAnthropicUsage(DEFAULT_MOCK_FIXTURES.claude);
     }
     return {
@@ -178,6 +195,8 @@ export async function fetchAnthropicUsage(
       sevenDayPercent: 0,
       fiveHourResetsAt: null,
       sevenDayResetsAt: null,
+      status: 'error',
+      error: String(e?.message || e),
       raw: null,
     };
   }
@@ -216,26 +235,32 @@ export async function fetchCodexUsage(
       signal,
     });
     if (!res.ok) {
-      if (process.env.NODE_ENV === 'test' || isMockOrOffline('codex', options)) {
+      if (options.fixture || registeredFixtures.has('codex')) {
         return parseCodexUsage(DEFAULT_MOCK_FIXTURES.codex);
       }
       return {
         primaryPercent: 0,
         resetsAt: null,
         windowMinutes: 300,
+        status: 'error',
+        error: `HTTP ${res.status}: ${res.statusText || 'request failed'}`,
         raw: null,
       };
     }
     const body = await res.json();
-    return parseCodexUsage(body);
-  } catch (e) {
-    if (process.env.NODE_ENV === 'test' || isMockOrOffline('codex', options)) {
+    const parsed = parseCodexUsage(body);
+    parsed.status = 'ok';
+    return parsed;
+  } catch (e: any) {
+    if (options.fixture || registeredFixtures.has('codex')) {
       return parseCodexUsage(DEFAULT_MOCK_FIXTURES.codex);
     }
     return {
       primaryPercent: 0,
       resetsAt: null,
       windowMinutes: 300,
+      status: 'error',
+      error: String(e?.message || e),
       raw: null,
     };
   }
@@ -250,36 +275,98 @@ export async function getProactiveQuotaStatus(
   const threshold = options.thresholdPercent ?? 95;
 
   if (norm === 'claude' || norm === 'anthropic') {
-    const effectiveToken = token || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_TOKEN || 'dummy';
-    const usage = await fetchAnthropicUsage(effectiveToken, options);
+    let effectiveToken = token || options.env?.ANTHROPIC_API_KEY || options.env?.CLAUDE_CODE_TOKEN || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_TOKEN;
+    if (!effectiveToken && options.profileDir) {
+      try {
+        const credPath = path.join(options.profileDir, 'credentials.json');
+        if (existsSync(credPath)) {
+          const c = JSON.parse(readFileSync(credPath, 'utf8'));
+          effectiveToken = c.accessToken || c.token || c.sessionToken || c.apiKey;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!effectiveToken && !isMockOrOffline('claude', options)) {
+      return {
+        agent,
+        usedPercent: 0,
+        windowMinutes: 300,
+        resetAt: null,
+        okToProceed: false,
+        status: 'unknown',
+        error: 'No credential or API token configured',
+      };
+    }
+    const usage = await fetchAnthropicUsage(effectiveToken || 'dummy', options);
     const usedPercent = usage.fiveHourPercent;
+    const secondaryPercent = usage.sevenDayPercent;
     const windowMinutes = 300;
     const resetAt = usage.fiveHourResetsAt;
-    const okToProceed = usedPercent < threshold && (usage.sevenDayPercent < 98);
+    const fiveHourBlocked = usedPercent >= threshold;
+    const sevenDayBlocked = secondaryPercent >= 98;
+    const hasError = usage.status === 'error';
+    const okToProceed = !hasError && !fiveHourBlocked && !sevenDayBlocked;
+    const blockingWindow = sevenDayBlocked ? 'secondary' : fiveHourBlocked ? 'primary' : null;
 
     return {
       agent,
       usedPercent,
+      secondaryPercent,
       windowMinutes,
       resetAt,
       okToProceed,
+      status: usage.status || 'ok',
+      error: usage.error,
+      blockingWindow,
     };
   }
 
   if (norm === 'codex' || norm === 'chatgpt' || norm === 'openai') {
-    const effectiveToken = token || process.env.CODEX_TOKEN || process.env.OPENAI_API_KEY || 'dummy';
-    const usage = await fetchCodexUsage(effectiveToken, options);
+    let effectiveToken = token || options.env?.CODEX_TOKEN || options.env?.OPENAI_API_KEY || process.env.CODEX_TOKEN || process.env.OPENAI_API_KEY;
+    if (!effectiveToken && options.profileDir) {
+      try {
+        const authPath = path.join(options.profileDir, '.auth');
+        if (existsSync(authPath)) {
+          const a = JSON.parse(readFileSync(authPath, 'utf8'));
+          effectiveToken = a.accessToken || a.token;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!effectiveToken && !isMockOrOffline('codex', options)) {
+      return {
+        agent,
+        usedPercent: 0,
+        windowMinutes: 300,
+        resetAt: null,
+        okToProceed: false,
+        status: 'unknown',
+        error: 'No credential or API token configured',
+      };
+    }
+    const usage = await fetchCodexUsage(effectiveToken || 'dummy', options);
     const usedPercent = usage.primaryPercent;
+    const secondaryPercent = usage.secondaryPercent ?? 0;
     const windowMinutes = usage.windowMinutes || 300;
     const resetAt = usage.resetsAt;
-    const okToProceed = usedPercent < threshold;
+    const primaryBlocked = usedPercent >= threshold;
+    const secondaryBlocked = secondaryPercent >= threshold;
+    const hasError = usage.status === 'error';
+    const okToProceed = !hasError && !primaryBlocked && !secondaryBlocked;
+    const blockingWindow = secondaryBlocked ? 'secondary' : primaryBlocked ? 'primary' : null;
 
     return {
       agent,
       usedPercent,
+      secondaryPercent,
       windowMinutes,
       resetAt,
       okToProceed,
+      status: usage.status || 'ok',
+      error: usage.error,
+      blockingWindow,
     };
   }
 
@@ -296,6 +383,7 @@ export async function getProactiveQuotaStatus(
       windowMinutes,
       resetAt,
       okToProceed,
+      status: 'ok',
     };
   }
 
@@ -305,13 +393,21 @@ export async function getProactiveQuotaStatus(
     windowMinutes: 0,
     resetAt: null,
     okToProceed: true,
+    status: 'ok',
   };
 }
 
 export function formatQuotaStatus(status: ProactiveQuotaHealth): string {
+  if (status.status === 'error') {
+    return `[${status.agent}] ERROR: ${status.error || 'request failed'}`;
+  }
+  if (status.status === 'unknown') {
+    return `[${status.agent}] UNKNOWN: ${status.error || 'no credentials'}`;
+  }
   const state = status.okToProceed ? 'OK' : 'THROTTLED';
+  const blockPart = status.blockingWindow ? ` (${status.blockingWindow} window blocked)` : '';
   const resetPart = status.resetAt ? `, reset: ${new Date(status.resetAt).toISOString()}` : '';
-  return `[${status.agent}] ${status.usedPercent}% used (${status.windowMinutes}m window${resetPart}) - ${state}`;
+  return `[${status.agent}] ${status.usedPercent}% used (${status.windowMinutes}m window${resetPart})${blockPart} - ${state}`;
 }
 
 export function formatQuotaForPrompt(status: ProactiveQuotaHealth): string {

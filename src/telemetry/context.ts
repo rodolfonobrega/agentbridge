@@ -14,7 +14,7 @@ export interface PolicyLimits {
   compact?: number | null;
   hard?: number | null;
   autoCompact?: boolean;
-  hardAction?: 'block' | 'handoff';
+  hardAction?: 'block' | 'handoff' | 'none';
   handoffTo?: string | null;
 }
 
@@ -214,6 +214,13 @@ export function buildHandoffDoc({
 export const seedPrompt = (doc: string): string =>
   `${doc}\n\nYou are taking over this work now. Acknowledge by replying with exactly one line: "READY: " followed by one sentence stating what you are continuing.`;
 
+export const MAINTENANCE_POLICY: PolicyLimits = {
+  warn: null,
+  hard: null,
+  autoCompact: false,
+  hardAction: 'none',
+};
+
 const lazy = () => import('./track.js');
 
 export async function handoff(sessionId: string, toAgent: string, opts: any = {}): Promise<any> {
@@ -243,7 +250,7 @@ export async function handoff(sessionId: string, toAgent: string, opts: any = {}
               permissions: 'read-only',
               timeoutMs: opts.timeoutMs || 240_000,
             },
-            { env, hooks: {} }
+            { env, hooks: {}, policy: MAINTENANCE_POLICY }
           )
         ).text;
     if (!parseSections(summaryMd).summary) throw new Error('summary has no "## Summary" section');
@@ -291,7 +298,7 @@ export async function handoff(sessionId: string, toAgent: string, opts: any = {}
         timeoutMs: opts.timeoutMs || 240_000,
         session: { mode: 'new' },
       },
-      { env, hooks: {} }
+      { env, hooks: {}, policy: MAINTENANCE_POLICY }
     );
     out.newSessionId = r.sessionId;
     out.ack = String(r.text || '').trim();
@@ -320,7 +327,7 @@ export async function compact(sessionId: string, opts: any = {}): Promise<any> {
           permissions: 'read-only',
           isolated: false,
         },
-        { env, hooks: {}, policy: { warn: null } }
+        { env, hooks: {}, policy: MAINTENANCE_POLICY }
       );
       const after = contextOf(sessionId, { agent, env });
       if (after?.source === 'claude-compact-summary-estimate') {
@@ -336,7 +343,7 @@ export async function compact(sessionId: string, opts: any = {}): Promise<any> {
                 timeoutMs: opts.timeoutMs || 240_000,
                 permissions: 'read-only',
               },
-              { env, hooks: {}, policy: { warn: null } }
+              { env, hooks: {}, policy: MAINTENANCE_POLICY }
             );
             measured = contextOf(sessionId, { agent, env });
           } catch {

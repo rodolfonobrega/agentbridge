@@ -10,6 +10,7 @@ import { isInstalled } from '../core/readiness.js';
 import { AccountPool } from './pool.js';
 import { StatsTracker } from './stats.js';
 import { RunOptions, AgentEvent } from '../types/index.js';
+import { getProactiveQuotaStatus } from '../quota/proactive.js';
 
 const run = (agent: any, opts: any) => runTracked(agent, opts, { origin: 'proxy' });
 
@@ -325,7 +326,7 @@ export async function drive(
 
 // ---------- running ----------
 let cwd: string | undefined;
-const sessions = new Map<string, { agent: string; id: string }>();
+export const sessions = new Map<string, { agent: string; id: string }>();
 export const est = (s?: string): number => Math.ceil((s || '').length / 4);
 const HOLD = Symbol('hold');
 const FINISH: Record<string, string> = {
@@ -352,9 +353,31 @@ export async function* runAgent(o: any): AsyncGenerator<{ type: string; delta: s
       retryAfterMs: o.pool.retryAfterMs(aname),
     });
   }
-  const keyOf = () => (o.sessionKey ? `${aname}:${acct ? acct.name + ':' : ''}${o.sessionKey}` : null);
+  if (o.pool && acct) {
+    getProactiveQuotaStatus(aname, undefined, { env: acct.env }).then((q) => {
+      if (q && q.status === 'ok') {
+        o.pool.updateQuota(aname, acct.name, {
+          sessionPercent: q.usedPercent,
+          weeklyPercent: q.secondaryPercent,
+          resetsAt: q.resetAt,
+          isThrottled: !q.okToProceed,
+        });
+      }
+    }).catch(() => {});
+  }
+  const keyOf = (name = aname) => (o.sessionKey ? `${name}:${acct ? acct.name + ':' : ''}${o.sessionKey}` : null);
   let key = keyOf(),
     known = key ? sessions.get(key) : undefined;
+  if (!known && o.sessionKey) {
+    for (const [k, v] of sessions.entries()) {
+      if (k.endsWith(`:${o.sessionKey}`) && v?.id) {
+        known = v;
+        key = k;
+        break;
+      }
+    }
+  }
+  const dispatchAgent = known?.agent && known.agent !== aname ? (agents.get(known.agent) || known.agent) : agent;
   const ac = new AbortController();
   const onAbort = () => ac.abort();
   if (o.signal?.aborted) ac.abort();
@@ -437,7 +460,7 @@ export async function* runAgent(o: any): AsyncGenerator<{ type: string; delta: s
         }
         return false;
       };
-      const it = run(agent, opts);
+      const it = run(dispatchAgent, opts);
       try {
         for (;;) {
           let x: any;
@@ -543,8 +566,12 @@ export async function* runAgent(o: any): AsyncGenerator<{ type: string; delta: s
         for (const t of out.splice(0)) yield { type: 'text', delta: t };
       }
       sid = r?.sessionId || sid;
+      const effectiveAgent = r?.fallback?.used || known?.agent || aname;
       if (acct) o.pool.ok(aname, acct.name);
-      if (key && sid) sessions.set(key, { agent: aname, id: sid });
+      if (key && sid) sessions.set(key, { agent: effectiveAgent, id: sid });
+      if (o.sessionKey && sid && effectiveAgent !== aname) {
+        sessions.set(`${effectiveAgent}:${acct ? acct.name + ':' : ''}${o.sessionKey}`, { agent: effectiveAgent, id: sid });
+      }
       const u = !limited && r?.usage ? r.usage : {};
       const finishReason = toolCalls.length
         ? 'tool_calls'
@@ -555,8 +582,9 @@ export async function* runAgent(o: any): AsyncGenerator<{ type: string; delta: s
         : FINISH[r?.stopReason] || 'stop';
       const usage = { input: u.input ?? est(o.prompt), output: u.output ?? est(sent) };
       o.stats?.record({
-        agent: aname,
-        model: model || null,
+        agent: effectiveAgent,
+        requestedAgent: aname,
+        model: r?.model || model || null,
         account: acct?.name ?? null,
         mode: isAgent ? 'agent' : 'api',
         finish: finishReason,
@@ -569,6 +597,8 @@ export async function* runAgent(o: any): AsyncGenerator<{ type: string; delta: s
         sessionId: sid,
         model: r?.model,
         finishReason,
+        fallback: r?.fallback || null,
+        effectiveAgent,
         ...(limited?.stopSequence ? { stopSequence: limited.stopSequence } : {}),
         ...(r?.stopReason ? { stopReason: r.stopReason } : {}),
         ...(toolCalls.length ? { toolCalls } : {}),

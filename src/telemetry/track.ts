@@ -34,27 +34,34 @@ export async function* runWithTelemetry(
     pending.push(p);
     return p;
   };
-  const policyOf = (sid: string) => getPolicy(name, sid, env, tele.policy);
+  const policyOf = (sid: string) => {
+    if (tele.policy?.hardAction === 'none' && tele.policy?.hard === null) {
+      return { warn: null, hard: null, autoCompact: false, hardAction: 'none' as const };
+    }
+    return getPolicy(name, sid, env, tele.policy);
+  };
 
   // hard limit: refuse to grow a session already over its limit
   const startSid = o.session?.mode === 'continue' || o.session?.mode === 'fork' ? o.session.id : null;
   if (startSid) {
-    const c = contextOf(startSid, { agent: name, env, windows: tele.windows });
     const pol = policyOf(startSid);
-    if (c && pol.hard != null && evaluate(c, pol).level === 'hard') {
-      if (pol.hardAction === 'handoff' && pol.handoffTo) {
-        const h = await handoff(startSid, pol.handoffTo, { agent: name, env, cwd: o.cwd });
+    if (pol.hard != null && pol.hardAction !== 'none') {
+      const c = contextOf(startSid, { agent: name, env, windows: tele.windows });
+      if (c && evaluate(c, pol).level === 'hard') {
+        if (pol.hardAction === 'handoff' && pol.handoffTo) {
+          const h = await handoff(startSid, pol.handoffTo, { agent: name, env, cwd: o.cwd });
+          throw new AgentError(
+            'AGENT_FAILED',
+            `context hard limit reached (${c.tokens}/${c.window} tokens): session handed off to ${pol.handoffTo} session ${h.newSessionId}`,
+            { reason: 'CONTEXT_HARD_LIMIT', handoff: h }
+          );
+        }
         throw new AgentError(
           'AGENT_FAILED',
-          `context hard limit reached (${c.tokens}/${c.window} tokens): session handed off to ${pol.handoffTo} session ${h.newSessionId}`,
-          { reason: 'CONTEXT_HARD_LIMIT', handoff: h }
+          `context hard limit reached (${c.tokens}/${c.window} tokens, ${c.exact ? 'exact' : 'estimate'}); compact or handoff first`,
+          { reason: 'CONTEXT_HARD_LIMIT', context: c }
         );
       }
-      throw new AgentError(
-        'AGENT_FAILED',
-        `context hard limit reached (${c.tokens}/${c.window} tokens, ${c.exact ? 'exact' : 'estimate'}); compact or handoff first`,
-        { reason: 'CONTEXT_HARD_LIMIT', context: c }
-      );
     }
   }
 

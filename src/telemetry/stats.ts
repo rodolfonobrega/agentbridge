@@ -163,21 +163,33 @@ export interface SessionContextResult {
   file?: string;
 }
 
+const sessionContextCache = new Map<string, { result: SessionContextResult | null; cachedAt: number }>();
+const CACHE_TTL_MS = 30_000;
+
 export function readSessionContext(
   agent: string,
   sessionId: string,
-  { homeDir = homedir(), cwd }: { homeDir?: string; cwd?: string } = {}
+  { homeDir = homedir(), cwd, env }: { homeDir?: string; cwd?: string; env?: NodeJS.ProcessEnv } = {}
 ): SessionContextResult | null {
   if (!sessionId) return null;
+  const cacheKey = `${agent}:${sessionId}:${env?.CLAUDE_CONFIG_DIR || env?.CODEX_HOME || ''}`;
+  const hit = sessionContextCache.get(cacheKey);
+  if (hit && Date.now() - hit.cachedAt < CACHE_TTL_MS) {
+    return hit.result;
+  }
+  let res: SessionContextResult | null = null;
   try {
     if (agent === 'claude') {
-      const root = path.join(homeDir, '.claude', 'projects');
+      const claudeDir = env?.CLAUDE_CONFIG_DIR || path.join(homeDir, '.claude');
+      const root = path.join(claudeDir, 'projects');
       let f: string | null = null;
-      for (const d of readdirSync(root)) {
-        const c = path.join(root, d, `${sessionId}.jsonl`);
-        if (existsSync(c)) {
-          f = c;
-          break;
+      if (existsSync(root)) {
+        for (const d of readdirSync(root)) {
+          const c = path.join(root, d, `${sessionId}.jsonl`);
+          if (existsSync(c)) {
+            f = c;
+            break;
+          }
         }
       }
       if (!f) return null;
@@ -192,7 +204,8 @@ export function readSessionContext(
         if (j.type === 'user' && j.isCompactSummary) {
           const c = j.message?.content;
           const txt = typeof c === 'string' ? c : JSON.stringify(c || '');
-          return { tokens: estimateTokens(txt), exact: false, source: 'claude-compact-summary-estimate', file: f };
+          res = { tokens: estimateTokens(txt), exact: false, source: 'claude-compact-summary-estimate', file: f };
+          break;
         }
         const u = j.type === 'assistant' && j.message?.usage;
         if (u && j.message?.model !== '<synthetic>') {
@@ -201,34 +214,39 @@ export function readSessionContext(
             (u.cache_creation_input_tokens || 0) +
             (u.cache_read_input_tokens || 0) +
             (u.output_tokens || 0);
-          return { tokens, exact: true, source: 'claude-session-file', model: j.message.model, file: f };
+          res = { tokens, exact: true, source: 'claude-session-file', model: j.message.model, file: f };
+          break;
         }
       }
     } else if (agent === 'opencode') {
-      const bin = resolveBinary('opencode');
+      const bin = resolveBinary('opencode', env);
       if (!bin) return null;
       const r = spawnSync(bin, ['export', sessionId], {
         cwd: cwd || undefined,
+        env: env ? { ...process.env, ...env } : undefined,
         encoding: 'utf8',
-        timeout: 25_000,
+        timeout: 3_000,
         windowsHide: true,
-        maxBuffer: 256 * 1024 * 1024,
+        maxBuffer: 32 * 1024 * 1024,
       });
       const i = (r.stdout || '').indexOf('{');
-      if (r.status !== 0 || i < 0) return null;
-      const j = JSON.parse(r.stdout.slice(i));
-      const msgs = (j.messages || []).filter((m: any) => m.info?.role === 'assistant' && m.info.tokens);
-      const last = msgs[msgs.length - 1];
-      if (!last) return null;
-      const t = last.info.tokens;
-      return {
-        tokens: (t.input || 0) + (t.output || 0) + (t.cache?.read || 0) + (t.cache?.write || 0),
-        exact: true,
-        source: 'opencode-export',
-        model: last.info.modelID ? `${last.info.providerID ? last.info.providerID + '/' : ''}${last.info.modelID}` : undefined,
-      };
+      if (r.status === 0 && i >= 0) {
+        const j = JSON.parse(r.stdout.slice(i));
+        const msgs = (j.messages || []).filter((m: any) => m.info?.role === 'assistant' && m.info.tokens);
+        const last = msgs[msgs.length - 1];
+        if (last) {
+          const t = last.info.tokens;
+          res = {
+            tokens: (t.input || 0) + (t.output || 0) + (t.cache?.read || 0) + (t.cache?.write || 0),
+            exact: true,
+            source: 'opencode-export',
+            model: last.info.modelID ? `${last.info.providerID ? last.info.providerID + '/' : ''}${last.info.modelID}` : undefined,
+          };
+        }
+      }
     } else if (agent === 'codex') {
-      const f = findFile(path.join(homeDir, '.codex', 'sessions'), (n) => n.startsWith('rollout-') && n.endsWith(`${sessionId}.jsonl`));
+      const codexDir = env?.CODEX_HOME || path.join(homeDir, '.codex');
+      const f = findFile(path.join(codexDir, 'sessions'), (n) => n.startsWith('rollout-') && n.endsWith(`${sessionId}.jsonl`));
       if (!f) return null;
       const lines = tailLines(f, 800_000);
       let model: string | undefined;
@@ -263,8 +281,8 @@ export function readSessionContext(
         }
         const info = j.payload?.info || j.info;
         const l = info?.last_token_usage;
-        if (l)
-          return {
+        if (l) {
+          res = {
             tokens: (l.input_tokens || 0) + (l.output_tokens || 0),
             exact: true,
             source: 'codex-session-file',
@@ -272,12 +290,15 @@ export function readSessionContext(
             model,
             file: f,
           };
+          break;
+        }
       }
     }
   } catch {
     /* fall through */
   }
-  return null;
+  sessionContextCache.set(cacheKey, { result: res, cachedAt: Date.now() });
+  return res;
 }
 
 export function runStatus(rec: any, { now = Date.now(), idleMs = 30_000, isAlive = alive }: { now?: number; idleMs?: number; isAlive?: (pid: number) => boolean } = {}): string {
@@ -304,6 +325,8 @@ export function createTracker({ agent, opts, env = process.env, origin = 'tracke
     id: randomUUID().slice(0, 12),
     origin,
     agent,
+    requestedAgent: agent,
+    effectiveAgent: agent,
     model: opts.model || null,
     cwd: opts.cwd || process.cwd(),
     pid: process.pid,
@@ -383,11 +406,14 @@ export function createTracker({ agent, opts, env = process.env, origin = 'tracke
           if (typeof result.usage.cost === 'number') rec.cost = result.usage.cost;
         }
         if (result.text && !rec.textTail) rec.textTail = String(result.text).slice(-3000);
-        if (result.fallback?.used)
+        if (result.fallback?.used) {
+          rec.effectiveAgent = result.fallback.used;
+          rec.agent = result.fallback.used;
           rec.fallback = {
             used: result.fallback.used,
             attempts: (result.fallback.attempts || []).map((a: any) => ({ agent: a.agent, code: a.code })),
           };
+        }
       } else {
         rec.state = error?.code === 'TIMEOUT' ? 'timeout' : error?.code === 'ABORTED' ? 'cancelled' : 'error';
         rec.timedOut = rec.state === 'timeout';
@@ -446,13 +472,17 @@ function withLock<T>(lockPath: string, fn: () => T): T {
 }
 
 function foldIntoSession(run: any, env: NodeJS.ProcessEnv): any {
-  const f = sessionFile(env, run.agent, run.sessionId);
+  const effectiveAgent = run.effectiveAgent || run.fallback?.used || run.agent;
+  const f = sessionFile(env, effectiveAgent, run.sessionId);
   return withLock(`${f}.lock`, () => foldLocked(run, env, f));
 }
 
 function foldLocked(run: any, env: NodeJS.ProcessEnv, f: string): void {
+  const effectiveAgent = run.effectiveAgent || run.fallback?.used || run.agent;
   const s = readJson(f) || {
-    agent: run.agent,
+    agent: effectiveAgent,
+    requestedAgent: run.requestedAgent || run.agent,
+    effectiveAgent,
     sessionId: run.sessionId,
     firstAt: run.startedAt,
     runIds: [],
@@ -464,6 +494,9 @@ function foldLocked(run: any, env: NodeJS.ProcessEnv, f: string): void {
     files: [],
     firstPrompt: run.promptHead,
   };
+  s.agent = effectiveAgent;
+  s.effectiveAgent = effectiveAgent;
+  if (!s.requestedAgent) s.requestedAgent = run.requestedAgent || run.agent;
   s.model = run.model || s.model;
   s.cwd = run.cwd;
   s.lastAt = run.endedAt || Date.now();
@@ -479,12 +512,12 @@ function foldLocked(run: any, env: NodeJS.ProcessEnv, f: string): void {
     s.lastPrompt = run.promptHead;
   }
   s.lastRun = { id: run.id, state: run.state };
-  s.ctx = computeCtx(run.agent, run.sessionId, run, s, env);
+  s.ctx = computeCtx(effectiveAgent, run.sessionId, run, s, env);
   writeJson(f, s);
 }
 
 function computeCtx(agent: string, sessionId: string, run: any, s: any, env: NodeJS.ProcessEnv, homeDir?: string): any {
-  const file = readSessionContext(agent, sessionId, { homeDir });
+  const file = readSessionContext(agent, sessionId, { homeDir, env });
   if (file) return { tokens: file.tokens, exact: file.exact, source: file.source, window: file.window || null, at: Date.now() };
   if (run?.lastUsage) {
     const u = run.lastUsage,
@@ -497,24 +530,44 @@ function computeCtx(agent: string, sessionId: string, run: any, s: any, env: Nod
   return { tokens: Math.max(estimateTokens('x'.repeat(chars)), s?.ctx?.tokens || 0), exact: false, source: 'chars/4', at: Date.now() };
 }
 
-export function listSessions(env: NodeJS.ProcessEnv = process.env): any[] {
+export function listSessions(env: NodeJS.ProcessEnv = process.env, { limit = 200, offset = 0 }: { limit?: number; offset?: number } = {}): any[] {
   let names: string[] = [];
+  const dir = sub(env, 'sessions');
   try {
-    names = (readdirSync(sub(env, 'sessions')) as string[]).filter((n: string) => n.endsWith('.json'));
+    names = (readdirSync(dir) as string[]).filter((n: string) => n.endsWith('.json'));
   } catch {
     /* none */
   }
-  return names.map((n) => readJson(path.join(sub(env, 'sessions'), n))).filter(Boolean);
+  names.sort((a, b) => b.localeCompare(a));
+  return names.slice(offset, offset + limit).map((n) => readJson(path.join(dir, n))).filter(Boolean);
 }
 
-export function listTrackedRuns(env: NodeJS.ProcessEnv = process.env): any[] {
+export function listTrackedRuns(
+  env: NodeJS.ProcessEnv = process.env,
+  { limit = 200, offset = 0, pruneMax = 500 }: { limit?: number; offset?: number; pruneMax?: number } = {}
+): any[] {
   let names: string[] = [];
+  const dir = sub(env, 'runs');
   try {
-    names = (readdirSync(sub(env, 'runs')) as string[]).filter((n: string) => n.endsWith('.json'));
+    names = (readdirSync(dir) as string[]).filter((n: string) => n.endsWith('.json'));
   } catch {
     /* none */
   }
-  return names.map((n) => readJson(path.join(sub(env, 'runs'), n))).filter(Boolean);
+  if (names.length > pruneMax) {
+    try {
+      const statsList = names.map((n) => ({ name: n, mtime: statSync(path.join(dir, n)).mtimeMs }));
+      statsList.sort((a, b) => a.mtime - b.mtime);
+      const toDelete = statsList.slice(0, names.length - pruneMax);
+      for (const item of toDelete) {
+        try { unlinkSync(path.join(dir, item.name)); } catch {}
+      }
+      names = (readdirSync(dir) as string[]).filter((n: string) => n.endsWith('.json'));
+    } catch {
+      /* ignore */
+    }
+  }
+  names.sort((a, b) => b.localeCompare(a));
+  return names.slice(offset, offset + limit).map((n) => readJson(path.join(dir, n))).filter(Boolean);
 }
 
 export function loadTrackedRun(id: string, env: NodeJS.ProcessEnv = process.env): any {
@@ -525,7 +578,7 @@ function ctxView(s: any, { env, homeDir, windows, refresh = true }: { env: NodeJ
   let ctx = s.ctx;
   let realModel: string | null = null;
   if (refresh) {
-    const f = readSessionContext(s.agent, s.sessionId, { homeDir, cwd: s.cwd });
+    const f = readSessionContext(s.agent, s.sessionId, { homeDir, cwd: s.cwd, env });
     if (f) {
       realModel = f.model || null;
       ctx = { tokens: f.tokens, exact: f.exact, source: f.source, window: f.window || null, at: Date.now() };
@@ -535,8 +588,8 @@ function ctxView(s: any, { env, homeDir, windows, refresh = true }: { env: NodeJ
   const w = ctx?.window && !windows?.[s.agent] ? { tokens: ctx.window, source: 'session-file' } : windowFor(s.agent, s.model, windows);
   let win = w.tokens,
     wsrc = w.source;
-  if (ctx && ctx.tokens > win && wsrc !== 'override') {
-    win = Math.max(win, 1_000_000);
+  const isOverflow = ctx && win > 0 && ctx.tokens > win;
+  if (isOverflow && wsrc !== 'override') {
     wsrc += '+observed>window';
   }
   const tokens = ctx?.tokens ?? 0;
@@ -550,6 +603,7 @@ function ctxView(s: any, { env, homeDir, windows, refresh = true }: { env: NodeJ
     window: win,
     windowSource: wsrc,
     pct: win ? +(tokens / win).toFixed(4) : null,
+    overflow: !!isOverflow,
     measuredAt: ctx?.at || null,
   };
 }
@@ -563,7 +617,7 @@ export function contextOf(
   if (!s) {
     const cands = agent ? [agent] : ['claude', 'codex'];
     for (const a of cands) {
-      const f = readSessionContext(a, sessionId, { homeDir });
+      const f = readSessionContext(a, sessionId, { homeDir, env });
       if (f)
         s = {
           agent: a,

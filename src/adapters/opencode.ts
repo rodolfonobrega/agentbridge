@@ -17,8 +17,10 @@ const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
 const stripAnsi = (x: any) => String(x).replace(ANSI, '');
 const fwd = (p: string) => p.split('\\').join('/');
 
-const dataDir = () => path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'opencode');
-const authFile = () => path.join(dataDir(), 'auth.json');
+const dataDir = (env?: NodeJS.ProcessEnv) =>
+  env?.OPENCODE_DATA_DIR ||
+  path.join(env?.XDG_DATA_HOME || process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'opencode');
+const authFile = (env?: NodeJS.ProcessEnv) => path.join(dataDir(env), 'auth.json');
 
 function assertInstalled(env: NodeJS.ProcessEnv): void {
   if (!resolveBinary(BIN, env)) {
@@ -29,9 +31,9 @@ function assertInstalled(env: NodeJS.ProcessEnv): void {
   }
 }
 
-function hasAuth(): boolean {
+function hasAuth(env?: NodeJS.ProcessEnv): boolean {
   try {
-    const j = JSON.parse(readFileSync(authFile(), 'utf8'));
+    const j = JSON.parse(readFileSync(authFile(env), 'utf8'));
     return j && Object.keys(j).length > 0;
   } catch {
     return false;
@@ -450,9 +452,9 @@ const adapter: AgentAdapter & { _run: (o: RunOptions) => AsyncGenerator<AgentEve
 
   async *_run(o: RunOptions): AsyncGenerator<AgentEvent, RunResult, void> {
     const started = Date.now();
-    assertInstalled(process.env);
-    if (!hasAuth()) {
-      throw new AgentError('NOT_LOGGED_IN', `No opencode credentials at ${authFile()} (run \`opencode auth login\`)`, {
+    assertInstalled(o.env || process.env);
+    if (!hasAuth(o.env)) {
+      throw new AgentError('NOT_LOGGED_IN', `No opencode credentials at ${authFile(o.env)} (run \`opencode auth login\`)`, {
         agent: 'opencode',
       });
     }

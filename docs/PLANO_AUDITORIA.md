@@ -51,19 +51,19 @@ Snapshot base: `cf50a72`
   - [x] `A70` — Rejeição explícita ou implementação de opções não suportadas em adaptadores novos
   - [x] `A72` — Detecção de empate sem consenso arbitrário no ensemble
 
-- [ ] **Fase 5: Telemetria, Quotas, Contexto & Contas (P2)**
-  - [ ] `A18` — Bloqueio de reentrada recursiva em compact e handoff
-  - [ ] `A20` — Correção do cálculo de janela de contexto evitando quedas artificiais
-  - [ ] `A21` — Associação correta de sessões ao effectiveAgent após fallback
-  - [ ] `A22` — Resolução de contexto respeitando diretórios de perfis gerenciados
-  - [ ] `A23` — Consulta assíncrona de contexto com timeout e cache prevenindo bloqueio do servidor
-  - [ ] `A24` — Política de retenção e paginação na listagem de histórico e sessões
-  - [ ] `A29` — Consulta de quota utilizando credenciais e perfis da conta selecionada
-  - [ ] `A30` — Avaliação da cota semanal (secondaryPercent) do Codex na disponibilidade
-  - [ ] `A41` — Distinção clara de erros/offline vs 0% de uso de quota
-  - [ ] `A42` — Integração automática de verificação de quota na seleção do pool de contas
-  - [ ] `A62` — Retomada de sessões usando o perfil e ambiente correto
-  - [ ] `A65` — Continuidade de sessões de fallback no agente efetivo no proxy
+- [x] **Fase 5: Telemetria, Quotas, Contexto & Contas (P2)**
+  - [x] `A18` — Bloqueio de reentrada recursiva em compact e handoff
+  - [x] `A20` — Correção do cálculo de janela de contexto evitando quedas artificiais
+  - [x] `A21` — Associação correta de sessões ao effectiveAgent após fallback
+  - [x] `A22` — Resolução de contexto respeitando diretórios de perfis gerenciados
+  - [x] `A23` — Consulta assíncrona de contexto com timeout e cache prevenindo bloqueio do servidor
+  - [x] `A24` — Política de retenção e paginação na listagem de histórico e sessões
+  - [x] `A29` — Consulta de quota utilizando credenciais e perfis da conta selecionada
+  - [x] `A30` — Avaliação da cota semanal (secondaryPercent) do Codex na disponibilidade
+  - [x] `A41` — Distinção clara de erros/offline vs 0% de uso de quota
+  - [x] `A42` — Integração automática de verificação de quota na seleção do pool de contas
+  - [x] `A62` — Retomada de sessões usando o perfil e ambiente correto
+  - [x] `A65` — Continuidade de sessões de fallback no agente efetivo no proxy
 
 - [ ] **Fase 6: Armazenamento, Configuração, Memória & UI Dashboard (P2/P3)**
   - [ ] `A25` — Gravação atômica com substituição via renameSync em config, contas e memória
@@ -101,5 +101,7 @@ Snapshot base: `cf50a72`
 - 2026-10-09: Fase 2 (Concorrência e Estabilidade do Codex App-Server) concluída (A03, A04, A05, A58, A59, A68). Testes de aceitação `codex-phase2.test.mjs` e `codex-appserver.test.mjs` 100% passando. Commit `8ed3d4b` enviado ao GitHub.
 - 2026-10-09: Fase 3 (Isolamento de Worktrees, Sandboxes e Execuções CLI) concluída (A07, A08, A09, A38, A39, A60). Testes de aceitação `phase3-isolation.test.mjs` 100% passando (6/6). Untracked files sincronizados no baseline de worktree, confinamento estrito de agentRoot em patches e headers, isolamento de índice git em diff concorrente, preservação de tail em circular buffer no autoRepair, suporte completo a worktree e budget no modo `--stream` e propagação de `.return()` nos geradores.
 - 2026-10-09: Fase 4 (Adaptadores, Roster, MCP Bridge & Pipelines) concluída (A06, A31, A36, A37, A43, A44, A61, A63, A64, A69, A70, A72). Testes de aceitação `phase4-adapters-roster.test.mjs` 100% passando (10/10). Validação estrita de opções e rejeição de incompatibilidades em adaptadores (cursor, gemini, devin, grok, acp), checagem explícita de timeout/abort em child processes, integridade total de status e autoRollback em pipelines, consenso sem vencedor arbitrário em empate e prioridade estrita de rejeição, normalização de prefixos MCP completos no SubagentRoster e schema validator imune a prototype pollution e ciclos.
+- 2026-10-09: Fase 5 (Telemetria, Quotas, Contexto & Contas) concluída (A18, A20, A21, A22, A23, A24, A29, A30, A41, A42, A62, A65). Testes de aceitação `phase5-telemetry-quota.test.mjs` 100% passando (10/10). Suspensão de políticas reentrantes em handoff/compact via MAINTENANCE_POLICY, preservação da janela de contexto real sem inflação artificial para 1M, continuidade e atribuição de sessões pós-fallback ao effectiveAgent, resolução de perfis gerenciados via env, caching e limites em inspeção de contexto, paginação e retenção em histórico/sessões, suporte a verificação de quotas primárias e secundárias com flags de erro reais e rotação proativa no pool de contas.
+
 
 
