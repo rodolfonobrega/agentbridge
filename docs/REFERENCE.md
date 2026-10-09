@@ -812,9 +812,9 @@ const promptHeader = formatMemoryForPrompt(process.cwd());
 
 ---
 
-## Proactive quota probing (`ab quota`)
+## Proactive quota probing (`ab quota` & `check_quota` MCP tool)
 
-Instead of waiting for an HTTP 429 error, AgentBridge proactively polls provider usage APIs (Anthropic OAuth 5-hour/7-day windows and ChatGPT Wham backend endpoints).
+Instead of waiting for an HTTP 429 error, AgentBridge proactively polls provider usage APIs (Anthropic OAuth 5-hour/7-day windows and ChatGPT Wham backend endpoints). This powers both manual command-line inspection and autonomous agent-to-agent delegation.
 
 ### CLI Usage
 ```bash
@@ -827,6 +827,40 @@ ab quota claude --threshold 85%
 # Output machine-readable JSON
 ab quota --json
 ```
+
+### MCP Tool: `check_quota`
+Exposed to all subagents connected via the AgentBridge MCP server. Allows autonomous agents to dynamically query their own (or another agent's) remaining token quota before launching resource-heavy sub-tasks:
+
+**Input Schema:**
+```json
+{
+  "agent": "codex",              // Required: agent name ("codex", "claude", etc.)
+  "thresholdPercent": 95         // Optional: throttling threshold percentage (default 95)
+}
+```
+
+**Output Structure:**
+```json
+{
+  "agent": "codex",
+  "usedPercent": 82,
+  "remainingPercent": 18,
+  "windowMinutes": 300,
+  "resetAt": 1791500000000,
+  "okToProceed": true,
+  "formatted": "[codex] 82% used (300m window, reset: 2026-10-09T18:00:00.000Z) - OK"
+}
+```
+
+### The Escalation Ladder ("A Escadinha") Pattern
+Agents can use `check_quota` to implement a multi-tiered escalation ladder:
+1. **Tier 1 (Flagship / Heavy Reasoning):** Codex or Claude 3.7 Sonnet.
+2. **Tier 2 (Fast / High-Throughput):** OpenCode, Pi, or Gemini Flash.
+3. **Tier 3 (Zero-Cost / Unlimited Local):** Ollama (e.g. `qwen2.5-coder:14b`).
+
+**Autonomous Quota Decision Rule:**
+- **If remaining quota > 15% (`usedPercent < 85`):** Subagent delegates to `ask_codex` with `permissions: "edit"`.
+- **If remaining quota <= 15% (`usedPercent >= 85`):** Subagent steps down the ladder to preserve quota, delegating to `ask_ollama` or `ask_pi`.
 
 ---
 

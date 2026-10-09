@@ -24,23 +24,33 @@ ab checkpoint create "Before agent refactor"             # git hidden-ref snapsh
 
 ---
 
-## Why agentbridge?
+## The Problem: The Fragmented Agent Dilemma
 
-You probably pay for more than one coding agent, and each has a different CLI, flags, output format, session model and permission system. Gluing them together means a pile of fragile scripts. agentbridge makes them **interchangeable building blocks**:
+Every developer today is caught in the same frustrating trap:
+- 😫 **Siloed Subscriptions:** You pay for Claude Code, OpenAI Codex, maybe Cursor, OpenCode, Antigravity, or run local Ollama. Each is brilliant at certain tasks, but they live in completely isolated walled gardens.
+- 🤹 **Incompatible Harnesses & CLIs:** Every single tool has its own command-line syntax, conflicting flag formats, different config directories, incompatible session persistence, and weird permission models. Orchestrating them means maintaining a fragile spiderweb of shell scripts.
+- 🚫 **Zero Interoperability:** Your agents cannot talk to each other. Claude cannot ask Codex to write tests. Cursor cannot delegate a heavy refactor to Claude. Codex cannot offload repetitive bulk processing to a free local Ollama instance.
+- 🛑 **The 2:00 PM Wall (Rate Limit Lockout):** You are in deep flow. Suddenly: `429 Too Many Requests: Quota exceeded`. Your agent crashes. You lose your session context, open another terminal, copy-paste prompts by hand, and try to re-explain the codebase to a different model.
+- 💥 **Manual Babysitting & Accidental Disasters:** Unrestricted agents running rogue bash commands, or subagents hallucinating and destroying working code without an instant undo button.
 
-| You want to... | agentbridge gives you |
+---
+
+## The Solution: AgentBridge
+
+**AgentBridge unifies all your AI coding agents into a single, cohesive super-system.**
+Instead of managing 5 different CLIs and hitting brick walls, AgentBridge makes all your agents **interchangeable, collaborating building blocks**:
+
+| The Frustration You Face | How AgentBridge Solves It |
 |---|---|
-| Call any agent from code or a shell script | One `run()/ask()` API and one `ab` CLI with identical options, events and results |
-| Let agents delegate to each other | A built-in **MCP bridge**: any agent can be a subagent of any other (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`...) with model, effort, permissions, cwd, timeout and session control |
-| Never be stopped by a token limit | **`RATE_LIMITED` detection + `fallback` chains** across agents |
-| Compare or hedge models | **`fanout`** (ask many, collect all) and **`race`** (first accepted answer wins, the rest are cancelled) |
-| Use your subscriptions from any SDK/app | An **OpenAI- and Anthropic-compatible local proxy** (`ab serve`) |
-| Use local models as agents | **HTTP endpoints** (Ollama built in; any OpenAI/Anthropic-compatible URL) and the **pi** agent |
-| See what your agents are doing | A live **dashboard** (`ab ui`): runs, tokens, cost, success rate, fallbacks, context pressure |
-| Keep context under control | **Telemetry, context policy, auto-compaction** and cross-agent **`handoff()`** |
-| Stay safe | Permission ceilings, depth guards and **HMAC-attested** delegation so a subagent cannot escalate |
-| Zero-risk agent edits | **Git hidden-ref checkpoints** (`refs/agentbridge/checkpoints/...`): rollback untracked and modified files instantly without branch pollution |
-| Prevent token lockouts | **Proactive quota probing** (Anthropic & Codex usage limits) + automatic pool cooldown and rotation |
+| **Fragmented CLIs & APIs** | **One universal CLI (`ab`) & TypeScript API:** Call any agent with identical options, stream events, and structured results. |
+| **Isolated Agents in Silos** | **Universal MCP Bridge:** Any agent can call any other agent as a subagent (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`...) with granular permissions, timeouts, and session controls. |
+| **Hitting 429 Token Walls** | **The Escalation Ladder ("A Escadinha"):** Seamless fallback chains (`--fallback codex,pi,ollama`). When one agent runs out of quota, the next steps in automatically. |
+| **Wasting Expensive Tokens** | **Proactive Quota Routing:** Agents actively query token limits via `check_quota` or `ab quota` to intelligently delegate to cheaper or local models. |
+| **Hedge & Compare Models** | **`fanout` & `race`:** Send tasks to multiple models in parallel; compare solutions or take the fastest answer. |
+| **Locked Out of SDKs** | **Universal OpenAI/Anthropic Proxy (`ab serve`):** Drive any tool, IDE, or script through your existing agent subscriptions. |
+| **Accidental Code Destruction** | **Zero-Accident Safety Lock (Trava de Segurança):** Safe `read-only` by default, with deliberate unlocking (`--permissions edit`). |
+| **No Easy Undo on Broken Edits** | **Git Hidden-Ref Checkpoints:** Instant repository snapshots with zero branch pollution for atomic rollbacks (`ab checkpoint rollback`). |
+| **Dependency Hell & Bloat** | **Zero Runtime Dependencies:** Pure Node.js & TypeScript. No bloat, instantaneous startup. |
 
 ---
 
@@ -162,11 +172,56 @@ Now, from inside any of them, you can say "ask claude to review this" or "have p
 - **Safety rules:** recursion depth guard, permission ceiling (a subagent can never exceed the caller), HMAC attestation of results, the attestation key is delivered only through the process environment (never on disk or argv).
 - Forced child working directory (`AGENTBRIDGE_CHILD_CWD`) so a caller cannot redirect where a subagent works.
 
-### 4. Rate limits and fallback
-```bash
-ab ask claude "Refactor X" --fallback codex,opencode:opencode-go/glm-5.3-flash
+### 4. The Escalation Ladder ("A Escadinha") & Proactive Quota Intelligence
+
+Never let rate limits or exhausted token quotas kill your momentum again. AgentBridge gives you a two-stage defense: **automatic cascading fallback ladders** and **autonomous proactive quota routing**.
+
+#### 🪜 The Escalation Ladder ("A Escadinha")
+Set up an intelligent multi-tiered cascade across different providers and compute tiers:
+
 ```
-HTTP 429/529, "usage limit", "quota exceeded", "credit balance too low", "overloaded"... become `RATE_LIMITED` (with `retryAfterMs`). The chain moves to the next agent, reports `fallback: { used, attempts, contextLost }`, and **refuses to re-run** a task that already made edits under `edit`/`full` permissions. Works in the library, CLI, MCP tools and proxy.
+┌─────────────────────────────────────────────────────────────┐
+│  Tier 1: Heavyweight Architects (Codex / Claude 3.7 Sonnet) │  Deep reasoning & architecture
+└──────────────────────────────┬──────────────────────────────┘
+                               │ (Approaching limit / 429)
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Tier 2: Fast & Efficient Workers (OpenCode / Pi / Gemini)  │  Rapid implementation & cleanup
+└──────────────────────────────┬──────────────────────────────┘
+                               │ (Approaching limit / 429)
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Tier 3: Zero-Cost Unlimited Local (Ollama / vLLM)          │  100% offline, private & free
+└─────────────────────────────────────────────────────────────┘
+```
+
+Run it seamlessly from the CLI, API, or MCP tools:
+```bash
+# If Codex is rate-limited, Claude takes over; if Claude is limited, Pi or local Ollama finishes the job!
+ab ask codex "Refactor the authentication flow" --fallback claude,pi,ollama:qwen2.5-coder:14b
+```
+HTTP 429/529, "usage limit", "quota exceeded", "credit balance too low", "overloaded"... become `RATE_LIMITED` (with `retryAfterMs`). The chain moves down the ladder to the next agent, reports `fallback: { used, attempts, contextLost }`, and safely **refuses to re-run** a task that already made edits under `edit`/`full` permissions.
+
+#### 🧠 Autonomous Proactive Quota Delegation (Agent-to-Agent)
+Why wait for a 429 error to crash your run? Agents can query their real-time quota window using the **`check_quota`** MCP tool (or `ab quota <agent>` CLI):
+
+```json
+// Tool Call: check_quota({ agent: "codex" })
+{
+  "agent": "codex",
+  "usedPercent": 82,
+  "remainingPercent": 18,
+  "windowMinutes": 300,
+  "resetAt": "2026-10-09T18:00:00.000Z",
+  "okToProceed": true
+}
+```
+
+**Real-world Prompt Pattern (Codex / Claude Subagent Quota Routing):**
+> *"You are the Lead Engineer. Before implementing the test suite, check your remaining quota using `check_quota({ agent: 'codex' })`. If your remaining quota is above 15% (`usedPercent < 85`), spawn an `ask_codex` subagent with `permissions: 'edit'` to write the tests. If you have 15% or less quota remaining, gracefully step down the escalation ladder and delegate the task to local zero-cost Ollama via `ask_ollama(model: 'qwen2.5-coder:14b')` or `ask_pi`."*
+
+This turns your AI agents into **frugal, self-aware resource managers** that preserve your expensive flagship tokens for high-leverage tasks while offloading boilerplate to local models!
+
 - **Proactive Quota Probing & Pool Cooldown:** Automatically queries Anthropic OAuth usage APIs and Codex headers, rotating accounts or triggering cooldowns for credentials with $\ge 95\%$ quota usage.
 
 ### 5. Parallel workflows

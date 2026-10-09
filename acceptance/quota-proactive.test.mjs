@@ -172,3 +172,23 @@ test('formatQuotaStatus and formatQuotaForPrompt format human and prompt outputs
   assert.ok(promptBlock.includes('Used: 92%'));
   assert.ok(promptBlock.includes('Window: 300m'));
 });
+
+test('MCP bridge exposes check_quota tool and returns structured quota status', async () => {
+  const { allTools, callAny } = await import('../dist/bridge/mcp.js');
+  const tools = allTools();
+  const quotaTool = tools.find((t) => t.name === 'check_quota');
+  assert.ok(quotaTool, 'check_quota tool should be registered in MCP');
+
+  setQuotaFixture('codex', {
+    primary_window: { used_percent: 80, limit_window_seconds: 18000, reset_at: Date.now() + 60000 },
+  });
+
+  const res = await callAny('check_quota', { agent: 'codex' });
+  assert.ok(res.structuredContent);
+  assert.equal(res.structuredContent.agent, 'codex');
+  assert.equal(res.structuredContent.usedPercent, 80);
+  assert.equal(res.structuredContent.remainingPercent, 20);
+  assert.equal(res.structuredContent.okToProceed, true);
+
+  clearQuotaFixtures();
+});

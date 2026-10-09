@@ -140,7 +140,64 @@ Once updated, all subagents can freely execute `permissions: "full"`.
 
 ---
 
-## 6. Using Local Endpoints & Models (Ollama, OpenRouter, vLLM)
+## 6. Proactive Quota Routing & The Escalation Ladder ("A Escadinha")
+
+### How to Check Quota Proactively
+You do not need to wait for an HTTP 429 error or a rate limit exception to occur. When connected via MCP or executing CLI tasks, you can query real-time remaining token quotas:
+
+- **Via MCP Tool (`check_quota`):**
+  ```json
+  {
+    "tool": "check_quota",
+    "arguments": {
+      "agent": "codex"
+    }
+  }
+  ```
+  Returns structured quota health:
+  ```json
+  {
+    "agent": "codex",
+    "usedPercent": 82,
+    "remainingPercent": 18,
+    "windowMinutes": 300,
+    "resetAt": "2026-10-09T18:00:00.000Z",
+    "okToProceed": true,
+    "formatted": "[codex] 82% used (300m window, reset: 2026-10-09T18:00:00.000Z) - OK"
+  }
+  ```
+
+### The Autonomous Routing Pattern
+When coordinating complex workflows or spawning subagents, follow this pattern:
+1. **Query Quota:** Call `check_quota({ agent: "codex" })` (or `claude`).
+2. **Evaluate Remaining Capacity:**
+   - **Above 15% Remaining (`usedPercent < 85`):** You have sufficient headroom. Spawn your primary subagent:
+     `ask_codex({ prompt: "Write unit tests for auth.ts", permissions: "edit" })`
+   - **15% or Less Remaining (`usedPercent >= 85`):** Preserve your expensive quota for critical architectural decisions. Step down the escalation ladder ("escadinha") and delegate the task to a local zero-cost model:
+     `ask_ollama({ prompt: "Write unit tests for auth.ts", model: "qwen2.5-coder:14b", permissions: "edit" })`
+     or `ask_pi({ prompt: "...", permissions: "edit" })`.
+
+### The Automatic Escalation Ladder ("A Escadinha")
+AgentBridge automatically executes this cascade if you configure fallback targets:
+- **In CLI:**
+  ```bash
+  ab ask codex "Refactor the module" --fallback claude,pi,ollama:qwen2.5-coder:14b
+  ```
+- **In MCP Tool calls:**
+  ```json
+  {
+    "tool": "ask_codex",
+    "arguments": {
+      "prompt": "Refactor the module",
+      "permissions": "edit",
+      "fallback": ["claude", "pi", "ollama:qwen2.5-coder:14b"]
+    }
+  }
+  ```
+
+---
+
+## 7. Using Local Endpoints & Models (Ollama, OpenRouter, vLLM)
 
 AgentBridge can run local models (e.g., `qwen2.5-coder`, `glm-5.3-flash:cloud`, `deepseek-r1`) as full coding agents via **harness mode**:
 
@@ -166,7 +223,7 @@ AgentBridge can run local models (e.g., `qwen2.5-coder`, `glm-5.3-flash:cloud`, 
 
 ---
 
-## 7. The Compat Proxy (`ab serve`) for BYOK & Agentic Frameworks (e.g. GEPA)
+## 8. The Compat Proxy (`ab serve`) for BYOK & Agentic Frameworks (e.g. GEPA)
 
 If you are integrating AgentBridge with an external BYOK application (Cursor, LibreChat, Continue.dev) or an autonomous prompt optimization engine like **GEPA**:
 
@@ -240,7 +297,7 @@ ab serve --port 8787
 
 ---
 
-## 8. Summary Checklist for AI Agents
+## 9. Summary Checklist for AI Agents
 
 - [ ] Need to make risky changes? Run `ab checkpoint create "before refactor"`.
 - [ ] Need a second opinion on code? Call `ask_codex` or `ask_claude` with `permissions: "full"`.

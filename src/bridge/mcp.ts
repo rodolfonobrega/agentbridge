@@ -283,9 +283,30 @@ export const CHECKPOINT_TOOLS = [
   },
 ];
 
+export const QUOTA_TOOLS = [
+  {
+    name: 'check_quota',
+    description: 'Query proactive quota and rate limit status for an agent (codex, claude, etc.). Returns used percentage, remaining percentage, window duration, reset time, and whether it is ok to proceed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agent: { type: 'string', description: 'Agent name (e.g. "codex", "claude")' },
+        thresholdPercent: { type: 'number', description: 'Maximum acceptable used percent before throttling (default 95)' },
+      },
+      required: ['agent'],
+    },
+  },
+];
+
 export const allTools = (env: NodeJS.ProcessEnv = process.env): any[] => {
   const L = agentList(env);
-  return [...L.map((a) => toolSchema(a)), ...L.map((a) => toolSchema(a, 'dispatch')), ...RUN_TOOLS, ...CHECKPOINT_TOOLS];
+  return [
+    ...L.map((a) => toolSchema(a)),
+    ...L.map((a) => toolSchema(a, 'dispatch')),
+    ...RUN_TOOLS,
+    ...CHECKPOINT_TOOLS,
+    ...QUOTA_TOOLS,
+  ];
 };
 
 export function resolvePerms(requested?: string, env: NodeJS.ProcessEnv = process.env, cwd?: string): string {
@@ -662,6 +683,23 @@ export async function callAny(name: string, args: any, ctx: any = {}): Promise<a
     const { diffCheckpoint } = await import('../extras/checkpoint.js');
     const diff = diffCheckpoint(args?.cwd || process.cwd(), args?.id);
     return { content: [{ type: 'text', text: diff || '(no differences)' }], structuredContent: { id: args?.id, diff } };
+  }
+  if (name === 'check_quota') {
+    const { getProactiveQuotaStatus, formatQuotaStatus } = await import('../quota/proactive.js');
+    const agent = args?.agent || 'codex';
+    const status = await getProactiveQuotaStatus(agent, undefined, {
+      thresholdPercent: args?.thresholdPercent,
+    });
+    const remainingPercent = Math.max(0, 100 - status.usedPercent);
+    const result = {
+      ...status,
+      remainingPercent,
+      formatted: formatQuotaStatus(status),
+    };
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      structuredContent: result,
+    };
   }
   return undefined;
 }

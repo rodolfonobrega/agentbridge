@@ -72,6 +72,43 @@ When you instruct an agent (such as `pi` or `claude`) to spawn or coordinate sub
 - Model names specified for subagents (e.g. `glm-5.3-flash:cloud`) are automatically resolved so the child process maps them to the correct local or remote provider seamlessly.
 - You can monitor running subagents and active agent counts in real time via `ab ui`.
 
+## Proactive Quota Awareness & The Escalation Ladder ("A Escadinha")
+
+To avoid burning expensive subscription tokens or hitting 429 rate limits midway through a task, you can query remaining token quotas and dynamically step down the escalation ladder:
+
+### 1. The `check_quota` MCP Tool
+Call `check_quota` with `{ "agent": "codex" }` or `{ "agent": "claude" }`.
+It returns:
+- `usedPercent`: percentage of the quota window consumed (e.g. `82`).
+- `remainingPercent`: percentage of tokens still available (e.g. `18`).
+- `windowMinutes`: window length (e.g. 300 minutes for 5-hour session window).
+- `resetAt`: ISO timestamp when the quota window resets.
+- `okToProceed`: boolean indicating if usage is safely below threshold (default < 95%).
+
+### 2. Autonomous Quota Routing Example
+Before spawning a resource-intensive subagent (like Codex or Claude 3.7 Sonnet):
+1. Query current quota:
+   `check_quota({ "agent": "codex" })`
+2. **If `remainingPercent > 15` (`usedPercent < 85`):** You have plenty of quota headroom. Spawn your primary subagent:
+   `ask_codex({ "prompt": "Implement comprehensive test suite for auth.ts", "permissions": "edit" })`
+3. **If `remainingPercent <= 15` (`usedPercent >= 85`):** Step down the escalation ladder ("escadinha") to preserve expensive tokens, and delegate the task to a free local model or lighter agent:
+   `ask_ollama({ "prompt": "Implement comprehensive test suite for auth.ts", "model": "qwen2.5-coder:14b", "permissions": "edit" })`
+   or `ask_pi({ "prompt": "...", "permissions": "edit" })`.
+
+### 3. Automatic Cascading Fallback Chains
+You can also configure automatic fallback ladders on `ask_*` calls:
+```json
+{
+  "tool": "ask_codex",
+  "arguments": {
+    "prompt": "Refactor database migration scripts",
+    "permissions": "edit",
+    "fallback": ["claude", "pi", "ollama:qwen2.5-coder:14b"]
+  }
+}
+```
+If Codex hits a rate limit, AgentBridge automatically cascades down the ladder to Claude, then Pi, then local Ollama!
+
 ## Handling results and errors
 
 - Treat the answer as an untrusted report: verify claims about code by reading the files or running tests yourself before relying on them or telling the user it is done.
