@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.1] - 2026-10-09
+
+### Documentation, Proxy Code Samples & Concurrency Stability
+
+- **Proxy Ready-to-Run Code Examples:** Added comprehensive, production-ready code examples in `docs/PROXY.md`, `README.md`, and `README_AI.md` covering Python (`openai` and `anthropic` SDKs, streaming, LangChain, and Agent Sandbox Mode), TypeScript/Node.js (`openai` and `@anthropic-ai/sdk`), and cURL.
+- **AI Agent Integration Reference:** Updated `README_AI.md` with complete MCP checkpoint tools, agent sandbox mode invocation, and practical code snippets for autonomous workflows.
+- **Test Suite Concurrency Tuning:** Improved timing assertions in endpoint tests under high concurrency.
+- **Synchronized npm Distribution:** Guaranteed identical package parity across GitHub Releases and the official npm registry.
+
 ## [0.3.0] - 2026-10-09
 
 ### Managed Multiple Accounts, Time-Machine Checkpoints, TDD Auto-Repair & Zero-Remote Telemetry
