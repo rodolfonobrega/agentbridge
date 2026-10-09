@@ -1,0 +1,5 @@
+# GitHub Linguist overrides
+# Exclude acceptance tests, build scripts, and static UI client bundle from the language breakdown
+acceptance/** linguist-vendored
+scripts/** linguist-vendored
+src/ui/app.js linguist-vendored
