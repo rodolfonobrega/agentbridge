@@ -46,11 +46,18 @@ AgentBridge enforces strict permissions at the runtime level. An agent cannot ex
     - If `permissions` is `edit` or `full`, AgentBridge **automatically** drives the endpoint via a coding harness (`claude` or `pi`) so the model has tools to modify files.
     - If you want the model to **read files or search the web** without editing, pass `harness: "claude"` (or `harness: "pi"`) with `permissions: "read-only"`.
     - If you only want a quick text answer without filesystem access, omit `harness` under `read-only` (or set `harness: "none"`), and it runs as a fast direct HTTP API call.
-- `model`: default is the cheapest model for that agent; set it only when asked or when the task needs more.
+- `model`: default is the cheapest model for that agent; set it only when asked or when the task needs more. Model names are **smart-resolved**: you can specify models with or without provider prefixes (e.g. `glm-5.3-flash:cloud` or `ollama/glm-5.3-flash:cloud`). AgentBridge automatically handles provider namespaces for Pi, Ollama, and other endpoints.
 - `effort`: `low` ... `max`.
 - `timeoutSeconds`: default 300; raise it for big tasks.
 - `session`: `{mode:'continue', id}` to follow up in the same agent conversation (`new`, `ephemeral`, `continue`, `fork`).
 - `fallback`: e.g. `["codex","ollama:glm-5.3-flash:cloud"]`. If the agent fails with `RATE_LIMITED` (or a code listed in `fallbackOn`), the next one answers. It is skipped if the first agent already ran tools under `edit`/`full`, to avoid redoing side effects. The result's `fallback` field says who answered and whether context was lost (fallback agents start a fresh session).
+
+## Delegating to Subagents
+
+When you instruct an agent (such as `pi` or `claude`) to spawn or coordinate subagents:
+- The permission ceiling defaults to `full`, meaning subagents can run tools, shell commands, and file edits without being capped at read-only/edit.
+- Model names specified for subagents (e.g. `glm-5.3-flash:cloud`) are automatically resolved so the child process maps them to the correct local or remote provider seamlessly.
+- You can monitor running subagents and active agent counts in real time via `ab ui`.
 
 ## Handling results and errors
 
