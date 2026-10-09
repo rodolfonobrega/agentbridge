@@ -194,24 +194,32 @@ for (;;) {
 
 The binary is available as `agentbridge` and `ab`.
 
-```
 ab run <agent> [prompt|-] [--model][--effort][--permissions][--cwd][--timeout s]
                            [--session new|ephemeral|continue|fork][--session-id id]
                            [--system][--json-schema '<json>'][--stream][--json]
+                           [--fallback a,b:model][--fallback-on RATE_LIMITED,TIMEOUT,...]
                            [--worktree][--max-cost][--max-tokens][--max-time s]
 ab ask <agent> [prompt|-] [same flags]           # prints only the result text
 ab fanout "<prompt>" agent[:model] ...           # run all, collect all
 ab race   "<prompt>" agent[:model] ...           # first accepted wins, rest cancelled
+ab fix <agent> "<test-cmd>" [--prompt p] [--max-attempts 3]  # TDD auto-repair loop with rollback
+ab review <coder> <reviewer> "<task>" [--max-turns 3]        # Multi-agent review loop with diffs
+ab ensemble "<task>" <a1> <a2> ... [--judge j]               # Multi-agent consensus voting & synthesis
+ab pipeline <pipeline.json> [--checkpoint-each]              # DAG task orchestrator with waves & rollback
+ab quota [agent] [--threshold %]                             # Proactive quota checking
+ab account list [agent] | add <agent> <name> [--copy-current][--login] | use <agent> <name> | remove <agent> <name> | quota
 ab checkpoint create [message] | list | rollback <id> | diff <id>   # git hidden-ref snapshots
+ab memory add "<rule>" | decision "<topic>" "<decision>" [--agent a] | list [--json] | clear
 ab sessions | ab ps | ab top [--once] | ab stats
-ab ui [--port 8788] [--open] [--token t]       # live web dashboard (see docs/TELEMETRY.md#dashboard)
+ab ui [--port 8788] [--open] [--token t]       # live web dashboard & time-machine UI
 ab context <session> [--agent a]
 ab handoff <session> --to <agent>
 ab watch <run> | ab wait <run> | ab cancel <run>
-ab serve [--port][--host][--token][--allow-non-loopback]
+ab serve [--port][--host][--token][--allow-non-loopback][--accounts file.json --accept-tos-risk]
 ab bridge                                        # stdio MCP server
 ab doctor [--live][--json]
-ab install <claude|codex|opencode|agy|pi|all> [--scope project|user|local] [--permissions read-only|plan|edit|full] [--max-depth N] [--no-agents] [--no-skill] [--auto-approve (codex)]
+ab setup | ab wizard [--yes]
+ab install <claude|codex|opencode|agy|pi|cursor|vscode|zed|windsurf|claude-desktop|all> [--scope project|user]
 ab endpoint [list] | add <name> <baseUrl> [--type openai|anthropic] [--model m] [--api-key-env VAR] | remove <name>
 ```
 

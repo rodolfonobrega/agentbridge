@@ -1,6 +1,10 @@
 # Telemetry, context policy, hooks
 
-Code: `src/telemetry/{stats,context,hooks,track,index}.mjs`. Everything is exported from `src/index.mjs`; `run()`/`ask()` are untouched.
+> [!IMPORTANT]
+> **100% LOCAL PRIVACY GUARANTEE (Zero Remote Telemetry):**  
+> AgentBridge does NOT send any telemetry, usage statistics, logs, prompt content, or operational metrics over the internet. There are zero third-party telemetry integrations (no PostHog, Segment, Google Analytics, Sentry, or cloud trackers). All recorded run summaries, token metrics, context windows, and tool counts are persisted exclusively on your local machine (`~/.agentbridge/telemetry/`). The optional dashboard (`ab ui`) runs strictly on loopback (`http://127.0.0.1`) and never transmits data outside your computer.
+
+Code: `src/telemetry/{stats,context,hooks,track,index}.ts`. Everything is exported from `src/index.ts`; `run()`/`ask()` are untouched.
 State lives in `~/.agentbridge/` (override with `AGENTBRIDGE_HOME`): `telemetry/{runs,sessions}/*.json`, `telemetry/stats.json`,
 `telemetry/policy.json`, `telemetry/config.json` (window overrides), `handoffs/*.md`, optional `hooks.json`.
 

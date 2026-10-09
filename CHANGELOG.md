@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.3.0] - 2026-10-09
+
+### Managed Multiple Accounts, Time-Machine Checkpoints, TDD Auto-Repair & Zero-Remote Telemetry
+
+- **Managed Multiple Accounts & Profiles (`ab account`):**
+  - Full directory isolation for accounts inspired by Orca (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `PI_CODING_AGENT_DIR`, etc.).
+  - Interactive multi-login commands: `ab account list [agent]`, `ab account add <agent> <name> [--copy-current] [--login]`, `ab account use <agent> <name>`, `ab account remove <agent> <name> [--purge]`.
+  - Zero-friction integration with `--account <name>` on CLI runs and automatic conversion to rotating pools for `ab serve --accept-tos-risk`.
+  - Proactive per-account quota inspection via `ab account quota [agent]`.
+- **Git Hidden-Ref Checkpoint Engine & Visual Time Machine:**
+  - Non-destructive workspaces snapshots stored under `refs/agentbridge/checkpoints/` using an isolated `GIT_INDEX_FILE`.
+  - Visual Time Machine tab integrated into `ab ui` (`http://127.0.0.1:8788`) with split diff viewing and instant one-click rollback.
+  - MCP Bridge tools exposed for AI agents: `checkpoint_create`, `checkpoint_list`, `checkpoint_diff`, `checkpoint_rollback`.
+- **TDD Auto-Repair Loop (`ab fix`):**
+  - Autonomous test-driven repair loop with bounded stdout/stderr capture.
+  - Automated pre-execution checkpointing and safe rollback on persistent failure.
+- **Multi-Agent Review Loop & Consensus (`ab review`, `ab ensemble`):**
+  - Implementer-reviewer feedback cycles with structured JSON/Markdown verdicts and git diff inspection under `read-only` ceiling.
+  - Parallel multi-agent ensemble runs with plurality consensus voting and optional synthesizer judge.
+- **DAG Pipeline Task Orchestrator (`ab pipeline`):**
+  - Directed Acyclic Graph runner with topological wave execution, concurrency limits, and wave checkpoints.
+- **Zero-Friction MCP Installers (`ab install <ide>`):**
+  - Instant zero-dependency setup for Cursor, VS Code, Zed, Windsurf, Claude Desktop, Claude Code, Codex, Pi, OpenCode, and Antigravity.
+- **Shared Project Memory (`ab memory`):**
+  - Machine-readable persistent repository conventions and decisions in `.agentbridge/memory.json`.
+- **Proactive Quota Probing (`ab quota`):**
+  - Proactive querying of Anthropic OAuth 5-hour/7-day windows and ChatGPT Wham usage limits, auto-throttling credentials at $\ge 95\%$ before encountering HTTP 429 penalties.
+- **CommonMark Boundary-Aware Streaming:**
+  - Throttled Markdown stream filter ensuring UI/WebSocket streams split only on clean Markdown boundaries (closing code fences, list items, blank lines).
+- **Subagent Native Roster:**
+  - Complete hierarchical parent-child subagent tree tracking with token usage aggregation and status transitions.
+- **Audited 100% Local Privacy Guarantee:**
+  - Verified and documented zero remote analytics/tracking policy: all run logs, token counts, and metrics remain on-device in `~/.agentbridge/`.
+
 ## [0.2.0] - 2026-10-09
 
 ### Smart Model Resolution, Real-Time Active Agent Tracking & Agent Autonomy

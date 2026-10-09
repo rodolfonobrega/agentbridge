@@ -215,7 +215,58 @@ Instant, non-destructive snapshots saved under `refs/agentbridge/checkpoints/...
 ### 13. Dual-mode Codex execution
 Supports standard batch CLI runs (`codex exec`) as well as persistent JSON-RPC 2.0 stdio server mode (`codex app-server`), minimizing cold-start overhead and maintaining stateful turn execution.
 
-### Agent capability overview
+### 14. Multiple accounts & managed profiles (`ab account`)
+```bash
+ab account list [agent]
+ab account add claude work --copy-current
+ab account add claude personal --login
+ab account use claude work
+ab account quota claude
+```
+Complete account profile isolation inspired by Orca. Each account gets its own dedicated configuration directory (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `PI_CODING_AGENT_DIR`), eliminating session collisions and leaked tokens. Seamlessly converts to a zero-friction pool for automatic round-robin rotation in `ab serve --accept-tos-risk`.
+
+### 15. TDD auto-repair loop (`ab fix`)
+```bash
+ab fix claude "npm test" --prompt "Fix auth token expiration bug" --max-attempts 3
+```
+Automatic test-driven repair loop. Captures test failures in a bounded ring buffer, creates a git checkpoint, feeds stdout/stderr to the agent with `edit` permissions, verifies with the test command, and automatically rolls back if attempts are exhausted without passing.
+
+### 16. Multi-agent review loop & consensus (`ab review`, `ab ensemble`)
+```bash
+ab review codex claude "Implement rate limiter" --max-turns 3
+ab ensemble "Analyze performance bottleneck" claude codex agy --judge claude
+```
+Cross-model verification. Implementers write code, reviewers inspect generated git diffs under `read-only` permissions with structured JSON/Markdown verdicts, and ensemble runs allow parallel multi-agent plurality voting and synthesis.
+
+### 17. DAG pipeline task orchestrator (`ab pipeline`)
+Executes multi-step agent pipelines organized as Directed Acyclic Graphs (DAGs) with topological wave parallelization, optional checkpoints per wave, and immediate rollback on failure.
+
+### 18. Shared project memory (`ab memory`)
+```bash
+ab memory add "Always use strict TypeScript and zero runtime dependencies"
+ab memory decision "state-management" "Use Zustand for UI state" --agent claude
+ab memory list
+```
+Persistent project knowledge stored in `.agentbridge/memory.json`. Injects conventions and past architectural decisions directly into agent prompts.
+
+### 19. Zero-friction MCP & IDE installers (`ab install <ide>`)
+```bash
+ab install cursor | vscode | zed | windsurf | claude-desktop | claude | codex | pi | agy | opencode | all
+```
+Installs the AgentBridge MCP server directly into your favorite editor or CLI with atomic JSON configuration merging.
+
+---
+
+## 🔒 Privacy & Telemetry: 100% Local & Zero Remote Tracking
+
+> [!IMPORTANT]
+> **Your data never leaves your machine.**
+> - **Zero Remote Analytics:** AgentBridge has NO cloud telemetry, NO tracking pixels, NO PostHog/Segment/Google Analytics/Sentry.
+> - **100% Local Filesystem Storage:** All run histories, token stats, context measurements, and checkpoints stay strictly on your local disk in `~/.agentbridge/`.
+> - **Air-Gapped Dashboard:** The `ab ui` server binds strictly to loopback (`http://127.0.0.1`), enforces strict CSP headers, blocks DNS rebinding, and is completely read-only.
+> - **Direct Provider Connections Only:** The only network traffic occurring in AgentBridge is the direct LLM API requests made by the underlying agent CLIs (Claude, Codex, Ollama, etc.) to the providers you have explicitly configured.
+
+---
 
 | Agent | Permissions enforced by | Sessions | Web Search / Network Access | How to Unlock Full Tools & Web |
 |---|---|---|---|---|

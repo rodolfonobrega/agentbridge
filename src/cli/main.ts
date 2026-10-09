@@ -111,6 +111,11 @@ async function cmdRun(_: string[], flags: Record<string, any>, { askOnly = false
   checkAgent(agent);
   const prompt = await promptFrom(_, flags);
   let opts = baseOpts(flags, prompt);
+  const { getAccountEnv } = await import('../core/accounts.js');
+  const accEnv = getAccountEnv(agent, flags.account);
+  if (Object.keys(accEnv).length) {
+    opts.env = { ...accEnv, ...(opts.env || {}) };
+  }
   const b = budgetOf(flags);
   const useWorktree = !!flags.worktree;
   const runOne = (a: any, p: any) => runBudgeted(a, p, b, { gen: cliGen });
@@ -444,6 +449,7 @@ const HELP = `agentbridge (ab) — drive local claude/codex/opencode/agy/pi/curs
   ab ensemble "<task>" <a1> <a2> ... [--judge j]               # Multi-agent consensus voting & synthesis
   ab pipeline <pipeline.json> [--checkpoint-each]              # DAG task orchestrator with waves & rollback
   ab quota [agent] [--threshold %]                             # Proactive quota checking
+  ab account list [agent] | add <agent> <name> [--copy-current][--login] | use <agent> <name> | remove <agent> <name> | quota
   ab checkpoint create [message] | list | rollback <id> | diff <id>   # git hidden-ref snapshots
   ab memory add "<rule>" | decision "<topic>" "<decision>" [--agent a] | list [--json] | clear
   ab sessions | ab ps | ab top [--once] | ab stats
@@ -559,6 +565,10 @@ export async function main(): Promise<void> {
         break;
       case 'quota':
         await (await import('../quota/proactive.js')).cmdQuota(_, flags, { out, err });
+        break;
+      case 'account':
+      case 'accounts':
+        await (await import('./accounts.js')).cmdAccount(_, flags, { out, err });
         break;
       default:
         throw new UsageError(`unknown command "${cmd}". Run "ab --help".`);

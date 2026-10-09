@@ -431,6 +431,21 @@ export {
   type CodexUsage,
 } from './quota/proactive.js';
 
+// Multiple Accounts Management
+export {
+  listAccounts,
+  addAccount,
+  removeAccount,
+  setActiveAccount,
+  getActiveAccount,
+  getAccountEnv,
+  getAccountsAsPool,
+  loadAccountsManifest,
+  saveAccountsManifest,
+  type AccountRecord,
+  type AccountsManifest,
+} from './core/accounts.js';
+
 // Types
 export * from './types/index.js';
 
