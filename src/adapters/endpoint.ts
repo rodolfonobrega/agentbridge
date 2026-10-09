@@ -271,7 +271,7 @@ export function makeEndpointAdapter(cfg: EndpointConfig): AgentAdapter {
       const wantsHarness =
         o.harness !== 'none' &&
         (Boolean(o.harness) ||
-          (!(o as any).defaultPermissions && Boolean(o.permissions) && o.permissions !== 'read-only') ||
+          (o.permissions !== 'read-only' && o.permissions !== 'plan') ||
           Boolean(o.mcpServers && Object.keys(o.mcpServers).length));
 
       if (wantsHarness) {

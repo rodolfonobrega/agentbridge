@@ -606,6 +606,38 @@ const poolConfig = getAccountsAsPool();
 
 ---
 
+## Configuration and safe permission defaults (`ab config`)
+
+AgentBridge adopts a **Least Privilege by Default** architecture by separating the **Permission Ceiling** from the **Default Execution Permission**:
+- **Permission Ceiling:** Defaults to `full`. Agents and users can request permissions up to `full` without being blocked.
+- **Default Execution Permission:** Defaults to **`read-only`** for safety. If an agent or human runs a command without specifying `--permissions`, the agent cannot modify files or execute destructive shell commands.
+- **Explicit Modification:** To allow editing, simply pass `--permissions edit` or `--permissions full`, or configure a persistent default.
+
+### CLI Usage
+```bash
+# View active configuration and effective defaults
+ab config list [--json]
+
+# Change default execution permission to edit (project or global)
+ab config set default-permissions edit            # for this project (.agentbridge/config.json)
+ab config set default-permissions edit --global   # for your user (~/.agentbridge/config.json)
+
+# Check active value
+ab config get default-permissions
+
+# Reset setting back to system default
+ab config reset default-permissions
+
+# Set permission ceiling (if you want to strictly restrict all subagents)
+ab config set permissions-ceiling edit
+```
+
+### Environment Variables
+- `AGENTBRIDGE_DEFAULT_PERMS` (or `AGENTBRIDGE_DEFAULT_PERMISSIONS`): Overrides the default permission level (`read-only`, `plan`, `edit`, `full`).
+- `AGENTBRIDGE_PERMS_CEILING` (or `AGENTBRIDGE_PERMS`): Overrides the permission ceiling.
+
+---
+
 ## TDD auto-repair loop (`ab fix`)
 
 `ab fix` runs an autonomous Test-Driven Development (TDD) repair loop. If your tests fail, AgentBridge takes a git checkpoint, feeds the test failure output to the agent under `edit` permissions, verifies the fix, and automatically retries. If attempts are exhausted without passing, it automatically rolls back your workspace.

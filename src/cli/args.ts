@@ -20,6 +20,8 @@ export const BOOL = new Set([
   'yes',
   'non-interactive',
   'wizard',
+  'global',
+  'project',
 ]);
 const SHORT: Record<string, string> = {
   m: 'model',

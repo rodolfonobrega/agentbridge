@@ -89,23 +89,29 @@ When the user or another agent asks you to delegate work, use the `agentbridge` 
 ### Delegation Best Practices for Agents:
 1. **Write self-contained prompts:** The subagent does NOT share your conversation history. Provide exact file paths, desired behavior, and constraints.
 2. **Always set `cwd`:** Pass the absolute path of the target repository so the subagent operates in the right directory.
-3. **Use `permissions: "full"`:** By default, let the subagent use shell commands, terminal tools, and file edits unless the user requested a strict plan-only or read-only review.
+3. **Pass `permissions: "edit"` or `"full"` when modifying code:** For security, the system default is `read-only`. When delegating tasks that require modifying code, creating files, or executing shell commands, you **must explicitly pass `permissions: "edit"` or `permissions: "full"`**. The permission ceiling defaults to `full`.
 4. **Parallel execution with `dispatch`:** If you need 3 independent tasks done (e.g. tests for module A, B, and C), call `dispatch_*` 3 times and then `wait_run` on each.
 5. **Verify results:** Never blindly accept code claims from a subagent. Inspect the modified files and run test suites before presenting the task as complete to the user.
 
 ---
 
-## 5. Permission Ceilings & The "Broader than Caller" Error
+## 5. Permission Ceilings & Safe Defaults
 
-### Understanding Ceilings
-AgentBridge enforces a strict safety invariant: **a subagent can never escalate privileges beyond its parent's session ceiling.**
+### Understanding Ceilings vs Defaults
+AgentBridge separates the **Permission Ceiling** (maximum allowed, defaults to `full`) from the **Default Permission** (applied when omitted, defaults to `read-only`):
 
-| Permission Level | Rank | Capabilities |
-|---|---|---|
-| `read-only` | 0 | Can read files and search web. **Cannot edit files. Cannot run shell.** |
-| `plan` | 1 | Can read files and plan solutions. **Cannot edit files. Cannot run shell.** |
-| `edit` | 2 | Can read and **edit/write workspace files**. **Cannot run arbitrary shell.** |
-| `full` *(default)* | 3 | **Unrestricted.** Can run bash/PowerShell, edit files, install packages, run tests. |
+| Permission Level | Rank | Capabilities | Default Role |
+|---|---|---|---|
+| `read-only` | 0 | Can read files and search web. **Cannot edit files. Cannot run shell.** | **Default Execution** |
+| `plan` | 1 | Can read files and plan solutions. **Cannot edit files. Cannot run shell.** | Explicit opt-in |
+| `edit` | 2 | Can read and **edit/write workspace files**. **Cannot run arbitrary shell.** | Explicit opt-in |
+| `full` | 3 | **Unrestricted.** Can run bash/PowerShell, edit files, install packages, run tests. | **Default Ceiling** |
+
+You can configure persistent defaults per project or globally:
+```bash
+ab config set default-permissions edit   # Sets default to edit
+ab config get default-permissions       # Prints active default
+```
 
 ### The "Broader than caller" / "Teto Máximo" Error
 If you or a subagent request `permissions: "full"` and receive an error like:

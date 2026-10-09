@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.2] - 2026-10-09
+
+### Least Privilege Security Architecture & Standardized Configuration (`ab config`)
+
+- **Separation of Permission Ceiling vs Default Execution:**
+  - **Permission Ceiling (`ceiling`):** Defaults to `full`. Agents and callers can request any permission level up to `full` without artificial blockage.
+  - **Default Execution Permission (`default`):** Defaults to **`read-only`** for maximum safety. Prevents unintended file modifications or destructive shell execution when invoking agents without explicit flags.
+  - **Explicit Elevation:** Callers explicitly pass `permissions: "edit"` or `permissions: "full"` when file creation, modifications, or test execution are desired.
+- **Unified Configuration Manager (`ab config`):**
+  - Project-level (`.agentbridge/config.json`) and user-level (`~/.agentbridge/config.json`) configuration with full precedence.
+  - Subcommands: `ab config list`, `ab config get <key>`, `ab config set <key> <val> [--global]`, `ab config reset [key]`.
+  - Environment variable overrides: `AGENTBRIDGE_DEFAULT_PERMS` and `AGENTBRIDGE_PERMS_CEILING`.
+- **Standardized Endpoints & Ollama Execution:**
+  - Completely eliminated special-casing and hidden flags (`defaultPermissions`) across endpoint adapters.
+  - Under `read-only` / `plan` (the default), Ollama and HTTP endpoints execute lightning-fast native chat completions with zero file mutation risk.
+  - Under `edit` / `full`, endpoints cleanly route to execution harnesses (Claude Code or Pi) with clear installation and setup instructions.
+- **Updated Agent Delegation Skills & Documentation:**
+  - Synchronized `skills/agentbridge-delegate/SKILL.md` and `README_AI.md` to guide AI agents to explicitly pass `permissions: "edit"` when implementing code or fixing bugs.
+
 ## [0.3.1] - 2026-10-09
 
 ### Documentation, Proxy Code Samples & Concurrency Stability

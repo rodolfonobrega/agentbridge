@@ -21,6 +21,7 @@ import {
   sendMessage,
   checkMessages,
 } from './runs.js';
+import { resolvePermissionLevel, PERMISSION_RANK } from '../core/config.js';
 
 const BUILTIN_AGENTS = ['claude', 'codex', 'opencode', 'agy', 'pi', 'cursor', 'grok', 'gemini', 'devin', 'acp'];
 const agentList = (env: NodeJS.ProcessEnv = process.env) => [...BUILTIN_AGENTS, ...endpointNames(env)];
@@ -122,7 +123,7 @@ function askSchema(agent: string) {
         permissions: {
           type: 'string',
           enum: ['read-only', 'plan', 'edit', 'full'],
-          description: 'Never broader than the caller; default = the caller level (full)',
+          description: 'Default: read-only (safe). Pass edit or full if modifying files or running tools. Never exceeds the ceiling.',
         },
         harness: {
           type: 'string',
@@ -287,12 +288,13 @@ export const allTools = (env: NodeJS.ProcessEnv = process.env): any[] => {
   return [...L.map((a) => toolSchema(a)), ...L.map((a) => toolSchema(a, 'dispatch')), ...RUN_TOOLS, ...CHECKPOINT_TOOLS];
 };
 
-export function resolvePerms(requested?: string, env: NodeJS.ProcessEnv = process.env): string {
-  const parent = RANK[env.AGENTBRIDGE_PERMS || ''] !== undefined ? env.AGENTBRIDGE_PERMS! : 'full';
-  if (requested == null) return parent;
-  if (RANK[requested] === undefined) throw new Error(`permissions must be one of ${Object.keys(RANK).join('|')}`);
-  if (RANK[requested] > RANK[parent]) throw new Error(`permissions "${requested}" is broader than the caller's "${parent}"`);
-  return requested;
+export function resolvePerms(requested?: string, env: NodeJS.ProcessEnv = process.env, cwd?: string): string {
+  try {
+    const { permissions } = resolvePermissionLevel(requested as any, { env, cwd });
+    return permissions;
+  } catch (err: any) {
+    throw new Error(err.message);
+  }
 }
 
 function safeEndpointModel(agent: string, env: NodeJS.ProcessEnv) {

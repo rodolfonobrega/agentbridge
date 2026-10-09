@@ -49,7 +49,7 @@ function baseOpts(flags: Record<string, any>, prompt: string): RunOptions {
   const o: RunOptions = { prompt };
   if (flags.model) o.model = flags.model;
   if (flags.effort) o.effort = flags.effort;
-  o.permissions = flags.permissions || 'full';
+  if (flags.permissions) o.permissions = flags.permissions;
   if (flags.harness) o.harness = flags.harness;
   if (flags.offline !== undefined) o.offline = Boolean(flags.offline);
   if (flags.isolated !== undefined) o.isolated = Boolean(flags.isolated);
@@ -450,6 +450,7 @@ const HELP = `agentbridge (ab) — drive local claude/codex/opencode/agy/pi/curs
   ab pipeline <pipeline.json> [--checkpoint-each]              # DAG task orchestrator with waves & rollback
   ab quota [agent] [--threshold %]                             # Proactive quota checking
   ab account list [agent] | add <agent> <name> [--copy-current][--login] | use <agent> <name> | remove <agent> <name> | quota
+  ab config [list] | get <key> | set <key> <val> [--global] | reset [key]   # manage default permissions & ceilings
   ab checkpoint create [message] | list | rollback <id> | diff <id>   # git hidden-ref snapshots
   ab memory add "<rule>" | decision "<topic>" "<decision>" [--agent a] | list [--json] | clear
   ab sessions | ab ps | ab top [--once] | ab stats
@@ -569,6 +570,9 @@ export async function main(): Promise<void> {
       case 'account':
       case 'accounts':
         await (await import('./accounts.js')).cmdAccount(_, flags, { out, err });
+        break;
+      case 'config':
+        await (await import('./config.js')).cmdConfig(_, flags, { out, err });
         break;
       default:
         throw new UsageError(`unknown command "${cmd}". Run "ab --help".`);

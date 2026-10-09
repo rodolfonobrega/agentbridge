@@ -32,21 +32,26 @@ The other agent has none of your context. Give it: the goal, the exact files/pat
 
 ## Permissions and Sandboxing: How Edits are Blocked vs Allowed
 
-AgentBridge enforces strict permissions at the runtime level. An agent cannot exceed your permission ceiling:
+AgentBridge separates the **Permission Ceiling** (maximum capability allowed) from the **Default Permission** (applied when omitted):
+- **Permission Ceiling:** Defaults to `full`. Any agent can request permissions up to `full`.
+- **Default Permission:** Defaults to **`read-only`** for safety. If an agent or user does not pass `permissions`, the delegated agent will safely run without file-editing or destructive shell capabilities.
+- **Configurability:** You can configure preferences globally or per project with `ab config set default-permissions <level>`.
+
+> ⚠️ **CRITICAL INSTRUCTION FOR DELEGATION:** Whenever you delegate a task that requires creating or modifying files, refactoring code, or running build/test commands, you **MUST explicitly pass `permissions: "edit"` or `permissions: "full"`**. If you omit it, the subagent will safely run in `read-only` mode and will refuse to modify files.
 
 | Permission | Filesystem & Tools Allowed | When to Use | Under the Hood Enforcement |
 |---|---|---|---|
-| `full` *(default)* | **All tools allowed**, including shell/bash execution. | Code edits, test runs, builds, package installs, automated fixes. | Bypasses permission prompts; full execution sandbox. |
+| `full` | **All tools allowed**, including shell/bash execution. | Code edits, test runs, builds, package installs, automated fixes. | Bypasses permission prompts; full execution sandbox. |
 | `edit` | Read, Grep, Glob, WebFetch, WebSearch + **File Write & Edit**. (Bash blocked). | Refactoring, bug fixes, file creation & code edits without arbitrary shell. | Unlocks Write/Edit tools; workspace-write sandbox restricted to cwd. |
 | `plan` | Read, Grep, Glob, WebFetch, WebSearch. **No edits, no bash.** | Solution design, checklist proposals, diff reviews. | Read-only sandbox with plan prompt mode; writes blocked. |
-| `read-only` | Read, Grep, Glob, WebFetch, WebSearch. **No edits, no bash.** | Reviews, code audits, questions, file inspection. | Tool allowlists exclude Write/Edit/Bash; OS-level sandbox enforces read-only; write deny rules. |
+| `read-only` *(default)* | Read, Grep, Glob, WebFetch, WebSearch. **No edits, no bash.** | Reviews, code audits, questions, file inspection. | Tool allowlists exclude Write/Edit/Bash; OS-level sandbox enforces read-only; write deny rules. |
 
 > **How AgentBridge Prevents Edits:**
 > In `read-only` and `plan` modes, write tools (`Write`, `Edit`, `Bash`) are physically omitted from tool definitions passed to Claude Code and Pi (`--tools Read,Glob,Grep,WebFetch,WebSearch` / `--exclude-tools write,edit,bash`). Codex is placed in an OS container sandbox (`--sandbox read-only`), and Antigravity gets a throwaway profile with explicit deny rules (`write_file(*)`). The model literally cannot mutate your files.
 
 ## Options that matter
 
-- `permissions`: `full` (default), `edit`, `plan`, `read-only`. Use `full` to give the agent unrestricted powers; downgrade only when sandboxing is requested.
+- `permissions`: `read-only` (safe default), `edit`, `plan`, `full`. Use `edit` or `full` whenever files need to be modified.
 - `harness`: `auto` (default), `claude`, `pi`, `none`.
   - For endpoints like Ollama or OpenRouter:
     - If `permissions` is `edit` or `full`, AgentBridge **automatically** drives the endpoint via a coding harness (`claude` or `pi`) so the model has tools to modify files.

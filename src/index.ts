@@ -4,10 +4,23 @@ import { loadEndpoints, endpointNames, makeEndpointAdapter } from './adapters/en
 import { AgentAdapter, AgentEvent, FallbackTarget, RunOptions, RunResult } from './types/index.js';
 import { installIde } from './cli/install-ide.js';
 import { SubagentRoster } from './bridge/subagent-roster.js';
+import { resolvePermissionLevel } from './core/config.js';
 
 export { AgentError, asRateLimited, retryAfterMs, looksRateLimited, rateLimitKind } from './core/errors.js';
 export { ev } from './core/events.js';
 export { loadEndpoints, endpointNames, saveEndpoint, endpointsFile } from './adapters/endpoint.js';
+export {
+  loadConfig,
+  saveConfig,
+  setConfigValue,
+  getConfigValue,
+  resetConfigValue,
+  getDefaultPermissions,
+  getPermissionsCeiling,
+  resolvePermissionLevel,
+  PERMISSION_RANK,
+  PERMISSION_LEVELS,
+} from './core/config.js';
 
 const NAMES = ['claude', 'codex', 'opencode', 'agy', 'pi', 'cursor', 'grok', 'gemini', 'devin', 'acp'];
 const cache = new Map<string, Promise<AgentAdapter>>();
@@ -125,11 +138,13 @@ export function validateOptions(opts: RunOptions): RunOptions {
     if (o[k] != null && typeof o[k] !== 'string') throw bad(`${k} must be a string`);
   }
   if (o.effort != null && !EFFORT.includes(o.effort)) throw bad(`effort must be one of ${EFFORT.join('|')}`);
-  if (o.permissions == null) {
-    o.permissions = 'full';
+  const resolved = resolvePermissionLevel(o.permissions, {
+    env: o.env || process.env,
+    cwd: o.cwd || process.cwd(),
+  });
+  o.permissions = resolved.permissions;
+  if (resolved.isDefault) {
     (o as any).defaultPermissions = true;
-  } else if (!PERMS.includes(o.permissions)) {
-    throw bad(`permissions must be one of ${PERMS.join('|')}`);
   }
   if (o.harness != null && !HARNESS_MODES.includes(o.harness)) {
     throw bad(`harness must be one of ${HARNESS_MODES.join('|')}`);

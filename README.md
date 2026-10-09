@@ -134,14 +134,13 @@ ab install all             # every one of the above that is installed
 
 Now, from inside any of them, you can say "ask claude to review this" or "have pi write the tests": the agent calls the `ask_<agent>` tools (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...).
 
-> **Permission Ceilings & Changing Permissions with `ab`:**
-> - **Default is `full`:** By default, AgentBridge grants full capabilities (`full`): unrestricted shell/PowerShell execution, file editing, and terminal tools. The agent has no artificial blocks.
-> - **Custom Ceilings (Sandboxing):** If you prefer strict sandboxing, you can install or run with lower permissions:
->   - `ab install all --permissions edit` (file edits allowed, no arbitrary shell)
->   - `ab install all --permissions plan` (planning only, no disk writes)
->   - `ab install all --permissions read-only` (read-only queries)
-> - **Updating existing permissions:** You can change or update permissions at any time simply by re-running `ab install <agent> --permissions <level>` or `ab setup`.
-> - **"Level Máximo / Broader than caller" Guard:** A delegated subagent can never escalate privileges above its caller's session ceiling. If an agent tries to request `full` while installed under an `edit` ceiling, AgentBridge prevents the privilege escalation. To allow it, update your ceiling with `ab install <agent> --permissions full`.
+> **Permission Ceilings & Safe Defaults:**
+> - **Ceiling is `full` by default:** AgentBridge grants up to full capabilities (`full`) when explicitly requested, with no artificial blockage.
+> - **Default execution is `read-only` (safe):** If an agent or human runs a command without specifying `--permissions`, the agent is run safely in read-only mode to prevent accidental file modifications or unintended shell commands.
+> - **To allow file modifications:** Pass `--permissions edit` (or `--permissions full`), or set your persistent default preference:
+>   `ab config set default-permissions edit` (for your project or globally with `--global`).
+> - **Custom Ceilings (Sandboxing):** To restrict the maximum ceiling permitted for all subagents, configure `ab config set permissions-ceiling edit` or re-run `ab install <agent> --permissions edit`.
+> - **"Broader than caller" Guard:** A delegated subagent can never escalate privileges above its caller's session ceiling.
 
 ---
 
