@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildExecutionWaves, interpolatePrompt, runPipeline } from '../dist/extras/pipeline.js';
+import { runPipeline as runPipelineFromRoot } from '../dist/index.js';
 import { parseArgs } from '../dist/cli/args.js';
 import { AgentError } from '../dist/core/errors.js';
 
@@ -64,4 +65,9 @@ test('parseArgs treats pipeline boolean flags as booleans (bare true, =false fal
   // bare at the end of argv must not throw "needs a value"
   assert.doesNotThrow(() => parseArgs(['p.json', '--auto-rollback']));
   assert.equal(parseArgs(['--checkpoint-each']).flags['checkpoint-each'], true);
+});
+
+test('runPipeline is part of the package root export', () => {
+  assert.equal(typeof runPipelineFromRoot, 'function');
+  assert.equal(runPipelineFromRoot, runPipeline);
 });

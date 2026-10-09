@@ -157,6 +157,7 @@ Now, from inside any of them, you can say "ask claude to review this" or "have p
 > 🌐 **Universal Skills (`.agents/skills`) & Conflict Prevention:**
 > - Pi, Codex, OpenCode, and Antigravity all share the open **`.agents/skills/`** directory. Installing once covers all of them!
 > - Within a single install run each skill destination is written at most once (per-process dedup in `writeSkill`, `src/cli/install.ts`), so `ab install all` produces exactly one copy per target.
+> - A project-scope copy that would be byte-identical to the global `~/.agents/skills/agentbridge-delegate` skill is skipped as a duplicate (a message tells you so); `--force` writes it anyway.
 
 ---
 

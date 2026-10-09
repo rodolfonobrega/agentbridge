@@ -131,23 +131,109 @@ test('install opencode writes timeout into opencode.json', async () => {
   }
 });
 
+// writeSkill consults the global ~/.agents skill via homedir(); isolate it per test
+// (same HOME/USERPROFILE sandbox pattern as install.test.mjs).
+function withFakeHome(home, fn) {
+  const oldHome = process.env.HOME;
+  const oldProfile = process.env.USERPROFILE;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  try {
+    fn();
+  } finally {
+    if (oldHome !== undefined) process.env.HOME = oldHome;
+    else delete process.env.HOME;
+    if (oldProfile !== undefined) process.env.USERPROFILE = oldProfile;
+    else delete process.env.USERPROFILE;
+  }
+}
+
 test('skill installation prevents duplicate collision across harnesses and scopes', async () => {
   const tmp = mkdtempSync(path.join(tmpdir(), 'ab-skill-collision-'));
   try {
-    const logs = [];
-    const out = (m) => logs.push(m);
+    withFakeHome(tmp, () => {
+      const logs = [];
+      const out = (m) => logs.push(m);
 
-    // First write to project
-    writeSkill(path.join(tmp, '.agents'), out);
-    const skillPath = path.join(tmp, '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
-    assert.ok(existsSync(skillPath), 'skill must exist in .agents/skills');
-    assert.equal(logs.length, 1);
-    assert.match(logs[0], /wrote skill/);
+      // First write to project
+      writeSkill(path.join(tmp, '.agents'), out);
+      const skillPath = path.join(tmp, '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
+      assert.ok(existsSync(skillPath), 'skill must exist in .agents/skills');
+      assert.equal(logs.length, 1);
+      assert.match(logs[0], /wrote skill/);
 
-    // Second write during same command execution should be deduplicated
-    logs.length = 0;
-    writeSkill(path.join(tmp, '.agents'), out);
-    assert.equal(logs.length, 0, 'subsequent write in same execution must be skipped without duplicate writes');
+      // Second write during same command execution should be deduplicated
+      logs.length = 0;
+      writeSkill(path.join(tmp, '.agents'), out);
+      assert.equal(logs.length, 0, 'subsequent write in same execution must be skipped without duplicate writes');
+    });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('writeSkill skips a project copy identical to the global skill', () => {
+  const tmp = mkdtempSync(path.join(tmpdir(), 'ab-skill-skip-'));
+  try {
+    withFakeHome(tmp, () => {
+      const logs = [];
+      const out = (m) => logs.push(m);
+
+      // User scope writes the global file itself, unconditionally.
+      writeSkill(path.join(tmp, '.agents'), out);
+      const globalSkill = path.join(tmp, '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
+      assert.ok(existsSync(globalSkill), 'global skill must be written');
+
+      // A project scope whose copy would be byte-identical: skipped as a duplicate.
+      const projBase = path.join(tmp, 'proj', '.agents');
+      writeSkill(projBase, out);
+      const projSkill = path.join(projBase, 'skills', 'agentbridge-delegate', 'SKILL.md');
+      assert.ok(!existsSync(projSkill), 'identical project copy must not be created');
+      assert.match(String(logs.at(-1)), /skill identical to global .*skipped duplicate/);
+    });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('writeSkill writes the project copy when the global skill differs', () => {
+  const tmp = mkdtempSync(path.join(tmpdir(), 'ab-skill-diff-'));
+  try {
+    withFakeHome(tmp, () => {
+      const logs = [];
+      const out = (m) => logs.push(m);
+
+      const globalSkill = path.join(tmp, '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
+      mkdirSync(path.dirname(globalSkill), { recursive: true });
+      writeFileSync(globalSkill, '---\nname: agentbridge-delegate\nOUTDATED GLOBAL\n', 'utf8');
+
+      // A differing global skill never blocks the project copy.
+      const projBase = path.join(tmp, 'proj', '.agents');
+      writeSkill(projBase, out);
+      const projSkill = path.join(projBase, 'skills', 'agentbridge-delegate', 'SKILL.md');
+      assert.ok(existsSync(projSkill), 'a differing global skill must not block the project copy');
+      assert.match(readFileSync(projSkill, 'utf8'), /^---/, 'project copy must come from the repo template');
+      assert.match(String(logs.at(-1)), /wrote skill/);
+    });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('writeSkill --force writes the project copy even when identical to the global skill', () => {
+  const tmp = mkdtempSync(path.join(tmpdir(), 'ab-skill-force-'));
+  try {
+    withFakeHome(tmp, () => {
+      const logs = [];
+      const out = (m) => logs.push(m);
+
+      writeSkill(path.join(tmp, '.agents'), out); // identical global skill
+      const projBase = path.join(tmp, 'proj', '.agents');
+      writeSkill(projBase, out, { force: true });
+      const projSkill = path.join(projBase, 'skills', 'agentbridge-delegate', 'SKILL.md');
+      assert.ok(existsSync(projSkill), '--force must write the identical project copy');
+      assert.match(String(logs.at(-1)), /wrote skill/);
+    });
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

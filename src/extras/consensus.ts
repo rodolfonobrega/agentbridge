@@ -543,15 +543,21 @@ export async function cmdEnsemble(
   flags: Record<string, any>,
   io: { out: (msg: any) => void; err?: (msg: any) => void }
 ): Promise<void> {
+  const JUDGE_MODES = ['auto', 'select', 'synthesize'];
   const task = _[0];
   const agentList = _.slice(1);
   if (!task || !agentList.length) {
-    throw new AgentError('BAD_OPTION', 'Usage: ab ensemble "<task>" <agent1> <agent2> ... [--judge <judge>]');
+    throw new AgentError('BAD_OPTION', 'Usage: ab ensemble "<task>" <agent1> <agent2> ... [--judge <judge>] [--judge-mode auto|select|synthesize]');
+  }
+  // Validate before spawning anything.
+  if (flags['judge-mode'] != null && !JUDGE_MODES.includes(flags['judge-mode'])) {
+    throw new AgentError('BAD_OPTION', '--judge-mode must be auto|select|synthesize');
   }
   const res = await runEnsemble({
     task,
     agents: agentList,
     judge: flags.judge,
+    ...(flags['judge-mode'] != null ? { judgeMode: flags['judge-mode'] } : {}),
     cwd: flags.cwd,
   });
   if (flags.json) {

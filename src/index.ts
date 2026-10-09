@@ -421,6 +421,7 @@ export {
   type EnsembleAgentConfig,
   type AgentEnsembleOutput,
 } from './extras/consensus.js';
+export { runPipeline } from './extras/pipeline.js';
 
 // IDE MCP Installer
 export {

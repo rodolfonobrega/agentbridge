@@ -512,7 +512,7 @@ const HELP = `agentbridge (ab) — drive local claude/codex/opencode/agy/pi/curs
   ab bridge                                        # stdio MCP server
   ab doctor [--live][--json]
   ab setup | ab wizard [--yes]                     # modern interactive terminal setup wizard
-  ab install <claude|codex|opencode|agy|pi|cursor|vscode|zed|windsurf|claude-desktop|all> [--scope project|user]
+  ab install <claude|codex|opencode|agy|pi|cursor|vscode|zed|windsurf|claude-desktop|all> [--scope project|user] [--force]
   ab endpoint [list] | add <name> <baseUrl> [--type openai|anthropic] [--model m] [--api-key-env VAR] | remove <name>
 `;
 

@@ -670,12 +670,13 @@ When you install the `agentbridge-delegate` skill, it is placed in `.agents/skil
 - OpenCode and Antigravity discover it automatically.
 - There is **no need** to install separate copies into `.claude/skills` or repeat the installation per harness.
 
-### 2. Duplicate-install behavior (no global skip, no `--force`)
-Pi scans both your workspace root (`./.agents/skills/`) and your global home (`~/.agents/skills/`). If the skill exists in both scopes, Pi auto-prefers one and marks the other skipped — that is Pi's own collision handling, and it is harmless here because both copies are written from the same source file and stay byte-identical.
-**What `ab install` actually does:**
-- It writes `.agents/skills/agentbridge-delegate` into the chosen scope unconditionally (project scope → `<cwd>/.agents/skills`, user scope → `~/.agents/skills`); there is no check of the other scope (`src/cli/install.ts`).
-- There is **no** `--force` flag and **no** global-content dedup; repeated runs simply overwrite with the same content.
-- `ab install all` deduplicates writes in-memory, writing the skill only once per run.
+### 2. Duplicate-install behavior (per-process dedup, global identical-content skip, `--force`)
+Pi scans both your workspace root (`./.agents/skills/`) and your global home (`~/.agents/skills/`). If the skill exists in both scopes, Pi auto-prefers one and marks the other skipped — that is Pi's own collision handling, and with AgentBridge it never even happens, because the redundant copy is not written in the first place.
+**What `ab install` actually does (`src/cli/install.ts`):**
+- `ab install all` deduplicates writes in-memory: each skill destination is written at most once per run (`writeSkill`).
+- When the destination is a project/other scope (`<cwd>/.agents/skills`) and the global skill (`~/.agents/skills/agentbridge-delegate/SKILL.md`) exists **and is byte-identical** to the copy that would be written, the project write is skipped with a message (`skill identical to global ... skipped duplicate copy`).
+- `--force` writes the project copy even when it is identical to the global one.
+- Writing the global skill itself (`--scope user` → `~/.agents/skills`) always writes normally; a differing (outdated) global skill also never blocks a project write.
 
 ---
 
@@ -829,12 +830,15 @@ Runs multiple agents in parallel on the same prompt and computes consensus via p
 # Plurality voting across 3 models
 ab ensemble "Analyze database deadlock in query X" claude codex agy
 
-# With a judge (the judge synthesizes a unified answer or picks the best reply,
-# according to its mode, selected by default heuristics)
-ab ensemble "Propose migration architecture" claude codex agy --judge claude
+# With a judge in synthesize mode (the judge merges the best of every reply
+# into a single unified answer)
+ab ensemble "Propose migration architecture" claude codex agy --judge claude --judge-mode synthesize
+
+# With a judge in select mode (the judge picks the single best reply)
+ab ensemble "Pick the best migration plan" claude codex agy --judge claude --judge-mode select
 ```
 
-`judgeMode` (`'auto'` default | `'select'` | `'synthesize'`) is a `runEnsemble` library option, not a CLI flag.
+`--judge-mode` accepts `auto` (default heuristics: select if one candidate is clearly superior, synthesize otherwise), `select` or `synthesize`; the same `judgeMode` (`'auto'` default | `'select'` | `'synthesize'`) is also a `runEnsemble` library option.
 
 ### Library API
 ```js
@@ -899,8 +903,7 @@ ab pipeline pipeline.json [--checkpoint-each] [--auto-rollback] [--cwd path] [--
 
 ### Library API
 ```js
-// runPipeline is not part of the package root export; use the deep dist path:
-import { runPipeline } from 'agentbridge/dist/extras/pipeline.js';
+import { runPipeline } from '@rodolfonobrega/agentbridge';
 
 const result = await runPipeline(pipelineDefinition, {
   cwd: process.cwd(),

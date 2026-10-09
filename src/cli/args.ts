@@ -12,6 +12,7 @@ export const BOOL = new Set([
   'no-seed',
   'no-models',
   'allow-non-loopback',
+  'force',
   'first',
   'no-agents',
   'no-skill',

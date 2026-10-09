@@ -8,6 +8,7 @@ import {
   parseReviewVerdict,
   runReviewLoop,
   runEnsemble,
+  cmdEnsemble,
 } from '../dist/extras/consensus.js';
 import { AgentError } from '../dist/core/errors.js';
 
@@ -310,4 +311,11 @@ test('runEnsemble judge selects specific agent in select mode', async () => {
 
   assert.equal(res.selectedAgent, 'solution-b');
   assert.ok(res.consensus.includes('Selected Agent: solution-b'));
+});
+
+test('cmdEnsemble rejects an invalid --judge-mode before spawning any agent', async () => {
+  await assert.rejects(
+    cmdEnsemble(['Pick the better solution', 'solution-a', 'solution-b'], { 'judge-mode': 'bogus' }, { out: () => {} }),
+    (err) => err instanceof AgentError && err.code === 'BAD_OPTION' && /--judge-mode must be auto\|select\|synthesize/.test(err.message)
+  );
 });

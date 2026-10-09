@@ -81,7 +81,8 @@ export interface AgentAdapter {
 ### H. Universal Open Agent Skills & Collision Guard
 - Universal canonical skill path is `.agents/skills/agentbridge-delegate/SKILL.md`.
 - Shared simultaneously across Pi, Codex, OpenCode, and Antigravity without redundant per-harness installations.
-- Skill writes are deduplicated per install process (`writeSkill` writes each destination copy once per run, `src/cli/install.ts`); there is no scan of pre-existing global installations for collision detection.
+- Skill writes are deduplicated per install process (`writeSkill` writes each destination copy once per run, `src/cli/install.ts`).
+- Collision guard: a project/other-scope copy byte-identical to the pre-existing global skill (`~/.agents/skills/agentbridge-delegate/SKILL.md`) is skipped instead of duplicated; `--force` writes it anyway. Writing the global skill itself always writes normally.
 
 ---
 
