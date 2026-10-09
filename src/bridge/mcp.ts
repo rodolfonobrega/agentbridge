@@ -268,6 +268,18 @@ export const CHECKPOINT_TOOLS = [
       },
     },
   },
+  {
+    name: 'checkpoint_diff',
+    description: 'Show unified diff between current workspace and a saved checkpoint snapshot.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Checkpoint ID to compare against' },
+        cwd: { type: 'string', description: 'Repository directory path' },
+      },
+      required: ['id'],
+    },
+  },
 ];
 
 export const allTools = (env: NodeJS.ProcessEnv = process.env): any[] => {
@@ -643,6 +655,11 @@ export async function callAny(name: string, args: any, ctx: any = {}): Promise<a
     const { listCheckpoints } = await import('../extras/checkpoint.js');
     const list = listCheckpoints(args?.cwd || process.cwd(), args?.sessionId);
     return { content: [{ type: 'text', text: JSON.stringify(list) }], structuredContent: { checkpoints: list } };
+  }
+  if (name === 'checkpoint_diff') {
+    const { diffCheckpoint } = await import('../extras/checkpoint.js');
+    const diff = diffCheckpoint(args?.cwd || process.cwd(), args?.id);
+    return { content: [{ type: 'text', text: diff || '(no differences)' }], structuredContent: { id: args?.id, diff } };
   }
   return undefined;
 }

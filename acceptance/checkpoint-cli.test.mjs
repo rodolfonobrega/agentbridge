@@ -27,8 +27,11 @@ test('MCP bridge exposes checkpoint tools and executes them', async () => {
   assert.equal(listRes.structuredContent?.checkpoints?.length, 1);
   assert.equal(listRes.structuredContent.checkpoints[0].id, cpId);
 
-  // 3. Corrupt file and checkpoint_rollback via MCP
+  // 3. Corrupt file, check checkpoint_diff, and checkpoint_rollback via MCP
   writeFileSync(path.join(repo, 'doc.md'), '# Corrupted Document\n');
+  const diffRes = await callAny('checkpoint_diff', { cwd: repo, id: cpId });
+  assert.ok(diffRes.content[0].text.includes('# Corrupted Document') || diffRes.content[0].text.includes('# Initial Document'));
+
   const rollbackRes = await callAny('checkpoint_rollback', { cwd: repo, id: cpId });
   assert.ok(rollbackRes.structuredContent?.restoredOid);
 
