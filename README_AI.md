@@ -1,4 +1,4 @@
-# AGENTS.md — The AI Agent Guide for AgentBridge
+# README_AI.md — The AI Agent Guide for AgentBridge
 
 > **Target Audience:** This document is written specifically for **AI Agents** (Claude Code, OpenAI Codex, Antigravity, OpenCode, Pi, Cursor, Devin, and autonomous frameworks like GEPA). If you are an AI assistant or autonomous agent operating in or interacting with this codebase, read this document to understand your capabilities, how to use the CLI and MCP tools, how to delegate tasks to subagents, and how to avoid common pitfalls.
 

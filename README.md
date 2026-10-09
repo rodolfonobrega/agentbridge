@@ -16,7 +16,7 @@ ab checkpoint create "Before agent refactor"             # git hidden-ref snapsh
 
 > Node ESM · Node ≥ 22 · Windows, macOS, Linux · MIT · zero runtime dependencies
 >
-> 🤖 **Are you an AI Agent?** If you are an autonomous coding agent (Claude Code, OpenAI Codex, Antigravity, OpenCode, Pi, etc.) reading or working in this codebase, **read [AGENTS.md](AGENTS.md)** for direct operational instructions, architecture, CLI commands, and delegation patterns.
+> 🤖 **Are you an AI Agent?** If you are an autonomous coding agent (Claude Code, OpenAI Codex, Antigravity, OpenCode, Pi, etc.) reading or working in this codebase, **read [README_AI.md](README_AI.md)** for direct operational instructions, architecture, CLI commands, and delegation patterns.
 
 ![agentbridge dashboard: live runs, success rate, tokens, cost, fallbacks, per-agent breakdown and context pressure](docs/img/dashboard.png)
 
@@ -237,7 +237,7 @@ Full details, flags and caveats: **[docs/REFERENCE.md](docs/REFERENCE.md)**.
 
 | Doc | What is in it |
 |---|---|
-| [AGENTS.md](AGENTS.md) | Dedicated operational guide for AI agents (architecture, delegation, full permissions, checkpoints) |
+| [README_AI.md](README_AI.md) | Dedicated operational guide for AI agents (architecture, delegation, full permissions, checkpoints) |
 | [docs/REFERENCE.md](docs/REFERENCE.md) | Complete reference: every CLI command, option, event, error, agent and environment variable |
 | [docs/PROXY.md](docs/PROXY.md) | The OpenAI/Anthropic compatible proxy |
 | [docs/TELEMETRY.md](docs/TELEMETRY.md) | Telemetry, the dashboard, context policy, compaction, handoff |
