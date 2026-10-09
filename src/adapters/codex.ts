@@ -116,6 +116,10 @@ function buildArgs(o: any, schemaFile?: string, claim: { id?: string } = {}, ima
     if (srv.args?.length) a.push('-c', `${k}.args=[${srv.args.map(toml).join(',')}]`);
     if (srv.env && Object.keys(srv.env).length)
       a.push('-c', `${k}.env={${Object.entries(srv.env).map(([x, y]) => `${toml(x)}=${toml(String(y))}`).join(',')}}`);
+    if (srv.timeout != null) {
+      const toSec = srv.timeout >= 1000 ? Math.round(srv.timeout / 1000) : Math.round(srv.timeout);
+      a.push('-c', `${k}.timeout=${toSec}`);
+    }
   }
   if (schemaFile) a.push('--output-schema', schemaFile);
   if (o.extraArgs != null) {

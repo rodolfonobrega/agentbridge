@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.1] - 2026-10-09
+
+### MCP Timeout & Universal Open Agent Skills Hardening
+- **Fix (MCP Timeout):** Resolved critical issue where AgentBridge discarded the `timeout` configuration of MCP servers, causing subagent executions to be abruptly terminated at the 60-second default limit of MCP SDK clients (Claude Code, Pi, IDEs).
+  - Added typed `timeout?: number` to `McpServerConfig` and validation in `validateOptions`.
+  - Propagated `timeout` across all adapters: Codex (`-c mcp_servers.<name>.timeout=...`), Pi (`mcp.json`), OpenCode (`opencode.json`), Antigravity (`mcp_config.json`), and Claude.
+  - Registered `agentbridge` with `"timeout": 300` across all harness configurations (`install`, `setup`, `install-ide` for Cursor, VS Code, Zed, Windsurf, Claude Desktop).
+  - Added support for both `timeout` and `timeoutSeconds` in `ask_*` and `dispatch_*` tool schemas.
+- **Fix (Skill Collision):** Resolved skill conflict warnings in Pi (`[Skill conflicts] "agentbridge-delegate" collision: auto (project) vs ~/.agents/skills (skipped)`).
+  - Adopted `.agents/skills` as the universal canonical Open Agent Skills standard shared across Pi, Codex, OpenCode, and Antigravity.
+  - Smart installer now detects existing global installations (`~/.agents/skills`) and avoids writing redundant duplicates to project folders.
+  - Setup and harness installers deduplicate skill writes during execution and prevent cross-directory duplicate copies.
+
 ## [0.4.0] - 2026-10-09
 
 ### Changes

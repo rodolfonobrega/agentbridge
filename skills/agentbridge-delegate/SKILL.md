@@ -61,11 +61,35 @@ AgentBridge is engineered with a **Zero-Accident Safety Lock**:
     - If you only want a quick text answer without filesystem access, omit `harness` under `read-only` (or set `harness: "none"`), and it runs as a fast direct HTTP API call.
 - `model`: default is the cheapest model for that agent; set it only when asked or when the task needs more. Model names are **smart-resolved**: you can specify models with or without provider prefixes (e.g. `glm-5.3-flash:cloud` or `ollama/glm-5.3-flash:cloud`). AgentBridge automatically handles provider namespaces for Pi, Ollama, and other endpoints.
 - `effort`: `low` ... `max`.
-- `timeoutSeconds`: default 300; raise it for big tasks.
+- `timeoutSeconds` / `timeout`: default 300 seconds; raise it for long tasks or deep analysis (e.g. 600). Supports both seconds or milliseconds.
 - `session`: `{mode:'continue', id}` to follow up in the same agent conversation (`new`, `ephemeral`, `continue`, `fork`).
 - `fallback`: e.g. `["codex","ollama:glm-5.3-flash:cloud"]`. If the agent fails with `RATE_LIMITED` (or a code listed in `fallbackOn`), the next one answers. It is skipped if the first agent already ran tools under `edit`/`full`, to avoid redoing side effects. The result's `fallback` field says who answered and whether context was lost (fallback agents start a fresh session).
 - `transport`: `auto` (default), `cli`, `app-server`.
   - Pass `transport: "app-server"` for **Codex** to run via a persistent JSON-RPC 2.0 daemon instead of batch process spawns.
+
+## MCP Server Timeout: Eliminating the 60-Second Hard Limit
+
+In earlier versions and raw MCP setups, MCP client libraries (such as Anthropic Claude Code, Cursor, and Pi) apply a strict default protocol timeout of **60 seconds** on tool calls unless configured otherwise. When delegating heavy tasks, subagent analysis would be abruptly severed at exactly 1 minute.
+
+AgentBridge resolves this completely:
+1. **Registered Harness Timeout (300s Default):** All installers (`agentbridge install`, `ab setup`, `install-ide`) automatically configure `"timeout": 300` (or the `--timeout <seconds>` flag) on the `agentbridge` MCP server across Pi (`mcp.json`), Claude Code (`mcp.json` / `claude_desktop_config.json`), OpenCode (`opencode.json`), Codex (`config.toml`), and IDE configs (Cursor, VS Code, Zed, Windsurf).
+2. **Passthrough & Custom MCP Server Timeouts:** When supplying `mcpServers` in AgentBridge configurations or API calls, the `timeout` property (`McpServerConfig.timeout`) is fully preserved and forwarded to all underlying adapters (Codex `-c mcp_servers.<name>.timeout=...`, Pi `mcp.json`, OpenCode, Antigravity, and Claude).
+3. **Dynamic Per-Call Override:** You can pass `timeout` or `timeoutSeconds` directly in any `ask_<agent>` or `dispatch_<agent>` tool call to extend the deadline for heavy batch operations.
+
+## Universal Skills (`.agents/skills`) & Zero Collision Guarantee
+
+The modern AI ecosystem (Pi, Codex, OpenCode, Antigravity, and recent Claude Code) adheres to the **Open Agent Skills standard** rooted in `.agents/skills/`.
+
+- **One Install Covers All Harnesses:** When you install the `agentbridge-delegate` skill into `.agents/skills/`, Pi, Codex, OpenCode, and Antigravity **automatically share and discover it simultaneously**. You do not need to install duplicate copies for each harness.
+- **Preventing Collision Warnings (`[Skill conflicts] collision`):**
+  - Previously, running setup or installers could create conflicting copies in both `.agents/skills` and `.claude/skills`, or in both project `<cwd>/.agents/skills` and user `~/.agents/skills`, prompting Pi to log:
+    ```
+    [Skill conflicts] "agentbridge-delegate" collision: auto (project) vs ~/.agents/skills (skipped)
+    ```
+  - AgentBridge's smart installer now checks for existing global installations:
+    - If the skill is already installed globally (`~/.agents/skills`), it safely skips creating an identical local duplicate in your project to prevent collision alerts.
+    - If installing specifically under `--scope project`, the project copy is placed cleanly in `.agents/skills/` once, without generating redundant legacy duplicates in `.claude/skills/`.
+    - Passing `--force` allows explicitly overriding this behavior when an isolated project modification is needed.
 
 ## Execution Transports: CLI vs App-Server Mode
 

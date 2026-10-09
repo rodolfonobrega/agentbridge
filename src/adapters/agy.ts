@@ -155,7 +155,13 @@ export function makeHome({
       mkdirSync(path.join(h, '.gemini', 'config'), { recursive: true });
       const servers: Record<string, any> = {};
       for (const [n, s] of Object.entries(mcpServers))
-        servers[n] = { command: s.command, args: s.args || [], env: s.env || {}, disabled: false };
+        servers[n] = {
+          command: s.command,
+          args: s.args || [],
+          env: s.env || {},
+          disabled: false,
+          ...(s.timeout != null ? { timeout: s.timeout } : {}),
+        };
       writeFileSync(path.join(h, '.gemini', 'config', 'mcp_config.json'), JSON.stringify({ mcpServers: servers }));
     }
   } catch (e) {

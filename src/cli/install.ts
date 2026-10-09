@@ -64,16 +64,70 @@ function bridgeCtx(flags: Record<string, any>) {
     env.AGENTBRIDGE_MAX_DEPTH = String(flags['max-depth']);
   }
   if (process.env.AGENTBRIDGE_HOME) env.AGENTBRIDGE_HOME = process.env.AGENTBRIDGE_HOME;
-  return { scope, permissions: ceiling, defaultPermissions: def, env, cwd: path.resolve(flags.cwd || process.cwd()) };
+  const timeout = flags.timeout != null ? Number(flags.timeout) : 300;
+  if (isNaN(timeout) || timeout <= 0) throw new UsageError('--timeout must be a positive number');
+  return { scope, permissions: ceiling, defaultPermissions: def, env, cwd: path.resolve(flags.cwd || process.cwd()), timeout };
 }
 
-function writeSkill(base: string, out: (msg: string) => void) {
+const writtenSkills = new Set<string>();
+
+export function writeSkill(
+  base: string,
+  out: (msg: string) => void,
+  opts?: { force?: boolean; scope?: string; cwd?: string }
+) {
   const dest = path.join(base, 'skills', 'agentbridge-delegate');
+  const destFile = path.join(dest, 'SKILL.md');
+  if (writtenSkills.has(destFile)) return;
+
+  const scope = opts?.scope || (base.includes(homedir()) ? 'user' : 'project');
+  const globalDest = path.join(homedir(), '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
+
+  // Prevent project duplicate if user already has it installed globally (covers Pi, Codex, OpenCode, Agy)
+  if (scope === 'project' && !opts?.force && existsSync(globalDest)) {
+    try {
+      const gContent = readFileSync(globalDest, 'utf8');
+      const cContent = readFileSync(SKILL, 'utf8');
+      if (gContent === cContent) {
+        out(
+          `Skill "agentbridge-delegate" already installed globally at ~/.agents/skills (covers Pi, Codex, OpenCode, Antigravity). Skipping local duplicate to avoid harness skill conflicts.`
+        );
+        writtenSkills.add(destFile);
+        return;
+      }
+    } catch {}
+  }
+
   mkdirSync(dest, { recursive: true });
-  copyFileSync(SKILL, path.join(dest, 'SKILL.md'));
-  out(`wrote skill ${path.join(dest, 'SKILL.md')}`);
+  copyFileSync(SKILL, destFile);
+  writtenSkills.add(destFile);
+  out(`wrote skill ${destFile}`);
 }
 const agentsBase = (c: any) => (c.scope === 'user' ? path.join(homedir(), '.agents') : path.join(c.cwd, '.agents'));
+
+function setCodexTimeout(timeout: number, out: (msg: string) => void) {
+  const file = path.join(process.env.CODEX_HOME || path.join(homedir(), '.codex'), 'config.toml');
+  let t: string;
+  try {
+    t = readFileSync(file, 'utf8');
+  } catch {
+    return;
+  }
+  const head = '[mcp_servers.agentbridge]';
+  const i = t.indexOf(head);
+  if (i < 0) return;
+  const rest = t.slice(i + head.length);
+  const j = rest.search(/^\[/m);
+  const body = j < 0 ? rest : rest.slice(0, j);
+  if (/^timeout\s*=/m.test(body)) {
+    const updated = body.replace(/^timeout\s*=\s*\d+/m, `timeout = ${timeout}`);
+    writeFileSync(file, t.slice(0, i + head.length) + updated + (j < 0 ? '' : rest.slice(j)));
+    return;
+  }
+  const nl = t.includes('\r\n') ? '\r\n' : '\n';
+  const at = i + head.length + body.replace(/\s+$/, '').length;
+  writeFileSync(file, t.slice(0, at) + nl + `timeout = ${timeout}` + t.slice(at));
+}
 
 function autoApproveCodex(out: (msg: string) => void) {
   const file = path.join(process.env.CODEX_HOME || path.join(homedir(), '.codex'), 'config.toml');
@@ -153,8 +207,9 @@ async function installCodex(flags: Record<string, any>, { out }: { out: (msg: st
     throw new UsageError(`codex mcp add failed: ${(r.stderr || r.stdout).trim()}`);
   }
   out(`registered MCP server "agentbridge" in Codex (global ~/.codex/config.toml, permission ceiling: ${c.permissions})`);
+  setCodexTimeout(c.timeout, out);
   if (flags['auto-approve']) autoApproveCodex(out);
-  if (!flags['no-skill']) writeSkill(agentsBase(c), out);
+  if (!flags['no-skill']) writeSkill(agentsBase(c), out, { force: flags.force, scope: c.scope, cwd: c.cwd });
   out(
     'Restart Codex. Its tools appear as agentbridge ask_claude / ask_opencode / ask_agy / ask_pi / ask_ollama ... Codex may ask to approve MCP tool calls the first time.'
   );
@@ -170,7 +225,7 @@ async function installAgy(flags: Record<string, any>, { out }: { out: (msg: stri
   });
   if (r.exitCode !== 0) throw new UsageError(`agy mcp add failed: ${(r.stderr || r.stdout).trim()}`);
   out(`registered MCP server "agentbridge" in Antigravity (global, permission ceiling: ${c.permissions})`);
-  if (!flags['no-skill']) writeSkill(agentsBase(c), out);
+  if (!flags['no-skill']) writeSkill(agentsBase(c), out, { force: flags.force, scope: c.scope, cwd: c.cwd });
   out('Restart agy. Its tools appear as agentbridge ask_claude / ask_codex / ask_opencode / ask_pi / ask_ollama ...');
 }
 
@@ -195,13 +250,14 @@ async function installPi(flags: Record<string, any>, { out }: { out: (msg: strin
     args: [MAIN, 'bridge'],
     env: c.env,
     exposure: 'direct',
+    timeout: c.timeout,
   };
   mkdirSync(dir, { recursive: true });
   const tmp = `${mcpFile}.${process.pid}.tmp`;
   writeFileSync(tmp, JSON.stringify(current, null, 2) + '\n');
   renameSync(tmp, mcpFile);
-  out(`registered MCP server "agentbridge" in pi (global ~/.pi/agent/mcp.json, permission ceiling: ${c.permissions})`);
-  if (!flags['no-skill']) writeSkill(agentsBase(c), out);
+  out(`registered MCP server "agentbridge" in pi (global ~/.pi/agent/mcp.json, permission ceiling: ${c.permissions}, timeout: ${c.timeout}s)`);
+  if (!flags['no-skill']) writeSkill(agentsBase(c), out, { force: flags.force, scope: c.scope, cwd: c.cwd });
   out('Restart pi. Its tools appear as agentbridge ask_claude / ask_codex / ask_opencode / ask_agy / ask_ollama ...');
 }
 
@@ -212,7 +268,7 @@ function installOpencode(flags: Record<string, any>, { out }: { out: (msg: strin
     c.scope === 'user'
       ? userPaths.find((f) => existsSync(f)) || userPaths[0]
       : path.join(c.cwd, 'opencode.json');
-  const entry = { type: 'local', command: [process.execPath, MAIN, 'bridge'], environment: c.env, enabled: true };
+  const entry = { type: 'local', command: [process.execPath, MAIN, 'bridge'], environment: c.env, enabled: true, timeout: c.timeout };
   let cfg: any = {};
   if (existsSync(file)) {
     try {
@@ -230,8 +286,8 @@ function installOpencode(flags: Record<string, any>, { out }: { out: (msg: strin
   const tmp = `${file}.${process.pid}.tmp`;
   writeFileSync(tmp, JSON.stringify(cfg, null, 2) + '\n');
   renameSync(tmp, file);
-  out(`registered MCP server "agentbridge" in OpenCode (${file}, permission ceiling: ${c.permissions})`);
-  if (!flags['no-skill']) writeSkill(agentsBase(c), out);
+  out(`registered MCP server "agentbridge" in OpenCode (${file}, permission ceiling: ${c.permissions}, timeout: ${c.timeout}s)`);
+  if (!flags['no-skill']) writeSkill(agentsBase(c), out, { force: flags.force, scope: c.scope, cwd: c.cwd });
   out(
     'Restart OpenCode. Its tools appear as agentbridge_ask_claude / agentbridge_ask_codex / agentbridge_ask_agy / agentbridge_ask_pi ...'
   );
@@ -281,14 +337,18 @@ export async function cmdInstall(
   if (target === 'opencode') return installOpencode(flags, io);
   if (['cursor', 'vscode', 'code', 'claude-desktop', 'claude_desktop', 'zed', 'windsurf'].includes(target)) {
     const { installIde } = await import('./install-ide.js');
-    const res = installIde(target as any, { scope: flags.scope, cwd: flags.cwd });
+    const res = installIde(target as any, {
+      scope: flags.scope,
+      cwd: flags.cwd,
+      timeout: flags.timeout ? Number(flags.timeout) : 300,
+    });
     io.out(`Installed agentbridge MCP server into ${target} (${res.path})`);
     return;
   }
   const { out } = io;
   if (target !== 'claude') throw new UsageError(USAGE);
-  const { scope, permissions, env, cwd } = bridgeCtx(flags);
-  const json = JSON.stringify({ type: 'stdio', command: process.execPath, args: [MAIN, 'bridge'], env });
+  const { scope, permissions, env, cwd, timeout } = bridgeCtx(flags);
+  const json = JSON.stringify({ type: 'stdio', command: process.execPath, args: [MAIN, 'bridge'], env, timeout });
 
   let registered = false;
   try {
@@ -319,7 +379,7 @@ export async function cmdInstall(
       throw new UsageError(`claude is not installed or "claude mcp add-json" failed. Install Claude Code with: npm install -g @anthropic-ai/claude-code`);
     }
   }
-  out(`registered MCP server "agentbridge" in Claude Code (scope: ${scope}, permission ceiling: ${permissions})`);
+  out(`registered MCP server "agentbridge" in Claude Code (scope: ${scope}, permission ceiling: ${permissions}, timeout: ${timeout}s)`);
 
   if (!flags['no-agents']) {
     const dir =
@@ -336,12 +396,21 @@ export async function cmdInstall(
     }
   }
   if (!flags['no-skill']) {
-    const base =
-      scope === 'user' ? process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude') : path.join(cwd, '.claude');
-    const dest = path.join(base, 'skills', 'agentbridge-delegate');
-    mkdirSync(dest, { recursive: true });
-    copyFileSync(SKILL, path.join(dest, 'SKILL.md'));
-    out(`wrote skill ${path.join(dest, 'SKILL.md')}`);
+    const agentsProject = path.join(cwd, '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
+    const agentsGlobal = path.join(homedir(), '.agents', 'skills', 'agentbridge-delegate', 'SKILL.md');
+    const alreadyInAgents = existsSync(agentsProject) || existsSync(agentsGlobal);
+    if (alreadyInAgents && !flags.force) {
+      out(
+        'Skill "agentbridge-delegate" already available in .agents/skills (Open Agent Skills standard). Skipping duplicate in .claude/skills to prevent harness collision.'
+      );
+    } else {
+      const base =
+        scope === 'user' ? process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude') : path.join(cwd, '.claude');
+      const dest = path.join(base, 'skills', 'agentbridge-delegate');
+      mkdirSync(dest, { recursive: true });
+      copyFileSync(SKILL, path.join(dest, 'SKILL.md'));
+      out(`wrote skill ${path.join(dest, 'SKILL.md')}`);
+    }
   }
   out(
     scope === 'project'

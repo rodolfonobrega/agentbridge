@@ -71,6 +71,16 @@ export interface AgentAdapter {
 ### F. Real-time Telemetry & Web Dashboard
 - Embedded HTTP web dashboard (`ab ui`) provides live visualization of multi-agent runs, token consumption, execution timelines, and subagent trees.
 
+### G. MCP Timeout Propagation & 60s Cutoff Elimination
+- `McpServerConfig.timeout` is fully typed, validated, and propagated across all adapters (Codex, Pi, OpenCode, Antigravity, Claude).
+- Installers (`install`, `setup`, `install-ide`) configure standard `"timeout": 300` across all registered client configurations (Pi, OpenCode, Claude, Codex, Cursor, VS Code, Zed, Windsurf), completely eliminating the MCP SDK default 60-second execution cutoff.
+- `ask_*` and `dispatch_*` tool schemas support both `timeout` and `timeoutSeconds`.
+
+### H. Universal Open Agent Skills & Collision Guard
+- Universal canonical skill path is `.agents/skills/agentbridge-delegate/SKILL.md`.
+- Shared simultaneously across Pi, Codex, OpenCode, and Antigravity without redundant per-harness installations.
+- Installer detects existing global installations (`~/.agents/skills`) and avoids redundant project-level duplicates that trigger Pi collision alerts (`[Skill conflicts] collision`).
+
 ---
 
 ## 3. Directory Structure

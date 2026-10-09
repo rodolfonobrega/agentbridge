@@ -265,6 +265,7 @@ function buildConfig(o: RunOptions): Record<string, any> {
         command: [s.command, ...(s.args || [])],
         enabled: true,
         ...(s.env ? { environment: s.env } : {}),
+        ...(s.timeout != null ? { timeout: s.timeout } : {}),
       };
     }
   }

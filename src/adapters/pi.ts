@@ -195,7 +195,14 @@ export function makeAgentDir({
       for (const [n, s] of Object.entries(mcpServers)) {
         const env = { ...(s.env || {}) };
         for (const k of passEnv) env[k] ??= '${' + k + '}';
-        servers[n] = { ...s, command: s.command, args: s.args || [], env, exposure: s.exposure || 'direct' };
+        servers[n] = {
+          ...s,
+          command: s.command,
+          args: s.args || [],
+          env,
+          exposure: s.exposure || 'direct',
+          ...(s.timeout != null ? { timeout: s.timeout } : {}),
+        };
       }
       writeFileSync(path.join(dir, 'mcp.json'), JSON.stringify({ mcpServers: servers, autoEnableCodemode: false }));
     }

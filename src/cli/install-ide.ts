@@ -20,6 +20,7 @@ export interface InstallIdeOptions {
   cwd?: string;
   configPath?: string;
   cliPath?: string;
+  timeout?: number;
 }
 
 export interface InstallIdeResult {
@@ -161,7 +162,7 @@ export function getIdeConfigPath(
   }
 }
 
-function isSameServerConfig(existing: any, target: { command: string; args: string[] }): boolean {
+function isSameServerConfig(existing: any, target: { command: string; args: string[]; timeout?: number }): boolean {
   if (!existing || typeof existing !== 'object') return false;
   const sameCommand =
     existing.command === target.command ||
@@ -171,7 +172,10 @@ function isSameServerConfig(existing: any, target: { command: string; args: stri
   if (!sameCommand) return false;
   if (!Array.isArray(existing.args)) return false;
   if (existing.args.length !== target.args.length) return false;
-  return existing.args.every((arg: any, index: number) => arg === target.args[index]);
+  return (
+    existing.args.every((arg: any, index: number) => arg === target.args[index]) &&
+    (target.timeout == null || existing.timeout === target.timeout)
+  );
 }
 
 /**
@@ -187,6 +191,7 @@ export function installIde(
   const serverConfig = {
     command: process.execPath,
     args: [cliPath, 'bridge'],
+    timeout: options?.timeout ?? 300,
   };
 
   const norm = target.toLowerCase().trim();

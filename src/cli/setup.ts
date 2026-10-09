@@ -7,7 +7,7 @@ import path from 'node:path';
 import { runCollect, resolveBinary } from '../core/spawn.js';
 import { findBinary as findAgy } from '../adapters/agy.js';
 import { findBinary as findPi } from '../adapters/pi.js';
-import { cmdInstall, cmdEndpoint } from './install.js';
+import { cmdInstall, cmdEndpoint, writeSkill } from './install.js';
 import { doctor } from '../extras/doctor.js';
 import { loadEndpoints } from '../adapters/endpoint.js';
 
@@ -552,6 +552,7 @@ export async function cmdSetup(
     permissions,
     'no-skill': !installSkill,
     'auto-approve': autoApproveCodex,
+    timeout: flags.timeout ? Number(flags.timeout) : 300,
     ...(flags.cwd ? { cwd: targetCwd } : {}),
   };
 
@@ -598,33 +599,19 @@ export async function cmdSetup(
     }
   }
 
-  // Sincronização explícita de skills se installSkill estiver ativo
+  // Sincronização canônica e segura de skills (sem duplicatas colidentes)
   if (installSkill) {
     try {
-      const canonicalSkill = path.resolve(fileURLToPath(new URL('../../skills/agentbridge-delegate/SKILL.md', import.meta.url)));
-      if (existsSync(canonicalSkill)) {
-        // Projeto local
-        const p1 = path.join(targetCwd, '.agents', 'skills', 'agentbridge-delegate');
-        mkdirSync(p1, { recursive: true });
-        copyFileSync(canonicalSkill, path.join(p1, 'SKILL.md'));
-
-        const p2 = path.join(targetCwd, '.claude', 'skills', 'agentbridge-delegate');
-        mkdirSync(p2, { recursive: true });
-        copyFileSync(canonicalSkill, path.join(p2, 'SKILL.md'));
-
-        // Usuário global APENAS se scope for 'user'
-        if (scope === 'user') {
-          const u1 = path.join(homedir(), '.agents', 'skills', 'agentbridge-delegate');
-          mkdirSync(u1, { recursive: true });
-          copyFileSync(canonicalSkill, path.join(u1, 'SKILL.md'));
-
-          if (existsSync(path.join(homedir(), '.claude'))) {
-            const u2 = path.join(homedir(), '.claude', 'skills', 'agentbridge-delegate');
-            mkdirSync(u2, { recursive: true });
-            copyFileSync(canonicalSkill, path.join(u2, 'SKILL.md'));
+      const baseDir = scope === 'user' ? path.join(homedir(), '.agents') : path.join(targetCwd, '.agents');
+      writeSkill(
+        baseDir,
+        (msg) => {
+          if (typeof msg === 'string' && msg.trim()) {
+            io.out(`  ${c.green}✔${c.reset} ${c.bold}SKILL:${c.reset} ${msg.trim()}`);
           }
-        }
-      }
+        },
+        { scope, cwd: targetCwd }
+      );
     } catch {
       /* ignore skill copy errors */
     }

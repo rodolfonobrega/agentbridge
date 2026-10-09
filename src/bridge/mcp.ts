@@ -132,6 +132,11 @@ function askSchema(agent: string) {
           description: 'Execution harness for endpoint models (default: auto for edit/tools, direct API for read-only)',
         },
         cwd: { type: 'string' },
+        timeout: {
+          type: 'number',
+          exclusiveMinimum: 0,
+          description: 'Timeout in seconds (or ms if >= 1000). Alias for timeoutSeconds.',
+        },
         timeoutSeconds: { type: 'number', exclusiveMinimum: 0, description: 'Default 300' },
         session: {
           type: 'object',
@@ -370,10 +375,14 @@ function prepare(agent: string, args: any, env: NodeJS.ProcessEnv) {
     if (args[k] != null) opts[k] = args[k];
   }
   if (env.AGENTBRIDGE_CHILD_CWD) opts.cwd = env.AGENTBRIDGE_CHILD_CWD;
-  const ts =
-    args.timeoutSeconds != null
-      ? Number(args.timeoutSeconds)
-      : Number(env.AGENTBRIDGE_DEFAULT_TIMEOUT_S) || DEFAULT_TIMEOUT_S;
+  const rawTimeout = args.timeoutSeconds ?? args.timeout;
+  let ts = Number(env.AGENTBRIDGE_DEFAULT_TIMEOUT_S) || DEFAULT_TIMEOUT_S;
+  if (rawTimeout != null) {
+    const num = Number(rawTimeout);
+    if (!isNaN(num) && num > 0) {
+      ts = num >= 1000 ? Math.round(num / 1000) : num;
+    }
+  }
   opts.timeoutMs = Math.round(ts * 1000);
   const childDepth = depth + 1;
   const models = Object.fromEntries(agentList(env).filter((a) => env[mk(a)]).map((a) => [mk(a), env[mk(a)]]));

@@ -220,6 +220,9 @@ export function validateOptions(opts: RunOptions): RunOptions {
         throw bad(`mcpServers.${n}.args must be string[]`);
       }
       if (s.env != null && !isObj(s.env)) throw bad(`mcpServers.${n}.env must be an object`);
+      if (s.timeout != null && (typeof s.timeout !== 'number' || s.timeout <= 0 || !Number.isFinite(s.timeout))) {
+        throw bad(`mcpServers.${n}.timeout must be a positive number`);
+      }
     }
   }
   if (o.env != null && !isObj(o.env)) throw bad('env must be an object');
