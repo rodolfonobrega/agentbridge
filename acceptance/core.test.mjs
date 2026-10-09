@@ -350,3 +350,29 @@ test('spawnProc bounds stderr to 8KiB ring buffer and provides child PID', async
   assert.ok(r.stderr.length > 0, 'stderr captured tail output');
 });
 
+// ---- round 6 regressions ----
+test('single-line shim quoting both interpreter and script resolves to the script (last quoted token)', { skip: process.platform !== 'win32' }, async () => {
+  const d = mkdtempSync(path.join(tmpdir(), 'ab-shim3-'));
+  const scriptDir = path.join(d, 'pkg', 'bin');
+  mkdirSync(scriptDir, { recursive: true });
+  writeFileSync(path.join(scriptDir, 'cli.js'), 'console.log(JSON.stringify(process.argv.slice(2)))');
+  const CRLF = String.fromCharCode(13, 10), BS = String.fromCharCode(92);
+  // `"%~dp0\node.exe" "%~dp0\pkg\bin\cli.js" %*`: the interpreter is the FIRST quoted token, the script the LAST.
+  // Resolving the first token (node.exe, absent next to the shim) would spawn the prompt as JS -> SyntaxError.
+  writeFileSync(path.join(d, 'direct.cmd'), '@echo off' + CRLF + '"%~dp0' + BS + 'node.exe" "%~dp0' + BS + 'pkg' + BS + 'bin' + BS + 'cli.js" %*' + CRLF);
+  const env = { PATH: d + path.delimiter + process.env.PATH };
+  const r = await runCollect('direct', ['a "b" c&d'], { env, cwd: d, timeoutMs: 15000 });
+  assert.equal(r.exitCode, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), ['a "b" c&d']);
+});
+
+test('runCollect caps collected stdout to maxBuffer, keeping the newest lines', async () => {
+  const r = await runCollect(N, ['-e', "for(let i=0;i<300;i++)console.log('n' + String(i).padStart(3, '0'))"], { maxBuffer: 25 });
+  // every line is 4 chars (+1 accounting) so the cap keeps exactly the newest 5 lines, oldest dropped
+  assert.deepEqual(r.stdout.split('\n'), ['n295', 'n296', 'n297', 'n298', 'n299']);
+  assert.equal(r.exitCode, 0);
+  // no maxBuffer: full output, unchanged semantics
+  const full = await runCollect(N, ['-e', "console.log('a');console.log('b');console.log('c')"]);
+  assert.equal(full.stdout, 'a\nb\nc');
+});
+
