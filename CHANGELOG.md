@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.3] - 2026-10-10
+
+### Quota & Credentials
+- **Native logins are read:** `check_quota` and `ab account quota` now find the Claude Code (`~/.claude/.credentials.json`) and Codex (`~/.codex/auth.json`) logins, honoring `CLAUDE_CONFIG_DIR` and `CODEX_HOME`. Profile directories are still isolated. (#6)
+- **Live usage fields:** Claude's `utilization` and Codex's `rate_limit` windows are parsed, so real accounts no longer show `0%`. Codex requests send `ChatGPT-Account-Id`. (#6)
+
+### Localization
+- **English user-facing text:** the `ab setup` usage guide and the README, README_AI, REFERENCE and agent skill docs are now in English. (#7)
+
 ## [0.4.2] - 2026-10-09
 
 ### CI & Cross-Platform Stability
