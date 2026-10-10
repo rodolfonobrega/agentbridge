@@ -48,7 +48,7 @@ Instead of managing 5 different CLIs and hitting brick walls, AgentBridge makes 
 | **Wasting Expensive Tokens** | **Proactive Quota Routing:** Agents actively query token limits via `check_quota` or `ab quota` to intelligently delegate to cheaper or local models. |
 | **Hedge & Compare Models** | **`fanout` & `race`:** Send tasks to multiple models in parallel; compare solutions or take the fastest answer. |
 | **Locked Out of SDKs** | **Universal OpenAI/Anthropic Proxy (`ab serve`):** Drive any tool, IDE, or script through your existing agent subscriptions. |
-| **Accidental Code Destruction** | **Zero-Accident Safety Lock (Trava de Segurança):** Safe `read-only` by default, with deliberate unlocking (`--permissions edit`). |
+| **Accidental Code Destruction** | **Zero-Accident Safety Lock:** Safe `read-only` by default, with deliberate unlocking (`--permissions edit`). |
 | **No Easy Undo on Broken Edits** | **Git Hidden-Ref Checkpoints:** Instant repository snapshots with zero branch pollution for atomic rollbacks (`ab checkpoint rollback`). |
 | **Dependency Hell & Bloat** | **Zero Runtime Dependencies:** Pure Node.js & TypeScript. No bloat, instantaneous startup. |
 
@@ -146,7 +146,7 @@ Install scope defaults to the current project (`--scope project`: writes `.mcp.j
 
 Now, from inside any of them, you can say "ask claude to review this" or "have pi write the tests": the agent calls the `ask_<agent>` tools (`ask_claude`, `ask_codex`, `ask_opencode`, `ask_agy`, `ask_pi`, `ask_ollama`, ...).
 
-> 🛡️ **The Safety Lock (Trava de Segurança):**
+> 🛡️ **The Safety Lock:**
 > - **Zero-Accident Default (`read-only`):** When you run `ab ask` or when an agent calls `ask_*`, the safety lock is active by default. The agent can inspect code and answer questions, but **cannot modify files or run destructive shell scripts**.
 > - **Intentional Unlocking:** When you want the agent to write code, implement features, or run tests, simply unlock it with `--permissions edit` (or `--permissions full`).
 > ⏱️ **MCP Timeouts (Zero 60s Cutoffs):**

@@ -30,7 +30,7 @@ The MCP server `agentbridge` exposes other coding agents as tools. Each runs as 
 
 The other agent has none of your context. Give it: the goal, the exact files/paths, constraints, and the form the answer should take. Set `cwd` to the project folder. Ask it to be concise.
 
-## The Safety Lock (Trava de Segurança): How Edits are Blocked vs Allowed
+## The Safety Lock: How Edits are Blocked vs Allowed
 
 AgentBridge is engineered with a **Zero-Accident Safety Lock**:
 - **Why it exists:** Unrestricted subagent execution is dangerous. An autonomous agent asked to "audit this function" or "check tests" could hallucinate and overwrite source code or execute destructive bash commands.
@@ -322,38 +322,38 @@ If you have shell execution access, you can run high-level orchestration workflo
 ## Storage, Memory & UI Security Guarantees (Phase 6 Hardening)
 
 - **Root-Walking Discovery (`findProjectRoot`):**
-  A resolução de arquivos de configuração (`.agentbridge/config.json`) e memória de projeto (`.agentbridge/memory.json`) escala recursivamente pela árvore de diretórios até encontrar a raiz do repositório Git ou a pasta `.agentbridge`, permitindo que agentes executando em monorepos ou subpastas compartilhem as mesmas regras e configurações centrais.
+  Config files (`.agentbridge/config.json`) and project memory (`.agentbridge/memory.json`) are resolved by walking up the directory tree until the Git repository root or an `.agentbridge` folder is found. Agents running in monorepos or subfolders therefore share the same rules and central configuration.
 - **Atomic File Writing & Explicit Failure Propagation:**
-  Todas as mutações de arquivos de configuração, manifestos de contas (`accounts.json`) e memórias de projeto utilizam gravações atômicas em arquivos temporários com substituição atômica via `renameSync`. Falhas de I/O em disco cheio ou permissão negada propagam erros claros sem engolir exceções em blocos `catch` vazios.
+  All writes to config files, account manifests (`accounts.json`) and project memory are atomic: they write a temporary file and swap it in with `renameSync`. Disk-full and permission errors propagate clearly instead of being swallowed by empty `catch` blocks.
 - **Cross-Source Memory Consistency:**
-  `loadMemory` avalia `updatedAt` entre o armazenamento local (`.agentbridge/memory.json`) e o armazenamento de fallback global (`~/.agentbridge/memory/<repoHash>.json`), garantindo que o agente sempre opere sobre o estado mais recente mesmo após chaveamento de fallback.
+  `loadMemory` compares `updatedAt` between the local store (`.agentbridge/memory.json`) and the global fallback store (`~/.agentbridge/memory/<repoHash>.json`), so an agent always works on the most recent state, even after a fallback switch.
 - **Auto-Injection of Project Memory:**
-  Qualquer execução (`ab run`, `runTracked`, `ask`) injeta automaticamente o bloco `[PROJECT CONVENTIONS & MEMORY - PRESERVE THESE RULES]` no prompt quando o projeto possui regras ou decisões persistidas, sem necessidade de injeção manual.
+  Every run (`ab run`, `runTracked`, `ask`) automatically injects the `[PROJECT CONVENTIONS & MEMORY - PRESERVE THESE RULES]` block into the prompt when the project has saved rules or decisions. No manual injection is needed.
 - **Account Directory Path Traversal Prevention:**
-  `ab account add` e `ab account remove` validam nomes de agentes contra listas conhecidas e verificam canonicamente que o diretório de perfil reside estritamente dentro da raiz de perfis gerenciados (`.agentbridge/profiles`), prevenindo deleções ou criações arbitrárias fora da sandbox.
+  `ab account add` and `ab account remove` validate agent names against known lists and check that the profile directory stays inside the managed profiles root (`.agentbridge/profiles`), preventing arbitrary creation or deletion outside the sandbox.
 - **Dashboard UI CSP & Authentication Compliance:**
-  O Time Machine do painel visual (`ab ui`) elimina todos os atributos inline `style="..."` em favor de classes CSS estáticas compatíveis com Content Security Policy estrita, e todas as chamadas de API (`/api/checkpoints`, `/api/checkpoints/:id/diff`, `/api/checkpoints/:id/rollback`) transmitem o token de autorização `Bearer <token>`.
+  The Time Machine in the visual dashboard (`ab ui`) has no inline `style="..."` attributes, using static CSS classes compatible with a strict Content Security Policy. All API calls (`/api/checkpoints`, `/api/checkpoints/:id/diff`, `/api/checkpoints/:id/rollback`) send the `Bearer <token>` authorization header.
 - **Strict Token & Request Validation (Proxy API):**
-  Endpoints compatíveis com OpenAI e Anthropic rejeitam rigorosamente parâmetros inválidos ou incompatíveis com `400 Bad Request`, incluindo `max_tokens <= 0` ou não-inteiro, e a flag não suportada `previous_response_id`.
+  OpenAI- and Anthropic-compatible endpoints strictly reject invalid or incompatible parameters with `400 Bad Request`, including `max_tokens <= 0` or non-integer values, and the unsupported `previous_response_id` flag.
 - **Isolated Proxy Server Stores:**
-  Múltiplas instâncias de proxy programáticas mantêm seus próprios `AgentStore` e `sessionStore` isolados, eliminando vazamento de sessões ou sandboxes ativas entre instâncias concorrentes.
+  Multiple programmatic proxy instances each keep their own isolated `AgentStore` and `sessionStore`, so sessions and active sandboxes never leak between concurrent instances.
 
 ## Tooling, Installers & Ecosystem Guarantees (Phase 7 Hardening)
 
 - **Centralized Agent Catalog (`src/core/catalog.ts`):**
-  Todos os agentes nativos (`claude`, `codex`, `opencode`, `agy`, `pi`) e regras de contas são definidos em um catálogo único e centralizado (`BUILTIN_AGENTS`, `VALID_ACCOUNT_AGENTS`), eliminando descompassos entre o CLI, proxy, MCP e gerenciamento de perfis.
+  All native agents (`claude`, `codex`, `opencode`, `agy`, `pi`) and account rules are defined in one central catalog (`BUILTIN_AGENTS`, `VALID_ACCOUNT_AGENTS`), so the CLI, proxy, MCP and profile management never drift apart.
 - **Universal IDE Compatibility (`process.execPath`):**
-  Instaladores de IDEs (`ab install vscode|cursor|zed|windsurf`) utilizam `process.execPath` canônico em vez de referências frágeis a `node` no PATH, prevenindo erros `node: command not found` quando a IDE é lançada de ambientes de desktop com PATH restrito.
+  IDE installers (`ab install vscode|cursor|zed|windsurf`) use the canonical `process.execPath` instead of fragile `node` lookups on PATH, preventing `node: command not found` errors when the IDE is launched from a desktop environment with a restricted PATH.
 - **Transactional MCP Updates & Corruption Defense:**
-  A instalação de ferramentas MCP no Codex cria backups transacionais de `config.toml` antes da execução, restaurando o estado anterior caso `codex mcp add` falhe. No Pi (`~/.pi/agent/mcp.json`), arquivos com JSON inválido ou comentários são preservados sem perda de configurações prévias, emitindo mensagens de erro claras com instruções de configuração manual.
+  Installing MCP tools for Codex makes a transactional backup of `config.toml` first and restores the previous state if `codex mcp add` fails. For Pi (`~/.pi/agent/mcp.json`), files with invalid JSON or comments are left untouched, and a clear error explains how to configure it manually.
 - **Strict Scope Isolation in Setup Wizard (`ab setup` / `ab wizard`):**
-  Quando executado no escopo de projeto (`--scope project`), o assistente de instalação confina todas as configurações e cópias de skills estritamente ao diretório do projeto alvo (`flags.cwd` ou `process.cwd()`), sem poluir nem mutar `~/.agents/skills` ou `~/.claude/skills` do usuário. Falhas em qualquer agente no setup propagam explicitamente código de saída não-zero (`process.exitCode = 1`) para scripts de CI/CD.
+  When run with `--scope project`, the setup wizard confines all configuration and skill copies to the target project directory (`flags.cwd` or `process.cwd()`), without touching the user's `~/.agents/skills` or `~/.claude/skills`. A failure for any agent during setup exits with a non-zero code (`process.exitCode = 1`), so CI/CD scripts can detect it.
 - **Zero Resource & Timer Leaks (`withTimeout`):**
-  Todas as sondagens de modelos e diagnósticos de saúde (`ab doctor`) utilizam `withTimeout` com cancelamento imediato de temporizadores (`clearTimeout`), impedindo timers residuais de 20 segundos de segurarem o loop de eventos ativo.
+  All model probes and health checks (`ab doctor`) use `withTimeout`, which clears its timer as soon as the call settles (`clearTimeout`), so leftover 20-second timers never keep the event loop alive.
 - **Cross-Platform Diagnostic Precision (`ab doctor`):**
-  Diagnóstico de credenciais oferece suporte nativo à variável `CLAUDE_CONFIG_DIR` e unifica a detecção de configurações do OpenCode em todos os diretórios do Windows (`%LOCALAPPDATA%`, `%APPDATA%`, `.config`).
+  Credential diagnostics natively support the `CLAUDE_CONFIG_DIR` variable and unify OpenCode config detection across all Windows directories (`%LOCALAPPDATA%`, `%APPDATA%`, `.config`).
 - **Strict SemVer & Synchronized Lockfiles:**
-  Automações de lançamento e versionamento (`scripts/release.mjs`) validam estritamente versões no formato oficial SemVer e mantêm `package-lock.json` sincronizado com `package.json` através de `npm install --package-lock-only`, garantindo integridade absoluta de tags e releases.
+  Release automation (`scripts/release.mjs`) strictly validates versions in the official SemVer format and keeps `package-lock.json` in sync with `package.json` via `npm install --package-lock-only`, keeping tags and releases consistent.
 
 
 
