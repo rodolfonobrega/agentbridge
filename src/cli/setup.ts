@@ -602,7 +602,7 @@ export async function cmdSetup(
     }
   }
 
-  // Sincronização canônica e segura de skills (sem duplicatas colidentes)
+  // Canonical, safe skill sync (no colliding duplicates)
   if (installSkill) {
     try {
       const baseDir = scope === 'user' ? path.join(homedir(), '.agents') : path.join(targetCwd, '.agents');
@@ -638,30 +638,34 @@ export async function cmdSetup(
   io.out(`${c.green}│${c.reset}    ${c.cyan}ab doctor${c.reset}                         Run comprehensive health check     ${c.green}│${c.reset}`);
   io.out(`${c.green}╰${cardDivider}╯${c.reset}\n`);
 
-  // Rich Interactive Documentation Guide for the User
+  // Interactive usage guide for the user. Rows are padded by visible width so the border stays aligned.
+  const guideRow = (content: string) => {
+    const visible = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    io.out(`${c.cyan}│${c.reset}${content}${' '.repeat(Math.max(0, boxWidth - 2 - visible))}${c.cyan}│${c.reset}`);
+  };
   io.out(`${c.cyan}╭${cardDivider}╮${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.brightCyan}📖 GUIA DE USO & DOCUMENTAÇÃO RÁPIDA${c.reset}${' '.repeat(34)}${c.cyan}│${c.reset}`);
+  guideRow(`  ${c.bold}${c.brightCyan}USAGE GUIDE & QUICK DOCUMENTATION${c.reset}`);
   io.out(`${c.cyan}├${cardDivider}┤${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.yellow}1. Como seus Agentes se Comunicam (MCP Tools):${c.reset}${' '.repeat(22)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}     Agora qualquer agente configurado pode chamar outros como ferramentas:${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}     • ${c.green}ask_<agente>(prompt, permissions="edit")${c.reset} - Chamada síncrona${' '.repeat(13)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}     • ${c.green}dispatch_<agente>(prompt)${c.reset} - Disparo assíncrono / paralelo${' '.repeat(14)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}     • ${c.green}check_quota(agent="codex")${c.reset} - Consulta cota antes de tarefas caras${' '.repeat(7)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}     • ${c.green}checkpoint_create("mensagem")${c.reset} - Snapshot Git invisível e seguro${' '.repeat(9)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}${' '.repeat(70)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.yellow}2. Zero-Accident Safety Lock (Trava de Segurança):${c.reset}${' '.repeat(18)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}     • Por padrão, delegações rodam em ${c.bold}read-only${c.reset} (sem perigo de estragar).  ${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}     • Para autorizar edição de arquivos ou testes, passe explicitamente:   ${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}       ${c.bold}permissions: "edit"${c.reset} ou ${c.bold}permissions: "full"${c.reset}.${' '.repeat(32)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}${' '.repeat(70)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.yellow}3. Ultra-Baixa Latência no Codex (Daemon App-Server):${c.reset}${' '.repeat(15)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}     • Adicione ${c.bold}--transport app-server${c.reset} no CLI ou ${c.bold}transport: "app-server"${c.reset}  ${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}       nas ferramentas MCP para manter o daemon aquecido na memória,        ${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}       eliminando cold-starts e permitindo aprovações em tempo real!         ${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}${' '.repeat(70)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}  ${c.bold}${c.yellow}4. Painel Visual & Telemetria em Tempo Real:${c.reset}${' '.repeat(24)}${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}     • Rode ${c.bold}ab ui --open${c.reset} para ver em tempo real o consumo de tokens,      ${c.cyan}│${c.reset}`);
-  io.out(`${c.cyan}│${c.reset}       árvores de subagentes delegados e histórico de checkpoints!          ${c.cyan}│${c.reset}`);
+  guideRow(`  ${c.bold}${c.yellow}1. How your agents talk to each other (MCP tools):${c.reset}`);
+  guideRow(`     Any configured agent can now call the others as tools:`);
+  guideRow(`     • ${c.green}ask_<agent>(prompt, permissions="edit")${c.reset} - synchronous call`);
+  guideRow(`     • ${c.green}dispatch_<agent>(prompt)${c.reset} - async / parallel dispatch`);
+  guideRow(`     • ${c.green}check_quota(agent="codex")${c.reset} - check quota before costly tasks`);
+  guideRow(`     • ${c.green}checkpoint_create("message")${c.reset} - invisible, safe Git snapshot`);
+  guideRow('');
+  guideRow(`  ${c.bold}${c.yellow}2. Zero-Accident Safety Lock:${c.reset}`);
+  guideRow(`     • By default, delegations run in ${c.bold}read-only${c.reset} mode.`);
+  guideRow(`     • To allow file edits or tests, pass explicitly:`);
+  guideRow(`       ${c.bold}permissions: "edit"${c.reset} or ${c.bold}permissions: "full"${c.reset}.`);
+  guideRow('');
+  guideRow(`  ${c.bold}${c.yellow}3. Ultra-low latency on Codex (App-Server daemon):${c.reset}`);
+  guideRow(`     • Add ${c.bold}--transport app-server${c.reset} (CLI) or ${c.bold}transport: "app-server"${c.reset}`);
+  guideRow(`       in MCP calls to keep the daemon warm, avoiding cold starts`);
+  guideRow(`       and enabling real-time approvals.`);
+  guideRow('');
+  guideRow(`  ${c.bold}${c.yellow}4. Visual dashboard & live telemetry:${c.reset}`);
+  guideRow(`     • Run ${c.bold}ab ui --open${c.reset} to watch token usage live,`);
+  guideRow(`       delegated subagent trees and checkpoint history.`);
   io.out(`${c.cyan}╰${cardDivider}╯${c.reset}\n`);
 
   if (runDoctorAtEnd) {

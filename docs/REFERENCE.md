@@ -1272,7 +1272,7 @@ When you want the OpenRouter model to act as a **full coding agent** with tool e
 - **With Pi Harness (`--harness pi`):**
   AgentBridge automatically prefixes the model as `openrouter/<model>` and drives Pi with tool execution:
   ```bash
-  ab run openrouter "Crie o arquivo config.json" --permissions edit --harness pi --model deepseek/deepseek-chat
+  ab run openrouter "Create the file config.json" --permissions edit --harness pi --model deepseek/deepseek-chat
   ```
 
 #### 4. Delegating via MCP
