@@ -89,8 +89,9 @@ export function parseAnthropicUsage(data: any): AnthropicUsage {
   const fiveHour = data?.five_hour || data?.session;
   const sevenDay = data?.seven_day || data?.weekly;
 
-  const fiveHourPercent = Math.round(fiveHour?.used_percentage ?? fiveHour?.used_percent ?? 0);
-  const sevenDayPercent = Math.round(sevenDay?.used_percentage ?? sevenDay?.used_percent ?? 0);
+  // The live OAuth usage endpoint reports `utilization`; the fixtures and older shapes use used_percentage.
+  const fiveHourPercent = Math.round(fiveHour?.utilization ?? fiveHour?.used_percentage ?? fiveHour?.used_percent ?? 0);
+  const sevenDayPercent = Math.round(sevenDay?.utilization ?? sevenDay?.used_percentage ?? sevenDay?.used_percent ?? 0);
   const fiveHourResetsAt = parseResetTime(fiveHour?.resets_at || fiveHour?.reset_at);
   const sevenDayResetsAt = parseResetTime(sevenDay?.resets_at || sevenDay?.reset_at);
 
@@ -106,8 +107,10 @@ export function parseAnthropicUsage(data: any): AnthropicUsage {
 }
 
 export function parseCodexUsage(data: any): CodexUsage {
-  const primary = data?.primary_window || data?.session || data?.rate_limits?.session;
-  const secondary = data?.secondary_window || data?.weekly || data?.rate_limits?.weekly;
+  // The live ChatGPT usage endpoint nests the windows under rate_limit.
+  const root = data?.rate_limit || data;
+  const primary = root?.primary_window || data?.session || data?.rate_limits?.session;
+  const secondary = root?.secondary_window || data?.weekly || data?.rate_limits?.weekly;
 
   const primaryPercent = Math.round(primary?.used_percent ?? primary?.used_percentage ?? 0);
   const secondaryPercent = secondary
