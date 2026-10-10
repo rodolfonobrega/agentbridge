@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 
 // Direct proactive quota querying before hitting 429 errors (inspired by Orca).
@@ -88,8 +89,9 @@ export function parseAnthropicUsage(data: any): AnthropicUsage {
   const fiveHour = data?.five_hour || data?.session;
   const sevenDay = data?.seven_day || data?.weekly;
 
-  const fiveHourPercent = Math.round(fiveHour?.used_percentage ?? fiveHour?.used_percent ?? 0);
-  const sevenDayPercent = Math.round(sevenDay?.used_percentage ?? sevenDay?.used_percent ?? 0);
+  // The live OAuth usage endpoint reports `utilization`; the fixtures and older shapes use used_percentage.
+  const fiveHourPercent = Math.round(fiveHour?.utilization ?? fiveHour?.used_percentage ?? fiveHour?.used_percent ?? 0);
+  const sevenDayPercent = Math.round(sevenDay?.utilization ?? sevenDay?.used_percentage ?? sevenDay?.used_percent ?? 0);
   const fiveHourResetsAt = parseResetTime(fiveHour?.resets_at || fiveHour?.reset_at);
   const sevenDayResetsAt = parseResetTime(sevenDay?.resets_at || sevenDay?.reset_at);
 
@@ -105,8 +107,10 @@ export function parseAnthropicUsage(data: any): AnthropicUsage {
 }
 
 export function parseCodexUsage(data: any): CodexUsage {
-  const primary = data?.primary_window || data?.session || data?.rate_limits?.session;
-  const secondary = data?.secondary_window || data?.weekly || data?.rate_limits?.weekly;
+  // The live ChatGPT usage endpoint nests the windows under rate_limit.
+  const root = data?.rate_limit || data;
+  const primary = root?.primary_window || data?.session || data?.rate_limits?.session;
+  const secondary = root?.secondary_window || data?.weekly || data?.rate_limits?.weekly;
 
   const primaryPercent = Math.round(primary?.used_percent ?? primary?.used_percentage ?? 0);
   const secondaryPercent = secondary
@@ -129,6 +133,36 @@ function isMockOrOffline(agent: string, options?: QuotaQueryOptions): boolean {
   if (registeredFixtures.has(agent.toLowerCase())) return true;
   if (process.env.AGENTBRIDGE_OFFLINE === '1' || process.env.AGENTBRIDGE_PROACTIVE_MOCK === '1') return true;
   return false;
+}
+
+function readJsonFile(file: string): any {
+  try {
+    if (!existsSync(file)) return null;
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// Claude Code writes its login to <CLAUDE_CONFIG_DIR>/.credentials.json (default ~/.claude),
+// with the token nested under claudeAiOauth. A profile dir (ab account add) is searched
+// instead of the default home, so one account never reads another's login.
+function claudeCredentialFiles(options: QuotaQueryOptions): string[] {
+  const configDir =
+    options.env?.CLAUDE_CONFIG_DIR || process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude');
+  const dir = options.profileDir || configDir;
+  return [path.join(dir, '.credentials.json'), path.join(dir, 'credentials.json')];
+}
+
+// Codex writes its login to <CODEX_HOME>/auth.json (default ~/.codex), with the token under tokens.
+function codexAuthFiles(options: QuotaQueryOptions): string[] {
+  const codexHome = options.env?.CODEX_HOME || process.env.CODEX_HOME || path.join(homedir(), '.codex');
+  const dir = options.profileDir || codexHome;
+  return [path.join(dir, 'auth.json'), path.join(dir, '.auth')];
+}
+
+function claudeTokenFrom(c: any): string | undefined {
+  return c?.claudeAiOauth?.accessToken || c?.accessToken || c?.token || c?.sessionToken || c?.apiKey || undefined;
 }
 
 export async function fetchAnthropicUsage(
@@ -200,7 +234,8 @@ export async function fetchAnthropicUsage(
 
 export async function fetchCodexUsage(
   token: string,
-  options: QuotaQueryOptions = {}
+  options: QuotaQueryOptions = {},
+  accountId?: string
 ): Promise<CodexUsage> {
   if (options.fixture) {
     return parseCodexUsage(options.fixture);
@@ -226,6 +261,7 @@ export async function fetchCodexUsage(
       method: 'GET',
       headers: {
         Authorization: `Bearer ${token}`,
+        ...(accountId ? { 'ChatGPT-Account-Id': accountId } : {}),
         'User-Agent': 'agentbridge/0.2.0',
       },
       signal,
@@ -272,15 +308,10 @@ export async function getProactiveQuotaStatus(
 
   if (norm === 'claude' || norm === 'anthropic') {
     let effectiveToken = token || options.env?.ANTHROPIC_API_KEY || options.env?.CLAUDE_CODE_TOKEN || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_TOKEN;
-    if (!effectiveToken && options.profileDir) {
-      try {
-        const credPath = path.join(options.profileDir, 'credentials.json');
-        if (existsSync(credPath)) {
-          const c = JSON.parse(readFileSync(credPath, 'utf8'));
-          effectiveToken = c.accessToken || c.token || c.sessionToken || c.apiKey;
-        }
-      } catch {
-        /* ignore */
+    if (!effectiveToken) {
+      for (const file of claudeCredentialFiles(options)) {
+        effectiveToken = claudeTokenFrom(readJsonFile(file));
+        if (effectiveToken) break;
       }
     }
     if (!effectiveToken && !isMockOrOffline('claude', options)) {
@@ -320,16 +351,12 @@ export async function getProactiveQuotaStatus(
 
   if (norm === 'codex' || norm === 'chatgpt' || norm === 'openai') {
     let effectiveToken = token || options.env?.CODEX_TOKEN || options.env?.OPENAI_API_KEY || process.env.CODEX_TOKEN || process.env.OPENAI_API_KEY;
-    if (!effectiveToken && options.profileDir) {
-      try {
-        const authPath = path.join(options.profileDir, '.auth');
-        if (existsSync(authPath)) {
-          const a = JSON.parse(readFileSync(authPath, 'utf8'));
-          effectiveToken = a.accessToken || a.token;
-        }
-      } catch {
-        /* ignore */
-      }
+    let accountId: string | undefined;
+    for (const file of codexAuthFiles(options)) {
+      if (effectiveToken) break;
+      const a = readJsonFile(file);
+      effectiveToken = a?.tokens?.access_token || a?.accessToken || a?.token;
+      accountId = a?.tokens?.account_id;
     }
     if (!effectiveToken && !isMockOrOffline('codex', options)) {
       return {
@@ -342,7 +369,7 @@ export async function getProactiveQuotaStatus(
         error: 'No credential or API token configured',
       };
     }
-    const usage = await fetchCodexUsage(effectiveToken || 'dummy', options);
+    const usage = await fetchCodexUsage(effectiveToken || 'dummy', options, accountId);
     const usedPercent = usage.primaryPercent;
     const secondaryPercent = usage.secondaryPercent ?? 0;
     const windowMinutes = usage.windowMinutes || 300;
