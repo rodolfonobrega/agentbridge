@@ -308,3 +308,23 @@ test('no login anywhere returns unknown without making a request', async () => {
     rmSync(codexDir, { recursive: true, force: true });
   }
 });
+
+test('parseAnthropicUsage reads the live `utilization` field', () => {
+  const parsed = parseAnthropicUsage({
+    five_hour: { utilization: 4, resets_at: '2026-10-10T07:40:00Z' },
+    seven_day: { utilization: 2, resets_at: '2026-10-14T00:00:00Z' },
+  });
+  assert.equal(parsed.fiveHourPercent, 4);
+  assert.equal(parsed.sevenDayPercent, 2);
+});
+
+test('parseCodexUsage reads windows nested under rate_limit', () => {
+  const parsed = parseCodexUsage({
+    rate_limit: {
+      primary_window: { used_percent: 7, reset_at: 1791650000 },
+      secondary_window: { used_percent: 3, reset_at: 1792254800 },
+    },
+  });
+  assert.equal(parsed.primaryPercent, 7);
+  assert.equal(parsed.secondaryPercent, 3);
+});
