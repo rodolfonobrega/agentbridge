@@ -183,9 +183,16 @@ test('A30: getProactiveQuotaStatus checks secondary (weekly) window for Codex', 
 test('A41: getProactiveQuotaStatus and fetch differentiate error and unknown from 0% OK', async () => {
   clearQuotaFixtures();
   try {
-    // When no credentials and not in offline mock mode, status is unknown with error
+    // When no credentials and not in offline mock mode, status is unknown with error.
+    // CLAUDE_CONFIG_DIR points at a missing dir so the test never reads the developer's real login.
     const noCredStatus = await getProactiveQuotaStatus('claude', '', {
-      env: { ANTHROPIC_API_KEY: '', CLAUDE_CODE_TOKEN: '', AGENTBRIDGE_OFFLINE: '0', AGENTBRIDGE_PROACTIVE_MOCK: '0' },
+      env: {
+        ANTHROPIC_API_KEY: '',
+        CLAUDE_CODE_TOKEN: '',
+        CLAUDE_CONFIG_DIR: '/nonexistent-agentbridge-test-config',
+        AGENTBRIDGE_OFFLINE: '0',
+        AGENTBRIDGE_PROACTIVE_MOCK: '0',
+      },
     });
     assert.equal(noCredStatus.okToProceed, false);
     assert.equal(noCredStatus.status, 'unknown');

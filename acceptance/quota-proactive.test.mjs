@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
+  DEFAULT_MOCK_FIXTURES,
   parseAnthropicUsage,
   parseCodexUsage,
   fetchAnthropicUsage,
@@ -191,4 +195,116 @@ test('MCP bridge exposes check_quota tool and returns structured quota status', 
   assert.equal(res.structuredContent.okToProceed, true);
 
   clearQuotaFixtures();
+});
+
+// Credential discovery: read the native CLI logins (and ab account profiles) without touching the real home.
+function tmpHome(files = {}) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'ab-quota-'));
+  for (const [name, body] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(dir, name)), { recursive: true });
+    writeFileSync(path.join(dir, name), JSON.stringify(body));
+  }
+  return dir;
+}
+
+function captureFetch(body) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, headers: init.headers });
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  return { calls, fetchImpl };
+}
+
+test('claude quota reads the native login from CLAUDE_CONFIG_DIR and sends the OAuth beta header', async () => {
+  clearQuotaFixtures();
+  const dir = tmpHome({ '.credentials.json': { claudeAiOauth: { accessToken: 'tok-claude' } } });
+  try {
+    const { calls, fetchImpl } = captureFetch(DEFAULT_MOCK_FIXTURES.claude);
+    const status = await getProactiveQuotaStatus('claude', undefined, { env: { CLAUDE_CONFIG_DIR: dir }, fetchImpl });
+    assert.equal(status.status, 'ok');
+    assert.equal(status.usedPercent, 15);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, ANTHROPIC_OAUTH_USAGE_URL);
+    assert.equal(calls[0].headers.Authorization, 'Bearer tok-claude');
+    assert.equal(calls[0].headers['anthropic-beta'], 'oauth-2025-04-20');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('claude quota searches the profile dir, not the default home, when a profile is given', async () => {
+  clearQuotaFixtures();
+  const profile = tmpHome({ '.credentials.json': { claudeAiOauth: { accessToken: 'tok-profile' } } });
+  const home = tmpHome({ '.credentials.json': { claudeAiOauth: { accessToken: 'tok-home' } } });
+  try {
+    const { calls, fetchImpl } = captureFetch(DEFAULT_MOCK_FIXTURES.claude);
+    await getProactiveQuotaStatus('claude', undefined, { profileDir: profile, env: { CLAUDE_CONFIG_DIR: home }, fetchImpl });
+    assert.equal(calls[0].headers.Authorization, 'Bearer tok-profile');
+  } finally {
+    rmSync(profile, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('claude profile without a login does not fall back to the default home', async () => {
+  clearQuotaFixtures();
+  const profile = tmpHome();
+  const home = tmpHome({ '.credentials.json': { claudeAiOauth: { accessToken: 'tok-home' } } });
+  try {
+    const { calls, fetchImpl } = captureFetch(DEFAULT_MOCK_FIXTURES.claude);
+    const status = await getProactiveQuotaStatus('claude', undefined, { profileDir: profile, env: { CLAUDE_CONFIG_DIR: home }, fetchImpl });
+    assert.equal(status.status, 'unknown');
+    assert.equal(status.error, 'No credential or API token configured');
+    assert.equal(calls.length, 0);
+  } finally {
+    rmSync(profile, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('codex quota reads tokens.access_token from CODEX_HOME and sends the ChatGPT account id', async () => {
+  clearQuotaFixtures();
+  const dir = tmpHome({ 'auth.json': { tokens: { access_token: 'tok-codex', account_id: 'acct-1' } } });
+  try {
+    const { calls, fetchImpl } = captureFetch(DEFAULT_MOCK_FIXTURES.codex);
+    const status = await getProactiveQuotaStatus('codex', undefined, { env: { CODEX_HOME: dir }, fetchImpl });
+    assert.equal(status.status, 'ok');
+    assert.equal(calls[0].url, CODEX_USAGE_URL);
+    assert.equal(calls[0].headers.Authorization, 'Bearer tok-codex');
+    assert.equal(calls[0].headers['ChatGPT-Account-Id'], 'acct-1');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('codex profile keeps working with the legacy .auth file', async () => {
+  clearQuotaFixtures();
+  const profile = tmpHome({ '.auth': { accessToken: 'tok-legacy' } });
+  try {
+    const { calls, fetchImpl } = captureFetch(DEFAULT_MOCK_FIXTURES.codex);
+    await getProactiveQuotaStatus('codex', undefined, { profileDir: profile, env: {}, fetchImpl });
+    assert.equal(calls[0].headers.Authorization, 'Bearer tok-legacy');
+    assert.equal(calls[0].headers['ChatGPT-Account-Id'], undefined);
+  } finally {
+    rmSync(profile, { recursive: true, force: true });
+  }
+});
+
+test('no login anywhere returns unknown without making a request', async () => {
+  clearQuotaFixtures();
+  const claudeDir = tmpHome();
+  const codexDir = tmpHome();
+  try {
+    const { calls, fetchImpl } = captureFetch({});
+    const env = { CLAUDE_CONFIG_DIR: claudeDir, CODEX_HOME: codexDir };
+    const claude = await getProactiveQuotaStatus('claude', undefined, { env, fetchImpl });
+    const codex = await getProactiveQuotaStatus('codex', undefined, { env, fetchImpl });
+    assert.equal(claude.status, 'unknown');
+    assert.equal(codex.status, 'unknown');
+    assert.equal(calls.length, 0);
+  } finally {
+    rmSync(claudeDir, { recursive: true, force: true });
+    rmSync(codexDir, { recursive: true, force: true });
+  }
 });
