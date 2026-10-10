@@ -245,11 +245,11 @@ AgentBridge seamlessly supports both plain chat and full coding tools for Ollama
 - **OpenRouter via Harness (Tools, Web Search & File Edits):**
   ```bash
   # Using Claude Code harness with OpenRouter models:
-  ab run openrouter "refatore src/auth.ts e crie testes" --permissions edit --harness claude --model anthropic/claude-3.5-sonnet
+  ab run openrouter "refatore src/auth.ts e crie testes" --permissions edit --harness claude --model anthropic/claude-sonnet-5.5
   ab ask openrouter "inspecione os logs e pesquise na web" --harness claude --model deepseek/deepseek-r1
   ```
   Or via MCP tool:
-  `ask_openrouter(prompt="refatore auth.ts...", permissions="edit", model="anthropic/claude-3.5-sonnet")`
+  `ask_openrouter(prompt="refatore auth.ts...", permissions="edit", model="anthropic/claude-sonnet-5.5")`
 
 - **Fast Plain Chat (Direct API):**
   ```bash

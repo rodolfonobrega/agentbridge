@@ -167,7 +167,7 @@ test('CLI: endpoint add/list/remove and install claude (project scope, no model 
   let r = await run1(['endpoint', 'add', 'cli_ep', 'http://127.0.0.1:9/v1', '--model', 'm'], cwd); assert.equal(r.c, 0, r.e);
   r = await run1(['endpoint', 'list'], cwd); assert.match(r.o, /cli_ep/);
   r = await run1(['endpoint', 'add', 'claude', 'http://x/v1'], cwd); assert.notEqual(r.c, 0);
-  r = await run1(['install', 'claude', '--permissions', 'edit', '--max-depth', '1'], cwd); assert.equal(r.c, 0, r.e + r.o);
+  r = await run1(['install', 'claude', '--permissions', 'edit', '--max-depth', '1', '--force'], cwd); assert.equal(r.c, 0, r.e + r.o);
   const mcp = JSON.parse(readFileSync(path.join(cwd, '.mcp.json'), 'utf8')).mcpServers.agentbridge;
   assert.equal(mcp.env.AGENTBRIDGE_PERMS, 'edit'); assert.equal(mcp.env.AGENTBRIDGE_MAX_DEPTH, '1'); assert.deepEqual(mcp.args.slice(-1), ['bridge']);
   const sk = path.join(cwd, '.claude', 'skills', 'agentbridge-delegate', 'SKILL.md'); assert.ok(existsSync(sk), 'skill installed');
