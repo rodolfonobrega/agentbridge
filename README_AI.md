@@ -96,7 +96,7 @@ When the user or another agent asks you to delegate work, use the `agentbridge` 
 
 ---
 
-## 5. The Safety Lock (Trava de Segurança) & Permission Ceilings
+## 5. The Safety Lock & Permission Ceilings
 
 ### Why Safe-by-Default Matters
 Most autonomous agent frameworks run in unrestricted or "yolo" mode by default. This creates catastrophic risk: a routine prompt asking "Audit auth.ts" or an unmonitored subagent hallucination can overwrite working code or run destructive shell scripts.
