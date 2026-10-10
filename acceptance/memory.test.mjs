@@ -17,6 +17,11 @@ import {
   cliMemoryList,
 } from '../dist/telemetry/memory.js';
 
+const memHome = realpathSync(mkdtempSync(path.join(tmpdir(), 'ab-mem-home-')));
+const prevAgentbridgeHome = process.env.AGENTBRIDGE_HOME;
+process.env.AGENTBRIDGE_HOME = memHome;
+
+
 test('loadMemory returns default empty memory for uninitialized directory', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'ab-mem-init-'));
   try {
@@ -188,3 +193,15 @@ test('CLI helpers and cmdMemory operate correctly', async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test.after?.(() => {
+  if (prevAgentbridgeHome !== undefined) {
+    process.env.AGENTBRIDGE_HOME = prevAgentbridgeHome;
+  } else {
+    delete process.env.AGENTBRIDGE_HOME;
+  }
+  try {
+    rmSync(memHome, { recursive: true, force: true });
+  } catch {}
+});
+

@@ -505,7 +505,7 @@ export async function cmdSetup(
               baseUrl: 'https://openrouter.ai/api/v1',
               type: 'openai',
               apiKeyEnv: 'OPENROUTER_API_KEY',
-              model: 'anthropic/claude-3.5-sonnet',
+              model: 'anthropic/claude-sonnet-5.5',
             };
           } else {
             const urlAns = (await rl.question(`    ${c.dim}Base URL:${c.reset} `)).trim();

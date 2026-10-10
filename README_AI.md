@@ -270,7 +270,7 @@ ab serve --port 8787
 
    client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="not-needed")
    stream = client.chat.completions.create(
-       model="claude/claude-3-7-sonnet",
+       model="claude/haiku",
        messages=[{"role": "user", "content": "Write a distributed task worker in Go."}],
        stream=True,
    )
@@ -284,7 +284,7 @@ ab serve --port 8787
 
    const client = new OpenAI({ baseURL: 'http://127.0.0.1:8787/v1', apiKey: 'not-needed' });
    const response = await client.chat.completions.create({
-     model: 'codex/gpt-4o',
+     model: 'codex/gpt-5.6-luna',
      messages: [{ role: 'user', content: 'Generate database migration for PostgreSQL.' }],
    });
    console.log(response.choices[0]?.message?.content);

@@ -66,7 +66,7 @@ import anthropic
 client = anthropic.Anthropic(base_url="http://127.0.0.1:8787", api_key="local-proxy")
 
 message = client.messages.create(
-    model="claude-3-7-sonnet",
+    model="haiku",
     max_tokens=1024,
     messages=[{"role": "user", "content": "Write a clean debounce function in TypeScript."}],
 )
@@ -150,7 +150,7 @@ from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(
     base_url="http://127.0.0.1:8787/v1",
     api_key="local-proxy",
-    model="claude/claude-3-7-sonnet",
+    model="claude/haiku",
     streaming=True,
 )
 

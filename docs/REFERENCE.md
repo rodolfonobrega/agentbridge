@@ -1244,7 +1244,7 @@ AgentBridge supports OpenRouter in both direct chat mode and full coding harness
 Register OpenRouter in your AgentBridge endpoint registry:
 ```bash
 # Add endpoint with default model and key read from environment:
-ab endpoint add openrouter https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY --model anthropic/claude-3.5-sonnet
+ab endpoint add openrouter https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY --model anthropic/claude-sonnet-5.5
 
 # Set your API key in your environment:
 export OPENROUTER_API_KEY="sk-or-v1-..."        # Linux/macOS
@@ -1264,10 +1264,10 @@ When you want the OpenRouter model to act as a **full coding agent** with tool e
   AgentBridge configures Claude Code to route requests through OpenRouter's Anthropic Messages API (`https://openrouter.ai/api/v1/messages`), injecting your `OPENROUTER_API_KEY` and target model. The OpenRouter model receives Claude Code's tools (`Read`, `Glob`, `Grep`, `WebSearch`, and `Edit` when permitted):
   ```bash
   # Read files and search web (read-only):
-  ab ask openrouter "Revise src/core/spawn.ts e pesquise por memory leaks" --harness claude --model anthropic/claude-3.5-sonnet
+  ab ask openrouter "Revise src/core/spawn.ts e pesquise por memory leaks" --harness claude --model anthropic/claude-sonnet-5.5
 
   # Edit and refactor files:
-  ab run openrouter "Refatore src/auth.ts e adicione testes" --permissions edit --harness claude --model anthropic/claude-3.5-sonnet
+  ab run openrouter "Refatore src/auth.ts e adicione testes" --permissions edit --harness claude --model anthropic/claude-sonnet-5.5
   ```
 - **With Pi Harness (`--harness pi`):**
   AgentBridge automatically prefixes the model as `openrouter/<model>` and drives Pi with tool execution:

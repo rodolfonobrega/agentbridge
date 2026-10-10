@@ -254,7 +254,7 @@ Point any OpenAI or Anthropic SDK directly at `http://127.0.0.1:8787`. Route wit
 from openai import OpenAI
 client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="not-needed")
 stream = client.chat.completions.create(
-    model="claude/claude-3-7-sonnet",
+    model="claude/haiku",
     messages=[{"role": "user", "content": "Explain async generator"}],
     stream=True
 )
@@ -267,7 +267,7 @@ for chunk in stream:
 import Anthropic from '@anthropic-ai/sdk';
 const client = new Anthropic({ baseURL: 'http://127.0.0.1:8787', apiKey: 'not-needed' });
 const res = await client.messages.create({
-  model: 'claude-3-7-sonnet',
+  model: 'haiku',
   max_tokens: 1024,
   messages: [{ role: 'user', content: 'Say hello!' }]
 });
